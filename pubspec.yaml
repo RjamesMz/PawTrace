@@ -1,0 +1,51 @@
+name: pawtrace_app
+description: PawTrace - Community-driven pet protection and recovery app.
+
+publish_to: 'none'
+
+version: 1.0.0+1
+
+environment:
+  sdk: '>=3.0.0 <4.0.0'
+
+dependencies:
+  flutter:
+    sdk: flutter
+
+  # Date & Localization
+  intl: ^0.19.0
+
+  # UI & Fonts
+  google_fonts: ^6.2.1
+
+  # Maps
+  google_maps_flutter: ^2.9.0
+
+  # Camera & Image
+  image_picker: ^1.1.2
+  camera: ^0.11.0+2
+
+  # Image processing for AI
+  image: ^4.1.7
+
+  # On-device AI / TFLite
+  tflite_flutter: ^0.11.0
+
+  # Charts
+  fl_chart: ^0.69.0
+
+  # Backend & Auth
+  supabase_flutter: ^2.6.0
+
+flutter:
+  uses-material-design: true
+
+  assets:
+    - assets/models/mobilenet_v1_1.0_224_quant.tflite
+    - assets/models/labels.txt
+    - assets/models/pawtrace_model.tflite
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^6.0.0

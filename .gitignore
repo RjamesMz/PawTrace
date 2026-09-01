@@ -1,0 +1,81 @@
+# ─── OS Files ──────────────────────────────────────────────────────────────────
+.DS_Store
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+
+# ─── IDE / Editor ──────────────────────────────────────────────────────────────
+.idea/
+.vscode/
+.atom/
+*.iml
+*.ipr
+*.iws
+
+# ─── Environment / Secrets ─────────────────────────────────────────────────────
+# Never commit real credentials. Use *.example files with fake values instead.
+.env
+.env.*
+!.env.example
+
+# Supabase config (if you move credentials to a dedicated file)
+lib/core/supabase_config.dart
+
+# Firebase credentials
+google-services.json
+GoogleService-Info.plist
+
+# Android signing keystore
+android/key.properties
+**/*.keystore
+**/*.jks
+
+# ─── Flutter / Dart / Pub ──────────────────────────────────────────────────────
+**/doc/api/
+**/ios/Flutter/.last_build_id
+.dart_tool/
+.flutter-plugins-dependencies
+.pub-cache/
+.pub/
+/build/
+/coverage/
+
+# Symbolication & obfuscation maps
+app.*.symbols
+app.*.map.json
+
+# ─── Android Build Artifacts ───────────────────────────────────────────────────
+/android/app/debug
+/android/app/profile
+/android/app/release
+/android/.gradle
+/android/.kotlin
+/android/captures/
+/android/GeneratedPluginRegistrant.java
+/android/.cxx/
+
+# Android local machine config (contains your local SDK path — machine-specific)
+android/local.properties
+
+# ─── Logs ──────────────────────────────────────────────────────────────────────
+*.log
+firebase-debug.log
+firebase-debug.*.log
+crashlytics-build.properties
+
+# ─── Temporary / Scratch Files ─────────────────────────────────────────────────
+*.swp
+*.pyc
+*.class
+.history
+.svn/
+.swiftpm/
+.build/
+.buildlog/
+migrate_working_dir/
+
+# Project-specific scratch files (not part of the app)
+scratch_inspect.dart
+
+# ─── macOS Swift Package Manager ───────────────────────────────────────────────
+**/xcuserdata/
