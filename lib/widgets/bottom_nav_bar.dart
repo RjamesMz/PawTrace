@@ -74,7 +74,20 @@ class BottomNavBar extends StatelessWidget {
       future: AuthService.instance.getCurrentUserRole(),
       builder: (context, snapshot) {
         final role = snapshot.data ?? UserRole.user;
-        final items = role == UserRole.admin ? _adminItems : _userItems;
+        final List<_NavItem> items;
+        if (role == UserRole.superAdmin) {
+          items = [
+            const _NavItem(
+                icon: Icons.home_rounded,
+                label: 'Home',
+                route: AppRoutes.superAdminHome),
+            ..._adminItems.sublist(1),
+          ];
+        } else if (role == UserRole.admin) {
+          items = _adminItems;
+        } else {
+          items = _userItems;
+        }
 
         final currentRoute = ModalRoute.of(context)?.settings.name;
         int activeIndex = currentIndex;

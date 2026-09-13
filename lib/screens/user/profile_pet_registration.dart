@@ -7,7 +7,6 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../core/app_colors.dart';
 import '../../core/app_constants.dart';
 import '../../core/app_routes.dart';
-import '../../core/navigation_helpers.dart';
 import '../../services/pet_embedding_service.dart';
 import '../../widgets/bottom_nav_bar.dart';
 
@@ -37,7 +36,6 @@ class _ProfilePetRegistrationScreenState
 
   final _supabase = Supabase.instance.client;
   static const Set<String> _allowedSpecies = {'Dog', 'Cat'};
-
 
   @override
   void dispose() {

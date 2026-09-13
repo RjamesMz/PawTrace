@@ -1,4 +1,6 @@
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
+import 'package:google_fonts/google_fonts.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../services/auth_service.dart';
 import '../../core/app_colors.dart';
@@ -9,11 +11,12 @@ import '../admin/super_admin_screen.dart';
 
 /// Listens to Supabase auth state and redirects to the correct screen.
 ///
-/// - Not signed in              → [LoginScreen]
-/// - Signed in, role = "admin"  → [UserManagementScreen]
-/// - Signed in, role = "user"   → [DashboardHomeScreen]
-///
-/// This widget is the [MaterialApp] home, replacing a static `initialRoute`.
+/// - Not signed in                  → [LoginScreen]
+/// - Signed in, role = "superAdmin" → [SuperAdminScreen]
+/// - Signed in, role = "admin"      → [BarangayAdminHomeScreen]
+/// - Signed in, role = "user":
+///   - On Web                       → [_WebAccessDeniedScreen]
+///   - On Mobile                    → [DashboardHomeScreen]
 class AuthWrapper extends StatelessWidget {
   const AuthWrapper({super.key});
 
@@ -40,16 +43,117 @@ class AuthWrapper extends StatelessWidget {
             if (roleSnap.connectionState == ConnectionState.waiting) {
               return const _SplashLoader();
             }
-            if (roleSnap.data == UserRole.superAdmin) {
+
+            final role = roleSnap.data ?? UserRole.user;
+
+            if (role == UserRole.superAdmin) {
               return const SuperAdminScreen();
             }
-            if (roleSnap.data == UserRole.admin) {
+            if (role == UserRole.admin) {
               return const BarangayAdminHomeScreen();
             }
+
+            // Regular user (owner/finder) on Web platform is restricted
+            if (kIsWeb) {
+              return const _WebAccessDeniedScreen();
+            }
+
             return const DashboardHomeScreen();
           },
         );
       },
+    );
+  }
+}
+
+/// Screen shown when a regular mobile user logs into the Web platform.
+class _WebAccessDeniedScreen extends StatelessWidget {
+  const _WebAccessDeniedScreen();
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: AppColors.background,
+      body: Center(
+        child: SingleChildScrollView(
+          padding: const EdgeInsets.all(24),
+          child: Container(
+            constraints: const BoxConstraints(maxWidth: 480),
+            padding: const EdgeInsets.all(36),
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(24),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withOpacity(0.08),
+                  blurRadius: 24,
+                  offset: const Offset(0, 8),
+                ),
+              ],
+              border: Border.all(color: AppColors.outlineVariant.withOpacity(0.3)),
+            ),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Container(
+                  width: 72,
+                  height: 72,
+                  decoration: const BoxDecoration(
+                    color: AppColors.errorContainer,
+                    shape: BoxShape.circle,
+                  ),
+                  child: const Icon(Icons.shield_outlined,
+                      color: AppColors.error, size: 40),
+                ),
+                const SizedBox(height: 24),
+                Text(
+                  'Administrator Portal Only',
+                  textAlign: TextAlign.center,
+                  style: GoogleFonts.montserrat(
+                    fontSize: 22,
+                    fontWeight: FontWeight.w700,
+                    color: AppColors.onSurface,
+                  ),
+                ),
+                const SizedBox(height: 12),
+                Text(
+                  'The PawTrace Web Portal is restricted to Barangay Administrators and Super Administrators.\n\nPet owners and finders should use the PawTrace Mobile App.',
+                  textAlign: TextAlign.center,
+                  style: GoogleFonts.inter(
+                    fontSize: 14,
+                    height: 1.5,
+                    color: AppColors.onSurfaceVariant,
+                  ),
+                ),
+                const SizedBox(height: 32),
+                SizedBox(
+                  width: double.infinity,
+                  height: 50,
+                  child: ElevatedButton.icon(
+                    onPressed: () async {
+                      await AuthService.instance.signOut();
+                    },
+                    icon: const Icon(Icons.logout_rounded, size: 18),
+                    label: const Text('Sign Out & Return to Login'),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: AppColors.primary,
+                      foregroundColor: Colors.white,
+                      elevation: 2,
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(14),
+                      ),
+                      textStyle: GoogleFonts.inter(
+                        fontSize: 15,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
     );
   }
 }

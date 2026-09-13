@@ -79,3 +79,8 @@ scratch_inspect.dart
 
 # ─── macOS Swift Package Manager ───────────────────────────────────────────────
 **/xcuserdata/
+
+
+env.js
+node_modules
+.env

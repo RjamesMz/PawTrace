@@ -1,15 +1,17 @@
-import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../core/app_colors.dart';
 import '../../core/app_routes.dart';
 import '../../services/auth_service.dart';
 
 /// Standalone Login screen for PawTrace.
 ///
-/// On successful sign-in, [AuthWrapper] (listening to authStateChanges)
-/// automatically routes the user to the correct destination.
-/// Tapping "Register" navigates to [RegisterScreen] via named route.
+/// On Web: Tailored for Super Admins and Barangay Admins accessing the admin portal.
+/// Regular users attempting to sign in on Web are rejected and prompted to use mobile.
+///
+/// On Mobile: Used by pet owners, finders, and admins alike.
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
 
@@ -44,8 +46,18 @@ class _LoginScreenState extends State<LoginScreen> {
 
     setState(() => _isLoading = true);
     try {
-      await AuthService.instance.signIn(email, password);
+      final role = await AuthService.instance.signIn(email, password);
       if (!mounted) return;
+
+      // Restrict Web portal to Administrators only
+      if (kIsWeb && role == UserRole.user) {
+        await AuthService.instance.signOut();
+        _showError(
+          'Access Denied: The web portal is restricted to Barangay Administrators and Super Administrators. Pet owners should use the mobile app.',
+        );
+        return;
+      }
+
       // Clear stack and let AuthWrapper route to the correct screen
       Navigator.of(context).pushNamedAndRemoveUntil('/', (_) => false);
     } on AuthException catch (e) {
@@ -61,12 +73,15 @@ class _LoginScreenState extends State<LoginScreen> {
     if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
-        content: Text(message,
-            style: GoogleFonts.inter(fontSize: 14, color: Colors.white)),
+        content: Text(
+          message,
+          style: GoogleFonts.inter(fontSize: 14, color: Colors.white),
+        ),
         backgroundColor: AppColors.error,
         behavior: SnackBarBehavior.floating,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
         margin: const EdgeInsets.fromLTRB(16, 0, 16, 24),
+        duration: const Duration(seconds: 4),
       ),
     );
   }
@@ -75,137 +90,44 @@ class _LoginScreenState extends State<LoginScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final screenWidth = MediaQuery.of(context).size.width;
+    final isWide = screenWidth >= 800;
+
     return Scaffold(
       backgroundColor: AppColors.background,
       body: Stack(
         children: [
           SafeArea(
-            child: SingleChildScrollView(
-              padding: const EdgeInsets.symmetric(horizontal: 20),
-              child: Column(
-                children: [
-                  const SizedBox(height: 48),
-
-                  // ── Brand header ─────────────────────────────────────────
-                  _buildBrandHeader(),
-                  const SizedBox(height: 32),
-
-                  // ── Welcome headline ─────────────────────────────────────
-                  Text(
-                    'Welcome Back',
-                    style: GoogleFonts.montserrat(
-                      fontSize: 28,
-                      fontWeight: FontWeight.w700,
-                      color: AppColors.onSurface,
-                    ),
-                  ),
-                  const SizedBox(height: 6),
-                  Text(
-                    'Sign in to continue protecting your pets',
-                    style: GoogleFonts.inter(
-                        fontSize: 14, color: AppColors.secondary),
-                  ),
-                  const SizedBox(height: 32),
-
-                  // ── Email field ──────────────────────────────────────────
-                  _formField(
-                    controller: _emailCtrl,
-                    hint: 'Email Address',
-                    icon: Icons.mail_outline_rounded,
-                    keyboardType: TextInputType.emailAddress,
-                  ),
-                  const SizedBox(height: 14),
-
-                  // ── Password field ───────────────────────────────────────
-                  _passwordField(
-                    controller: _passwordCtrl,
-                    hint: 'Password',
-                    obscure: _obscurePwd,
-                    onToggle: () => setState(() => _obscurePwd = !_obscurePwd),
-                  ),
-                  const SizedBox(height: 10),
-
-                  // ── Forgot password ──────────────────────────────────────
-                  Align(
-                    alignment: Alignment.centerRight,
-                    child: TextButton(
-                      onPressed: () {},
-                      child: Text(
-                        'Forgot password?',
-                        style: GoogleFonts.inter(
-                          fontSize: 13,
-                          fontWeight: FontWeight.w600,
-                          color: AppColors.primary,
-                        ),
-                      ),
-                    ),
-                  ),
-                  const SizedBox(height: 16),
-
-                  // ── Login button ─────────────────────────────────────────
-                  SizedBox(
-                    width: double.infinity,
-                    height: 56,
-                    child: ElevatedButton(
-                      onPressed: _isLoading ? null : _handleLogin,
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: AppColors.primary,
-                        foregroundColor: Colors.white,
-                        elevation: 6,
-                        shadowColor: AppColors.primary.withOpacity(0.35),
-                        shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(16)),
-                        textStyle: GoogleFonts.montserrat(
-                            fontSize: 16, fontWeight: FontWeight.w700),
-                      ),
-                      child: _isLoading
-                          ? const SizedBox(
-                              width: 22,
-                              height: 22,
-                              child: CircularProgressIndicator(
-                                  strokeWidth: 2.5, color: Colors.white),
-                            )
-                          : const Row(
-                              mainAxisAlignment: MainAxisAlignment.center,
-                              children: [
-                                Text('Login'),
-                                SizedBox(width: 8),
-                                Icon(Icons.arrow_forward_rounded, size: 20),
-                              ],
+            child: Center(
+              child: SingleChildScrollView(
+                padding: EdgeInsets.symmetric(
+                  horizontal: isWide ? 24 : 20,
+                  vertical: isWide ? 40 : 20,
+                ),
+                child: isWide
+                    ? ConstrainedBox(
+                        constraints: const BoxConstraints(maxWidth: 440),
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 32, vertical: 36),
+                          decoration: BoxDecoration(
+                            color: Colors.white,
+                            borderRadius: BorderRadius.circular(24),
+                            border: Border.all(
+                              color: AppColors.outlineVariant.withOpacity(0.3),
                             ),
-                    ),
-                  ),
-                  const SizedBox(height: 20),
-
-                  // ── Register link ────────────────────────────────────────
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      Text(
-                        "Don't have an account? ",
-                        style: GoogleFonts.inter(
-                            fontSize: 14, color: AppColors.secondary),
-                      ),
-                      GestureDetector(
-                        onTap: () => Navigator.pushNamed(
-                            context, AppRoutes.register),
-                        child: Text(
-                          'Register',
-                          style: GoogleFonts.inter(
-                            fontSize: 14,
-                            fontWeight: FontWeight.w700,
-                            color: AppColors.primary,
+                            boxShadow: [
+                              BoxShadow(
+                                color: Colors.black.withOpacity(0.06),
+                                blurRadius: 24,
+                                offset: const Offset(0, 8),
+                              ),
+                            ],
                           ),
+                          child: _buildFormContent(),
                         ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 40),
-
-                  // ── Feature icons footer ─────────────────────────────────
-                  _buildFeatureFooter(),
-                  const SizedBox(height: 32),
-                ],
+                      )
+                    : _buildFormContent(),
               ),
             ),
           ),
@@ -226,6 +148,147 @@ class _LoginScreenState extends State<LoginScreen> {
     );
   }
 
+  Widget _buildFormContent() {
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        if (!kIsWeb) const SizedBox(height: 24),
+
+        // ── Brand header ─────────────────────────────────────────
+        _buildBrandHeader(),
+        const SizedBox(height: 24),
+
+        // ── Welcome headline ─────────────────────────────────────
+        Text(
+          kIsWeb ? 'Admin Portal' : 'Welcome Back',
+          style: GoogleFonts.montserrat(
+            fontSize: 26,
+            fontWeight: FontWeight.w700,
+            color: AppColors.onSurface,
+          ),
+        ),
+        const SizedBox(height: 6),
+        Text(
+          kIsWeb
+              ? 'Sign in with your administrative credentials'
+              : 'Sign in to continue protecting your pets',
+          textAlign: TextAlign.center,
+          style: GoogleFonts.inter(fontSize: 14, color: AppColors.secondary),
+        ),
+        const SizedBox(height: 28),
+
+        // ── Email field ──────────────────────────────────────────
+        _formField(
+          controller: _emailCtrl,
+          hint: 'Email Address',
+          icon: Icons.mail_outline_rounded,
+          keyboardType: TextInputType.emailAddress,
+        ),
+        const SizedBox(height: 14),
+
+        // ── Password field ───────────────────────────────────────
+        _passwordField(
+          controller: _passwordCtrl,
+          hint: 'Password',
+          obscure: _obscurePwd,
+          onToggle: () => setState(() => _obscurePwd = !_obscurePwd),
+        ),
+        const SizedBox(height: 10),
+
+        // ── Forgot password ──────────────────────────────────────
+        Align(
+          alignment: Alignment.centerRight,
+          child: TextButton(
+            onPressed: () {},
+            child: Text(
+              'Forgot password?',
+              style: GoogleFonts.inter(
+                fontSize: 13,
+                fontWeight: FontWeight.w600,
+                color: AppColors.primary,
+              ),
+            ),
+          ),
+        ),
+        const SizedBox(height: 16),
+
+        // ── Login button ─────────────────────────────────────────
+        SizedBox(
+          width: double.infinity,
+          height: 54,
+          child: ElevatedButton(
+            onPressed: _isLoading ? null : _handleLogin,
+            style: ElevatedButton.styleFrom(
+              backgroundColor: AppColors.primary,
+              foregroundColor: Colors.white,
+              elevation: 4,
+              shadowColor: AppColors.primary.withOpacity(0.35),
+              shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(16)),
+              textStyle: GoogleFonts.montserrat(
+                  fontSize: 16, fontWeight: FontWeight.w700),
+            ),
+            child: _isLoading
+                ? const SizedBox(
+                    width: 22,
+                    height: 22,
+                    child: CircularProgressIndicator(
+                        strokeWidth: 2.5, color: Colors.white),
+                  )
+                : const Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Text('Login'),
+                      SizedBox(width: 8),
+                      Icon(Icons.arrow_forward_rounded, size: 20),
+                    ],
+                  ),
+          ),
+        ),
+        const SizedBox(height: 20),
+
+        // ── Register link (Only on mobile) ────────────────────────
+        if (!kIsWeb)
+          Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Text(
+                "Don't have an account? ",
+                style: GoogleFonts.inter(
+                    fontSize: 14, color: AppColors.secondary),
+              ),
+              GestureDetector(
+                onTap: () =>
+                    Navigator.pushNamed(context, AppRoutes.register),
+                child: Text(
+                  'Register',
+                  style: GoogleFonts.inter(
+                    fontSize: 14,
+                    fontWeight: FontWeight.w700,
+                    color: AppColors.primary,
+                  ),
+                ),
+              ),
+            ],
+          )
+        else
+          Text(
+            'Admin accounts are managed by the Super Administrator.',
+            textAlign: TextAlign.center,
+            style: GoogleFonts.inter(
+              fontSize: 12,
+              color: AppColors.onSurfaceVariant.withOpacity(0.7),
+            ),
+          ),
+        const SizedBox(height: 32),
+
+        // ── Feature icons footer ─────────────────────────────────
+        _buildFeatureFooter(),
+        const SizedBox(height: 16),
+      ],
+    );
+  }
+
   // ══════════════════════════════════════════════════════════════════════════
   //  SHARED COMPONENTS
   // ══════════════════════════════════════════════════════════════════════════
@@ -243,14 +306,39 @@ class _LoginScreenState extends State<LoginScreen> {
           child: const Icon(Icons.pets, color: Colors.white, size: 34),
         ),
         const SizedBox(height: 10),
-        Text(
-          'PawTrace',
-          style: GoogleFonts.montserrat(
-            fontSize: 24,
-            fontWeight: FontWeight.w800,
-            color: AppColors.primary,
-            letterSpacing: -0.5,
-          ),
+        Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(
+              'PawTrace',
+              style: GoogleFonts.montserrat(
+                fontSize: 24,
+                fontWeight: FontWeight.w800,
+                color: AppColors.primary,
+                letterSpacing: -0.5,
+              ),
+            ),
+            if (kIsWeb) ...[
+              const SizedBox(width: 8),
+              Container(
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                decoration: BoxDecoration(
+                  color: AppColors.primaryContainer.withOpacity(0.4),
+                  borderRadius: BorderRadius.circular(6),
+                ),
+                child: Text(
+                  'WEB',
+                  style: GoogleFonts.inter(
+                    fontSize: 10,
+                    fontWeight: FontWeight.w800,
+                    color: AppColors.primary,
+                    letterSpacing: 0.8,
+                  ),
+                ),
+              ),
+            ],
+          ],
         ),
       ],
     );

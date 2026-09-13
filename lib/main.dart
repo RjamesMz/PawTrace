@@ -1,5 +1,7 @@
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:responsive_framework/responsive_framework.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import 'core/app_routes.dart';
@@ -39,11 +41,13 @@ void main() async {
     anonKey: supabaseAnonKey,
   );
 
-  // Lock portrait orientation for mobile-first experience
-  await SystemChrome.setPreferredOrientations([
-    DeviceOrientation.portraitUp,
-    DeviceOrientation.portraitDown,
-  ]);
+  // Lock portrait orientation for mobile-first experience (not on web)
+  if (!kIsWeb) {
+    await SystemChrome.setPreferredOrientations([
+      DeviceOrientation.portraitUp,
+      DeviceOrientation.portraitDown,
+    ]);
+  }
 
   // Set system UI overlay style to match PawTrace brand
   SystemChrome.setSystemUIOverlayStyle(const SystemUiOverlayStyle(
@@ -69,6 +73,15 @@ class PawTraceApp extends StatelessWidget {
       title: 'PawTrace',
       debugShowCheckedModeBanner: false,
       theme: AppTheme.light,
+
+      builder: (context, child) => ResponsiveBreakpoints.builder(
+        child: child!,
+        breakpoints: const [
+          Breakpoint(start: 0, end: 599, name: MOBILE),
+          Breakpoint(start: 600, end: 899, name: TABLET),
+          Breakpoint(start: 900, end: double.infinity, name: DESKTOP),
+        ],
+      ),
 
       // AuthWrapper drives the entry point — it reads Firebase auth state
       // and Firestore role, then shows Login, Dashboard, or Admin screen.

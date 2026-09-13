@@ -3,7 +3,6 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../../core/app_colors.dart';
-import '../../core/app_routes.dart';
 import '../../widgets/bottom_nav_bar.dart';
 
 /// Lost Pet screen – full overview of the current lost-pet reports.

@@ -4,6 +4,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../core/app_colors.dart';
 import '../../core/app_routes.dart';
 import '../../core/navigation_helpers.dart';
+import '../../widgets/admin_content_wrapper.dart';
 
 /// Admin Pet Detail screen – displays full pet details with admin actions
 /// (Mark as Lost, Remove Pet). Receives a pet Map via constructor.
@@ -30,7 +31,8 @@ class _AdminPetDetailScreenState extends State<AdminPetDetailScreen> {
   Future<void> _markAsLost() async {
     setState(() => _isUpdating = true);
     try {
-      await _supabase.from('pets').update({'status': 'lost'}).eq('id', pet['id']);
+      final petId = pet['pet_id'] ?? pet['id'];
+      await _supabase.from('pets').update({'status': 'lost'}).eq('pet_id', petId);
       if (!mounted) return;
       setState(() => pet['status'] = 'lost');
       ScaffoldMessenger.of(context).showSnackBar(
@@ -84,7 +86,8 @@ class _AdminPetDetailScreenState extends State<AdminPetDetailScreen> {
 
     setState(() => _isUpdating = true);
     try {
-      await _supabase.from('pets').delete().eq('id', pet['id']);
+      final petId = pet['pet_id'] ?? pet['id'];
+      await _supabase.from('pets').delete().eq('pet_id', petId);
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
@@ -162,147 +165,369 @@ class _AdminPetDetailScreenState extends State<AdminPetDetailScreen> {
           ? const Center(child: CircularProgressIndicator(color: AppColors.primary))
           : SingleChildScrollView(
               padding: const EdgeInsets.fromLTRB(20, 0, 20, 40),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
+              child: AdminContentWrapper(
+                maxWidth: 800,
+                child: LayoutBuilder(
+                  builder: (context, constraints) {
+                    final isWide = constraints.maxWidth >= 700 ||
+                        MediaQuery.of(context).size.width >= 900;
+                    if (isWide) {
+                      return _buildWideDetailLayout(
+                        photoUrl: photoUrl.toString(),
+                        name: name,
+                        breed: breed,
+                        species: species,
+                        isLost: isLost,
+                        dobDisplay: dobDisplay,
+                        weight: weight,
+                        color: color,
+                        collarId: collarId,
+                        ownerName: ownerName,
+                        ownerEmail: ownerEmail,
+                        ownerPhone: ownerPhone,
+                      );
+                    }
+                    return _buildNarrowDetailLayout(
+                      photoUrl: photoUrl.toString(),
+                      name: name,
+                      breed: breed,
+                      species: species,
+                      isLost: isLost,
+                      dobDisplay: dobDisplay,
+                      weight: weight,
+                      color: color,
+                      collarId: collarId,
+                      ownerName: ownerName,
+                      ownerEmail: ownerEmail,
+                      ownerPhone: ownerPhone,
+                    );
+                  },
+                ),
+              ),
+            ),
+    );
+  }
+
+  Widget _buildWideDetailLayout({
+    required String photoUrl,
+    required String name,
+    required String breed,
+    required String species,
+    required bool isLost,
+    required String dobDisplay,
+    required String weight,
+    required String color,
+    required String collarId,
+    required String ownerName,
+    required String ownerEmail,
+    required String ownerPhone,
+  }) {
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        // Left side: Pet photo 300px wide
+        SizedBox(
+          width: 300,
+          child: ClipRRect(
+            borderRadius: BorderRadius.circular(16),
+            child: SizedBox(
+              width: 300,
+              height: 300,
+              child: photoUrl.isNotEmpty
+                  ? Image.network(
+                      photoUrl,
+                      fit: BoxFit.cover,
+                      errorBuilder: (_, __, ___) => _photoPlaceholder(),
+                    )
+                  : _photoPlaceholder(),
+            ),
+          ),
+        ),
+        const SizedBox(width: 24),
+        // Right side: All pet details, info grid card, owner info, action buttons
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              // Name + breed + status badge
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  // Pet photo
-                  const SizedBox(height: 16),
-                  ClipRRect(
-                    borderRadius: BorderRadius.circular(16),
-                    child: SizedBox(
-                      width: double.infinity,
-                      height: 200,
-                      child: photoUrl.toString().isNotEmpty
-                          ? Image.network(
-                              photoUrl,
-                              fit: BoxFit.cover,
-                              errorBuilder: (_, __, ___) => _photoPlaceholder(),
-                            )
-                          : _photoPlaceholder(),
-                    ),
-                  ),
-                  const SizedBox(height: 16),
-
-                  // Name + breed + status badge
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      Expanded(
-                        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                          Text(name, style: GoogleFonts.montserrat(fontSize: 22, fontWeight: FontWeight.w700, color: AppColors.onSurface)),
-                          const SizedBox(height: 2),
-                          Text('$breed • $species', style: GoogleFonts.inter(fontSize: 15, color: AppColors.onSurfaceVariant)),
-                        ]),
-                      ),
-                      Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 5),
-                        decoration: BoxDecoration(
-                          color: isLost ? AppColors.errorContainer : const Color(0xFFD1FAE5),
-                          borderRadius: BorderRadius.circular(999),
-                        ),
-                        child: Text(
-                          isLost ? 'LOST' : 'ACTIVE',
-                          style: GoogleFonts.inter(
-                            fontSize: 11,
-                            fontWeight: FontWeight.w700,
-                            letterSpacing: 0.5,
-                            color: isLost ? AppColors.error : const Color(0xFF065F46),
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 20),
-
-                  // Info grid card
-                  Container(
-                    padding: const EdgeInsets.all(16),
-                    decoration: BoxDecoration(
-                      color: Colors.white,
-                      borderRadius: BorderRadius.circular(16),
-                      boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 20, offset: const Offset(0, 4))],
-                    ),
-                    child: Column(
-                      children: [
-                        Row(
-                          children: [
-                            Expanded(child: _infoCell('Date of Birth', dobDisplay, border: const Border(right: BorderSide(color: Color(0xFFDDC1AE), width: 0.5)))),
-                            Expanded(child: Padding(padding: const EdgeInsets.only(left: 16), child: _infoCell('Weight', '$weight kg'))),
-                          ],
-                        ),
-                        const Divider(height: 28, color: Color(0xFFDDC1AE), thickness: 0.5),
-                        Row(
-                          children: [
-                            Expanded(child: _infoCell('Color & Markings', color, border: const Border(right: BorderSide(color: Color(0xFFDDC1AE), width: 0.5)))),
-                            Expanded(child: Padding(padding: const EdgeInsets.only(left: 16), child: _infoCell('Collar ID', collarId))),
-                          ],
-                        ),
-                      ],
-                    ),
-                  ),
-                  const SizedBox(height: 20),
-
-                  // Owner info section
-                  Text('OWNER INFORMATION', style: GoogleFonts.inter(fontSize: 11, fontWeight: FontWeight.w600, letterSpacing: 0.5, color: AppColors.onSurfaceVariant)),
-                  const SizedBox(height: 10),
-                  Container(
-                    width: double.infinity,
-                    padding: const EdgeInsets.all(16),
-                    decoration: BoxDecoration(
-                      color: Colors.white,
-                      borderRadius: BorderRadius.circular(16),
-                      boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 20, offset: const Offset(0, 4))],
-                    ),
+                  Expanded(
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        _ownerRow(Icons.person, ownerName),
-                        const SizedBox(height: 10),
-                        _ownerRow(Icons.email_outlined, ownerEmail),
-                        const SizedBox(height: 10),
-                        _ownerRow(Icons.phone_outlined, ownerPhone),
+                        Text(name,
+                            style: GoogleFonts.montserrat(
+                                fontSize: 24,
+                                fontWeight: FontWeight.w700,
+                                color: AppColors.onSurface)),
+                        const SizedBox(height: 2),
+                        Text('$breed • $species',
+                            style: GoogleFonts.inter(
+                                fontSize: 15,
+                                color: AppColors.onSurfaceVariant)),
                       ],
                     ),
                   ),
-                  const SizedBox(height: 28),
-
-                  // Action buttons
-                  SizedBox(
-                    width: double.infinity,
-                    height: 52,
-                    child: ElevatedButton.icon(
-                      onPressed: isLost ? null : _markAsLost,
-                      icon: const Icon(Icons.warning_amber_rounded, size: 20),
-                      label: Text(isLost ? 'Already Marked as Lost' : 'Mark as Lost'),
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: AppColors.primary,
-                        foregroundColor: Colors.white,
-                        disabledBackgroundColor: AppColors.surfaceContainerHigh,
-                        disabledForegroundColor: AppColors.onSurfaceVariant,
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-                        textStyle: GoogleFonts.inter(fontSize: 15, fontWeight: FontWeight.w700),
-                      ),
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 14, vertical: 5),
+                    decoration: BoxDecoration(
+                      color: isLost
+                          ? AppColors.errorContainer
+                          : const Color(0xFFD1FAE5),
+                      borderRadius: BorderRadius.circular(999),
                     ),
-                  ),
-                  const SizedBox(height: 12),
-                  SizedBox(
-                    width: double.infinity,
-                    height: 52,
-                    child: OutlinedButton.icon(
-                      onPressed: _removePet,
-                      icon: const Icon(Icons.delete_outline, size: 20),
-                      label: const Text('Remove Pet'),
-                      style: OutlinedButton.styleFrom(
-                        side: const BorderSide(color: AppColors.error, width: 2),
-                        foregroundColor: AppColors.error,
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-                        textStyle: GoogleFonts.inter(fontSize: 15, fontWeight: FontWeight.w700),
+                    child: Text(
+                      isLost ? 'LOST' : 'ACTIVE',
+                      style: GoogleFonts.inter(
+                        fontSize: 11,
+                        fontWeight: FontWeight.w700,
+                        letterSpacing: 0.5,
+                        color: isLost
+                            ? AppColors.error
+                            : const Color(0xFF065F46),
                       ),
                     ),
                   ),
                 ],
               ),
+              const SizedBox(height: 20),
+
+              // Info grid card
+              _buildInfoGridCard(dobDisplay, weight, color, collarId),
+              const SizedBox(height: 20),
+
+              // Owner info section
+              Text('OWNER INFORMATION',
+                  style: GoogleFonts.inter(
+                      fontSize: 11,
+                      fontWeight: FontWeight.w600,
+                      letterSpacing: 0.5,
+                      color: AppColors.onSurfaceVariant)),
+              const SizedBox(height: 10),
+              _buildOwnerCard(ownerName, ownerEmail, ownerPhone),
+              const SizedBox(height: 24),
+
+              // Action buttons
+              _buildActionButtons(isLost),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildNarrowDetailLayout({
+    required String photoUrl,
+    required String name,
+    required String breed,
+    required String species,
+    required bool isLost,
+    required String dobDisplay,
+    required String weight,
+    required String color,
+    required String collarId,
+    required String ownerName,
+    required String ownerEmail,
+    required String ownerPhone,
+  }) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const SizedBox(height: 16),
+        ClipRRect(
+          borderRadius: BorderRadius.circular(16),
+          child: SizedBox(
+            width: double.infinity,
+            height: 200,
+            child: photoUrl.isNotEmpty
+                ? Image.network(
+                    photoUrl,
+                    fit: BoxFit.cover,
+                    errorBuilder: (_, __, ___) => _photoPlaceholder(),
+                  )
+                : _photoPlaceholder(),
+          ),
+        ),
+        const SizedBox(height: 16),
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(name,
+                      style: GoogleFonts.montserrat(
+                          fontSize: 22,
+                          fontWeight: FontWeight.w700,
+                          color: AppColors.onSurface)),
+                  const SizedBox(height: 2),
+                  Text('$breed • $species',
+                      style: GoogleFonts.inter(
+                          fontSize: 15, color: AppColors.onSurfaceVariant)),
+                ],
+              ),
             ),
+            Container(
+              padding:
+                  const EdgeInsets.symmetric(horizontal: 14, vertical: 5),
+              decoration: BoxDecoration(
+                color: isLost
+                    ? AppColors.errorContainer
+                    : const Color(0xFFD1FAE5),
+                borderRadius: BorderRadius.circular(999),
+              ),
+              child: Text(
+                isLost ? 'LOST' : 'ACTIVE',
+                style: GoogleFonts.inter(
+                  fontSize: 11,
+                  fontWeight: FontWeight.w700,
+                  letterSpacing: 0.5,
+                  color: isLost
+                      ? AppColors.error
+                      : const Color(0xFF065F46),
+                ),
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 20),
+        _buildInfoGridCard(dobDisplay, weight, color, collarId),
+        const SizedBox(height: 20),
+        Text('OWNER INFORMATION',
+            style: GoogleFonts.inter(
+                fontSize: 11,
+                fontWeight: FontWeight.w600,
+                letterSpacing: 0.5,
+                color: AppColors.onSurfaceVariant)),
+        const SizedBox(height: 10),
+        _buildOwnerCard(ownerName, ownerEmail, ownerPhone),
+        const SizedBox(height: 28),
+        _buildActionButtons(isLost),
+      ],
+    );
+  }
+
+  Widget _buildInfoGridCard(
+      String dobDisplay, String weight, String color, String collarId) {
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(16),
+        boxShadow: [
+          BoxShadow(
+              color: Colors.black.withOpacity(0.05),
+              blurRadius: 20,
+              offset: const Offset(0, 4))
+        ],
+      ),
+      child: Column(
+        children: [
+          Row(
+            children: [
+              Expanded(
+                  child: _infoCell('Date of Birth', dobDisplay,
+                      border: const Border(
+                          right:
+                              BorderSide(color: Color(0xFFDDC1AE), width: 0.5)))),
+              Expanded(
+                  child: Padding(
+                      padding: const EdgeInsets.only(left: 16),
+                      child: _infoCell('Weight', '$weight kg'))),
+            ],
+          ),
+          const Divider(height: 28, color: Color(0xFFDDC1AE), thickness: 0.5),
+          Row(
+            children: [
+              Expanded(
+                  child: _infoCell('Color & Markings', color,
+                      border: const Border(
+                          right:
+                              BorderSide(color: Color(0xFFDDC1AE), width: 0.5)))),
+              Expanded(
+                  child: Padding(
+                      padding: const EdgeInsets.only(left: 16),
+                      child: _infoCell('Collar ID', collarId))),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildOwnerCard(
+      String ownerName, String ownerEmail, String ownerPhone) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(16),
+        boxShadow: [
+          BoxShadow(
+              color: Colors.black.withOpacity(0.05),
+              blurRadius: 20,
+              offset: const Offset(0, 4))
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          _ownerRow(Icons.person, ownerName),
+          const SizedBox(height: 10),
+          _ownerRow(Icons.email_outlined, ownerEmail),
+          const SizedBox(height: 10),
+          _ownerRow(Icons.phone_outlined, ownerPhone),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildActionButtons(bool isLost) {
+    return Column(
+      children: [
+        SizedBox(
+          width: double.infinity,
+          height: 52,
+          child: ElevatedButton.icon(
+            onPressed: isLost ? null : _markAsLost,
+            icon: const Icon(Icons.warning_amber_rounded, size: 20),
+            label: Text(isLost ? 'Already Marked as Lost' : 'Mark as Lost'),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: AppColors.primary,
+              foregroundColor: Colors.white,
+              disabledBackgroundColor: AppColors.surfaceContainerHigh,
+              disabledForegroundColor: AppColors.onSurfaceVariant,
+              shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(16)),
+              textStyle:
+                  GoogleFonts.inter(fontSize: 15, fontWeight: FontWeight.w700),
+            ),
+          ),
+        ),
+        const SizedBox(height: 12),
+        SizedBox(
+          width: double.infinity,
+          height: 52,
+          child: OutlinedButton.icon(
+            onPressed: _removePet,
+            icon: const Icon(Icons.delete_outline, size: 20),
+            label: const Text('Remove Pet'),
+            style: OutlinedButton.styleFrom(
+              side: const BorderSide(color: AppColors.error, width: 2),
+              foregroundColor: AppColors.error,
+              shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(16)),
+              textStyle:
+                  GoogleFonts.inter(fontSize: 15, fontWeight: FontWeight.w700),
+            ),
+          ),
+        ),
+      ],
     );
   }
 

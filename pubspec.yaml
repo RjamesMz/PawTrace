@@ -36,6 +36,7 @@ dependencies:
 
   # Backend & Auth
   supabase_flutter: ^2.6.0
+  responsive_framework: ^1.5.1
 
 flutter:
   uses-material-design: true
