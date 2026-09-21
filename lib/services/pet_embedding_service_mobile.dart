@@ -68,26 +68,132 @@ class PetEmbeddingService {
     }
   }
 
+  bool _isWildAnimalIndexOrLabel(int idx, String label) {
+    // 1. Wild canids in MobileNet: timber wolf (270), white wolf (271), red wolf (272), coyote (273), dingo (274), dhole (275), african hunting dog (276), hyena (277), foxes (278..281)
+    if (idx >= 270 && idx <= 281) return true;
+    // 2. Wild felids / big cats in MobileNet: cougar (287), lynx (288), leopard (289), snow leopard (290), jaguar (291), lion (292), tiger (293), cheetah (294)
+    if (idx >= 287 && idx <= 294) return true;
+    // 3. Bears: brown bear (295), american black bear (296), ice/polar bear (297), sloth bear (298)
+    if (idx >= 295 && idx <= 298) return true;
+    // 4. Tiger shark (4)
+    if (idx == 4) return true;
+
+    const wildKeywords = [
+      'wolf',
+      'timber wolf',
+      'white wolf',
+      'red wolf',
+      'coyote',
+      'dingo',
+      'dhole',
+      'hyena',
+      'fox',
+      'jackal',
+      'tiger',
+      'lion',
+      'leopard',
+      'jaguar',
+      'cheetah',
+      'panther',
+      'cougar',
+      'puma',
+      'lynx',
+      'bobcat',
+      'ocelot',
+      'caracal',
+      'serval',
+      'bear',
+    ];
+    return wildKeywords.any((k) => label.contains(k));
+  }
+
   bool _isDogIndexOrLabel(int idx, String label) {
-    if (idx >= 152 && idx <= 277) return true;
+    // Explicitly reject wild animals from ever being considered a dog
+    if (_isWildAnimalIndexOrLabel(idx, label)) return false;
+    // MobileNet domestic dog indices strictly span 152 through 269
+    if (idx >= 152 && idx <= 269) return true;
     const dogKeywords = [
-      'dog', 'hound', 'retriever', 'shepherd', 'terrier', 'poodle', 'bulldog', 'beagle', 'husky', 'pug',
-      'boxer', 'collie', 'spaniel', 'setter', 'pointer', 'malamute', 'samoyed', 'corgi', 'dachshund',
-      'dalmatian', 'doberman', 'labrador', 'chihuahua', 'shih', 'maltese', 'pomeranian', 'schnauzer',
-      'rottweiler', 'mastiff', 'greyhound', 'wolf', 'dingo', 'basenji', 'ridgeback', 'kelpie', 'whippet',
-      'saluki', 'borzoi', 'pekinese', 'papillon', 'kuvasz', 'briard', 'komondor', 'malinois', 'groenendael',
-      'schipperke', 'lhasa', 'vizsla', 'clumber', 'airedale', 'cairn', 'appenzeller', 'entlebucher',
-      'leonberg', 'newfoundland', 'great pyrenees', 'chow', 'keeshond', 'pembroke', 'cardigan', 'hairless',
-      'dhole', 'hunting dog', 'puppy', 'mutt', 'mongrel', 'aspin', 'canine',
+      'dog',
+      'hound',
+      'retriever',
+      'shepherd',
+      'terrier',
+      'poodle',
+      'bulldog',
+      'beagle',
+      'husky',
+      'pug',
+      'boxer',
+      'collie',
+      'spaniel',
+      'setter',
+      'pointer',
+      'malamute',
+      'samoyed',
+      'corgi',
+      'dachshund',
+      'dalmatian',
+      'doberman',
+      'labrador',
+      'chihuahua',
+      'shih',
+      'maltese',
+      'pomeranian',
+      'schnauzer',
+      'rottweiler',
+      'mastiff',
+      'greyhound',
+      'basenji',
+      'ridgeback',
+      'kelpie',
+      'whippet',
+      'saluki',
+      'borzoi',
+      'pekinese',
+      'papillon',
+      'kuvasz',
+      'briard',
+      'komondor',
+      'malinois',
+      'groenendael',
+      'schipperke',
+      'lhasa',
+      'vizsla',
+      'clumber',
+      'airedale',
+      'cairn',
+      'appenzeller',
+      'entlebucher',
+      'leonberg',
+      'newfoundland',
+      'great pyrenees',
+      'chow',
+      'keeshond',
+      'pembroke',
+      'cardigan',
+      'hairless',
+      'puppy',
+      'mutt',
+      'mongrel',
+      'aspin',
     ];
     return dogKeywords.any((k) => label.contains(k));
   }
 
   bool _isCatIndexOrLabel(int idx, String label) {
-    if (idx >= 282 && idx <= 287) return true;
+    // Explicitly reject wild animals / big cats from ever being considered a domestic cat
+    if (_isWildAnimalIndexOrLabel(idx, label)) return false;
+    // MobileNet domestic cat indices strictly span 282 through 286 (tabby, tiger cat, persian, siamese, egyptian)
+    if (idx >= 282 && idx <= 286) return true;
     const catKeywords = [
-      'cat', 'tabby', 'persian', 'siamese', 'egyptian', 'kitten', 'feline', 'puspin',
-      'tiger cat', 'lynx', 'cougar',
+      'domestic cat',
+      'tabby',
+      'persian',
+      'siamese',
+      'egyptian',
+      'kitten',
+      'feline',
+      'puspin',
     ];
     return catKeywords.any((k) => label.contains(k));
   }
@@ -137,8 +243,34 @@ class PetEmbeddingService {
       mobileNet!.run(input, mobileNetOutput);
 
       final scores = mobileNetOutput[0];
-      final indexedScores = List.generate(scores.length, (i) => MapEntry(i, scores[i]))
-        ..sort((a, b) => b.value.compareTo(a.value));
+      final indexedScores =
+          List.generate(scores.length, (i) => MapEntry(i, scores[i]))
+            ..sort((a, b) => b.value.compareTo(a.value));
+
+      // 1. FIRST: Check top predictions for wild animals (wolf, tiger, lion, bear, etc.)
+      for (int i = 0; i < 5 && i < indexedScores.length; i++) {
+        final entry = indexedScores[i];
+        final idx = entry.key;
+        final score = entry.value;
+        if (score < 8) continue;
+
+        final lbl = idx < mobileNetLabels.length
+            ? mobileNetLabels[idx].toLowerCase()
+            : '';
+        if (_isWildAnimalIndexOrLabel(idx, lbl)) {
+          debugPrint(
+              '[PawTrace] Wild animal detected: $lbl (idx: $idx, score: $score). Rejecting registration.');
+          return {
+            'label': 'Wild Animal (${_formatLabel(lbl)})',
+            'breed': _formatLabel(lbl),
+            'isAccepted': false,
+            'isDog': false,
+            'isCat': false,
+            'isWildAnimal': true,
+            'confidence': (score / 255.0).clamp(0.0, 1.0),
+          };
+        }
+      }
 
       int topDogIndex = -1;
       int topDogScore = 0;
@@ -152,7 +284,9 @@ class PetEmbeddingService {
         final score = entry.value;
         if (score < 5) continue;
 
-        final lbl = idx < mobileNetLabels.length ? mobileNetLabels[idx].toLowerCase() : '';
+        final lbl = idx < mobileNetLabels.length
+            ? mobileNetLabels[idx].toLowerCase()
+            : '';
         if (_isDogIndexOrLabel(idx, lbl)) {
           if (score > topDogScore) {
             topDogScore = score;
@@ -170,21 +304,33 @@ class PetEmbeddingService {
       bool isCat = topCatScore >= 5 && topCatScore > topDogScore;
       bool isAspin = false;
       bool isPuspin = false;
-      double confidence = (isDog ? topDogScore : (isCat ? topCatScore : 0)) / 255.0;
+      double confidence =
+          (isDog ? topDogScore : (isCat ? topCatScore : 0)) / 255.0;
 
-      // Second check: if MobileNet did not confidently detect a dog or cat, run Aspin/Puspin model
-      if (!isDog && !isCat && aspinPuspin != null) {
+      // Second check: run custom Aspin/Puspin model ONLY IF image doesn't match an inanimate non-pet object
+      final topEntry = indexedScores.isNotEmpty ? indexedScores.first : null;
+      final topScore = topEntry?.value ?? 0;
+      final topIdx = topEntry?.key ?? -1;
+      final topLbl = topIdx >= 0 && topIdx < mobileNetLabels.length
+          ? mobileNetLabels[topIdx].toLowerCase()
+          : '';
+
+      final bool isConfidentNonPet = topScore >= 40 &&
+          !_isDogIndexOrLabel(topIdx, topLbl) &&
+          !_isCatIndexOrLabel(topIdx, topLbl);
+
+      if (!isDog && !isCat && !isConfidentNonPet && aspinPuspin != null) {
         final secondOutput = List.generate(1, (_) => List.filled(2, 0.0));
         try {
           aspinPuspin!.run(input, secondOutput);
           final aspinScore = (secondOutput[0][0] as num).toDouble();
           final puspinScore = (secondOutput[0][1] as num).toDouble();
 
-          if (aspinScore >= 0.7) {
+          if (aspinScore >= 0.82) {
             isDog = true;
             isAspin = true;
             confidence = aspinScore;
-          } else if (puspinScore >= 0.7) {
+          } else if (puspinScore >= 0.82) {
             isCat = true;
             isPuspin = true;
             confidence = puspinScore;
@@ -260,7 +406,8 @@ class PetEmbeddingService {
       final isDog = detected['isDog'] == true;
       final isCat = detected['isCat'] == true;
       final accepted = detected['isAccepted'] == true;
-      final label = (detected['breed'] ?? detected['label'] ?? 'Unknown').toString();
+      final label =
+          (detected['breed'] ?? detected['label'] ?? 'Unknown').toString();
       final confidence = (detected['confidence'] as num?)?.toDouble() ?? 0.0;
       return PetClassificationResult(
         isDogOrCat: accepted,

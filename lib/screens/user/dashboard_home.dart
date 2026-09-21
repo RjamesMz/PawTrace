@@ -6,6 +6,7 @@ import '../../core/app_colors.dart';
 import '../../core/app_routes.dart';
 import '../../services/auth_service.dart';
 import '../../widgets/bottom_nav_bar.dart';
+import '../../widgets/notification_bell_button.dart';
 import '../shared/news_detail_screen.dart';
 
 /// Dashboard Home screen – news-first landing page with a quick view of
@@ -107,12 +108,6 @@ class _DashboardHomeScreenState extends State<DashboardHomeScreen> {
           SliverToBoxAdapter(
             child: _TopBar(
               photoUrl: _photoUrl,
-              onSignOut: () async {
-                await AuthService.instance.signOut();
-                if (!context.mounted) return;
-                Navigator.of(context)
-                    .pushNamedAndRemoveUntil('/', (_) => false);
-              },
               onSettings: () =>
                   Navigator.pushNamed(context, AppRoutes.settings),
             ),
@@ -124,12 +119,7 @@ class _DashboardHomeScreenState extends State<DashboardHomeScreen> {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   _HeroCard(userName: firstName),
-                  const SizedBox(height: 20),
-                  _DashboardStats(
-                    lostCount: _lostPetsList.length,
-                    newsCount: _newsList.length,
-                  ),
-                  const SizedBox(height: 20),
+                  const SizedBox(height: 24),
                   const _SectionHeader(
                     title: 'Latest news',
                     subtitle: 'Fresh updates from the community and field team',
@@ -227,12 +217,10 @@ class _DashboardHomeScreenState extends State<DashboardHomeScreen> {
 }
 
 class _TopBar extends StatelessWidget {
-  final Future<void> Function() onSignOut;
   final VoidCallback onSettings;
   final String? photoUrl;
 
-  const _TopBar(
-      {required this.onSignOut, required this.onSettings, this.photoUrl});
+  const _TopBar({required this.onSettings, this.photoUrl});
 
   @override
   Widget build(BuildContext context) {
@@ -283,15 +271,16 @@ class _TopBar extends StatelessWidget {
                 icon: const Icon(Icons.search,
                     color: AppColors.onSurfaceVariant, size: 20),
               ),
+              const NotificationBellButton(size: 20),
               IconButton(
-                tooltip: 'Sign out',
+                tooltip: 'My Registered Pets',
                 padding: EdgeInsets.zero,
                 constraints:
                     const BoxConstraints.tightFor(width: 36, height: 36),
-                icon: const Icon(Icons.logout_rounded,
-                    color: AppColors.onSurfaceVariant, size: 20),
-                onPressed: () async {
-                  await onSignOut();
+                icon: const Icon(Icons.pets_rounded,
+                    color: AppColors.primary, size: 20),
+                onPressed: () {
+                  Navigator.pushNamed(context, AppRoutes.myPets);
                 },
               ),
               IconButton(
@@ -374,83 +363,6 @@ class _HeroCard extends StatelessWidget {
                 color: Colors.white.withOpacity(0.9)),
           ),
           const SizedBox(height: 16),
-        ],
-      ),
-    );
-  }
-}
-
-class _DashboardStats extends StatelessWidget {
-  final int lostCount;
-  final int newsCount;
-
-  const _DashboardStats({required this.lostCount, required this.newsCount});
-
-  @override
-  Widget build(BuildContext context) {
-    return Row(
-      children: [
-        Expanded(
-            child: _StatTile(
-                label: 'Lost reports',
-                value: '$lostCount',
-                accent: AppColors.errorContainer,
-                dot: AppColors.error)),
-        const SizedBox(width: 10),
-        Expanded(
-            child: _StatTile(
-                label: 'News ',
-                value: '$newsCount',
-                accent: AppColors.surfaceContainerHigh,
-                dot: AppColors.primaryContainer)),
-      ],
-    );
-  }
-}
-
-class _StatTile extends StatelessWidget {
-  final String label;
-  final String value;
-  final Color accent;
-  final Color dot;
-
-  const _StatTile(
-      {required this.label,
-      required this.value,
-      required this.accent,
-      required this.dot});
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-      decoration:
-          BoxDecoration(color: accent, borderRadius: BorderRadius.circular(22)),
-      child: Row(
-        children: [
-          Container(
-              width: 8,
-              height: 8,
-              decoration: BoxDecoration(color: dot, shape: BoxShape.circle)),
-          const SizedBox(width: 8),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(value,
-                    style: GoogleFonts.montserrat(
-                        fontSize: 18,
-                        fontWeight: FontWeight.w700,
-                        color: AppColors.onSurface)),
-                Text(label.toUpperCase(),
-                    style: GoogleFonts.inter(
-                        fontSize: 10,
-                        fontWeight: FontWeight.w700,
-                        letterSpacing: 0.7,
-                        color: AppColors.onSurfaceVariant)),
-              ],
-            ),
-          ),
         ],
       ),
     );

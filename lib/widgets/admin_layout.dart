@@ -4,6 +4,7 @@ import '../core/app_colors.dart';
 import '../services/auth_service.dart';
 import 'admin_sidebar.dart';
 import 'bottom_nav_bar.dart';
+import 'notification_bell_button.dart';
 
 /// Responsive layout wrapper for all admin screens.
 ///
@@ -39,7 +40,6 @@ class AdminLayout extends StatefulWidget {
 class _AdminLayoutState extends State<AdminLayout> {
   String _adminName = 'Admin';
   UserRole _role = UserRole.admin;
-  bool _notifHovered = false;
 
   @override
   void initState() {
@@ -165,48 +165,9 @@ class _AdminLayoutState extends State<AdminLayout> {
               color: AppColors.onSurfaceVariant,
             ),
           ),
-          const SizedBox(width: 16),
-          // Notification bell with red badge
-          Stack(
-            clipBehavior: Clip.none,
-            children: [
-              MouseRegion(
-                cursor: SystemMouseCursors.click,
-                onEnter: (_) => setState(() => _notifHovered = true),
-                onExit: (_) => setState(() => _notifHovered = false),
-                child: AnimatedContainer(
-                  duration: const Duration(milliseconds: 150),
-                  decoration: BoxDecoration(
-                    color: _notifHovered
-                        ? AppColors.surfaceContainerLow
-                        : Colors.transparent,
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                  child: IconButton(
-                    icon: const Icon(
-                      Icons.notifications_outlined,
-                      color: AppColors.onSurfaceVariant,
-                      size: 22,
-                    ),
-                    onPressed: () {},
-                  ),
-                ),
-              ),
-              Positioned(
-                right: 8,
-                top: 8,
-                child: Container(
-                  width: 9,
-                  height: 9,
-                  decoration: const BoxDecoration(
-                    color: Colors.red,
-                    shape: BoxShape.circle,
-                  ),
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(width: 12),
+          const SizedBox(width: 8),
+          const NotificationBellButton(size: 22),
+          const SizedBox(width: 8),
           // Admin avatar
           CircleAvatar(
             radius: 18,

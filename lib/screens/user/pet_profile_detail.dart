@@ -5,6 +5,8 @@ import '../../core/app_colors.dart';
 import '../../core/app_routes.dart';
 import '../../core/navigation_helpers.dart';
 import '../../widgets/bottom_nav_bar.dart';
+import '../../widgets/pair_collar_dialog.dart';
+import 'locate_pet_screen.dart';
 
 /// Pet Profile Detail screen – detailed individual pet profile view.
 class PetProfileDetailScreen extends StatefulWidget {
@@ -505,7 +507,8 @@ class _PetProfileDetailScreenState extends State<PetProfileDetailScreen> {
     final dob = _formatDate(pet['date_of_birth']);
     final weight = '${pet['weight'] ?? '0.0'} kg';
     final color = pet['color'] ?? 'Unknown';
-    final collarId = pet['collar_id'] ?? 'None';
+    final rawCollarId = pet['collar_id'] as String?;
+    final hasCollar = rawCollarId != null && rawCollarId.isNotEmpty;
 
     return Container(
       padding: const EdgeInsets.all(16),
@@ -526,7 +529,72 @@ class _PetProfileDetailScreenState extends State<PetProfileDetailScreen> {
           Row(
             children: [
               Expanded(child: _infoCell('Color & Markings', color, border: const Border(right: BorderSide(color: Color(0xFFDDC1AE), width: 0.5)))),
-              Expanded(child: Padding(padding: const EdgeInsets.only(left: 16), child: _infoCell('Collar ID', collarId))),
+              Expanded(
+                child: Padding(
+                  padding: const EdgeInsets.only(left: 16),
+                  child: InkWell(
+                    borderRadius: BorderRadius.circular(8),
+                    onTap: () async {
+                      final result = await showPairCollarDialog(context: context, pet: pet);
+                      if (result != null) {
+                        _reloadPet();
+                      }
+                    },
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          children: [
+                            Text(
+                              'COLLAR ID',
+                              style: GoogleFonts.inter(
+                                fontSize: 10,
+                                fontWeight: FontWeight.w600,
+                                letterSpacing: 0.5,
+                                color: AppColors.onSurfaceVariant,
+                              ),
+                            ),
+                            const SizedBox(width: 4),
+                            const Icon(Icons.edit_outlined, size: 12, color: AppColors.primary),
+                          ],
+                        ),
+                        const SizedBox(height: 4),
+                        Row(
+                          children: [
+                            Flexible(
+                              child: Text(
+                                hasCollar ? rawCollarId : 'Not Paired',
+                                style: GoogleFonts.inter(
+                                  fontSize: 15,
+                                  fontWeight: FontWeight.w700,
+                                  color: hasCollar ? AppColors.onSurface : AppColors.outline,
+                                ),
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            ),
+                            const SizedBox(width: 6),
+                            Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                              decoration: BoxDecoration(
+                                color: hasCollar ? const Color(0xFFD1FAE5) : AppColors.primaryContainer.withOpacity(0.2),
+                                borderRadius: BorderRadius.circular(6),
+                              ),
+                              child: Text(
+                                hasCollar ? 'PAIRED' : 'PAIR',
+                                style: GoogleFonts.inter(
+                                  fontSize: 9,
+                                  fontWeight: FontWeight.w800,
+                                  color: hasCollar ? const Color(0xFF065F46) : AppColors.primary,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
             ],
           ),
         ],
@@ -555,7 +623,15 @@ class _PetProfileDetailScreenState extends State<PetProfileDetailScreen> {
           width: double.infinity,
           height: 52,
           child: ElevatedButton.icon(
-            onPressed: () => Navigator.pushNamed(context, AppRoutes.locateMyPet),
+            onPressed: () async {
+              await Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (_) => LocatePetScreen(pet: pet),
+                ),
+              );
+              _reloadPet();
+            },
             icon: const Icon(Icons.location_on, size: 20),
             label: const Text('Locate My Pet'),
             style: ElevatedButton.styleFrom(

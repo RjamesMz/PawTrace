@@ -21,6 +21,7 @@ class _AdminReportsScreenState extends State<AdminReportsScreen> {
   final _supabase = Supabase.instance.client;
 
   String _adminBarangay = '';
+  UserRole _currentUserRole = UserRole.admin;
   bool _isLoading = true;
   int _filterIndex = 0;
 
@@ -35,6 +36,7 @@ class _AdminReportsScreenState extends State<AdminReportsScreen> {
   }
 
   Future<void> _init() async {
+    _currentUserRole = await AuthService.instance.getCurrentUserRole();
     _adminBarangay = await AuthService.instance.getCurrentUserBarangay();
     await _fetchReports();
   }
@@ -42,11 +44,15 @@ class _AdminReportsScreenState extends State<AdminReportsScreen> {
   Future<void> _fetchReports() async {
     setState(() => _isLoading = true);
     try {
-      final data = await _supabase
+      var query = _supabase
           .from('lost_reports')
-          .select('*, pets(*), owner_id(*)')
-          .eq('barangay', _adminBarangay)
-          .order('reported_at', ascending: false);
+          .select('*, pets(*), owner_id(*)');
+
+      if (_currentUserRole != UserRole.superAdmin && _adminBarangay.isNotEmpty) {
+        query = query.eq('barangay', _adminBarangay);
+      }
+
+      final data = await query.order('reported_at', ascending: false);
       if (mounted) {
         setState(() {
           _reports = List<Map<String, dynamic>>.from(data);

@@ -7,6 +7,7 @@ import '../../core/app_routes.dart';
 import '../../services/auth_service.dart';
 import '../../widgets/admin_content_wrapper.dart';
 import '../../widgets/admin_layout.dart';
+import '../../widgets/notification_bell_button.dart';
 import '../../widgets/stat_card.dart';
 import '../shared/news_detail_screen.dart';
 import 'admin_pets_screen.dart';
@@ -802,28 +803,7 @@ class _BarangayAdminHomeScreenState extends State<BarangayAdminHomeScreen> {
                 ),
               ),
               const Spacer(),
-              // Notification bell with red badge
-              Stack(
-                children: [
-                  IconButton(
-                    icon: const Icon(Icons.notifications_outlined,
-                        color: AppColors.onSurfaceVariant, size: 26),
-                    onPressed: () {},
-                  ),
-                  Positioned(
-                    right: 8,
-                    top: 8,
-                    child: Container(
-                      width: 10,
-                      height: 10,
-                      decoration: const BoxDecoration(
-                        color: Colors.red,
-                        shape: BoxShape.circle,
-                      ),
-                    ),
-                  ),
-                ],
-              ),
+              const NotificationBellButton(size: 26),
               const SizedBox(width: 4),
               // Admin avatar
               CircleAvatar(
@@ -920,14 +900,19 @@ class _BarangayAdminHomeScreenState extends State<BarangayAdminHomeScreen> {
 
   // ─── News Announcements Section ─────────────────────────────────────────────
 
-  Future<void> _deletePost(String postId) async {
+  Future<void> _deletePost(Map<String, dynamic> post) async {
+    final postId =
+        (post['news_id'] ?? post['post_id'] ?? post['id'])?.toString() ?? '';
+    final title = post['title']?.toString() ?? 'this post';
+
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (_) => AlertDialog(
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
         title: Text('Delete Post?',
             style: GoogleFonts.montserrat(fontWeight: FontWeight.w700)),
-        content: Text('This will permanently remove the news post.',
+        content: Text(
+            'Are you sure you want to delete "$title"? This will permanently remove the news post.',
             style: GoogleFonts.inter(fontSize: 14)),
         actions: [
           TextButton(
@@ -937,11 +922,10 @@ class _BarangayAdminHomeScreenState extends State<BarangayAdminHomeScreen> {
           ),
           ElevatedButton(
             style: ElevatedButton.styleFrom(
-              backgroundColor: AppColors.error,
-              foregroundColor: Colors.white,
-              shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(12)),
-            ),
+                backgroundColor: AppColors.error,
+                foregroundColor: Colors.white,
+                shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12))),
             onPressed: () => Navigator.pop(context, true),
             child: Text('Delete',
                 style: GoogleFonts.inter(fontWeight: FontWeight.w600)),
@@ -951,9 +935,33 @@ class _BarangayAdminHomeScreenState extends State<BarangayAdminHomeScreen> {
     );
     if (confirmed != true || !mounted) return;
     try {
-      await _supabase.from('news').delete().eq('id', postId);
+      bool deleted = false;
+      for (final idCol in ['news_id', 'post_id', 'id']) {
+        if (postId.isNotEmpty) {
+          try {
+            await _supabase.from('news').delete().eq(idCol, postId);
+            deleted = true;
+            break;
+          } catch (_) {}
+        }
+      }
+      if (!deleted && title.isNotEmpty) {
+        await _supabase.from('news').delete().eq('title', title);
+      }
       _fetchNews();
-      if (mounted) setState(() {});
+      if (mounted) {
+        setState(() {});
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('News post deleted successfully.',
+                style: GoogleFonts.inter(fontWeight: FontWeight.w600)),
+            backgroundColor: const Color(0xFF22C55E),
+            behavior: SnackBarBehavior.floating,
+            shape:
+                RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+          ),
+        );
+      }
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(
@@ -1074,7 +1082,6 @@ class _BarangayAdminHomeScreenState extends State<BarangayAdminHomeScreen> {
     final category = post['category'] as String? ?? '';
     final imageUrl = post['image_url'] as String? ?? '';
     final accentHex = post['accent_color'] as String? ?? '#FF6600';
-    final postId = post['id']?.toString() ?? '';
 
     Color accentColor = AppColors.primary;
     try {
@@ -1186,7 +1193,7 @@ class _BarangayAdminHomeScreenState extends State<BarangayAdminHomeScreen> {
             icon: const Icon(Icons.delete_outline_rounded,
                 color: AppColors.error, size: 20),
             tooltip: 'Delete post',
-            onPressed: () => _deletePost(postId),
+            onPressed: () => _deletePost(post),
           ),
         ],
       ),

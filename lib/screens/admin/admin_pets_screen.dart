@@ -3,6 +3,7 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:responsive_framework/responsive_framework.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../core/app_colors.dart';
+import '../../core/app_routes.dart';
 import '../../services/auth_service.dart';
 import '../../widgets/admin_content_wrapper.dart';
 import '../../widgets/admin_layout.dart';
@@ -27,8 +28,19 @@ class _AdminPetsScreenState extends State<AdminPetsScreen> {
   bool isLoading = true;
   int _selectedChipIndex = 0;
   String _adminBarangay = '';
+  UserRole _currentUserRole = UserRole.admin;
+  String _selectedBarangayFilter = 'All';
 
   static const List<String> _chipLabels = ['All', 'Active', 'Lost', 'Dog', 'Cat'];
+
+  List<String> get _availableBarangays {
+    final set = <String>{'All'};
+    for (final p in allPets) {
+      final b = (p['barangay'] ?? p['users']?['barangay'] ?? '').toString().trim();
+      if (b.isNotEmpty) set.add(b);
+    }
+    return set.toList();
+  }
 
   @override
   void initState() {
@@ -37,8 +49,9 @@ class _AdminPetsScreenState extends State<AdminPetsScreen> {
   }
 
   Future<void> _init() async {
+    _currentUserRole = await AuthService.instance.getCurrentUserRole();
     _adminBarangay = await AuthService.instance.getCurrentUserBarangay();
-    fetchAllPets();
+    await fetchAllPets();
   }
 
   @override
@@ -50,11 +63,17 @@ class _AdminPetsScreenState extends State<AdminPetsScreen> {
   Future<void> fetchAllPets() async {
     setState(() => isLoading = true);
     try {
-      final data = await _supabase
+      var query = _supabase
           .from('pets')
-          .select('*, users(first_name, middle_name, surname, suffix, email, phone, barangay)')
-          .eq('barangay', _adminBarangay)
-          .order('created_at', ascending: false);
+          .select('*, users(first_name, middle_name, surname, suffix, email, phone, barangay)');
+
+      // If barangay admin, strictly scope to their assigned barangay.
+      // Super admin sees all pets across all barangays.
+      if (_currentUserRole != UserRole.superAdmin && _adminBarangay.isNotEmpty) {
+        query = query.eq('barangay', _adminBarangay);
+      }
+
+      final data = await query.order('created_at', ascending: false);
       if (!mounted) return;
       setState(() {
         allPets = List<Map<String, dynamic>>.from(data);
@@ -78,6 +97,14 @@ class _AdminPetsScreenState extends State<AdminPetsScreen> {
   void _applyFilters() {
     List<Map<String, dynamic>> result = List.from(allPets);
 
+    // Apply barangay filter for super admin
+    if (_currentUserRole == UserRole.superAdmin && _selectedBarangayFilter != 'All') {
+      result = result.where((p) {
+        final b = (p['barangay'] ?? p['users']?['barangay'] ?? '').toString().toLowerCase();
+        return b == _selectedBarangayFilter.toLowerCase();
+      }).toList();
+    }
+
     // Apply chip filter
     switch (_selectedChipIndex) {
       case 1: // Active
@@ -99,11 +126,20 @@ class _AdminPetsScreenState extends State<AdminPetsScreen> {
     if (q.isNotEmpty) {
       result = result.where((p) {
         final petName = (p['name'] ?? '').toString().toLowerCase();
+        final breed = (p['breed'] ?? '').toString().toLowerCase();
+        final species = (p['species'] ?? '').toString().toLowerCase();
+        final barangay = (p['barangay'] ?? p['users']?['barangay'] ?? '').toString().toLowerCase();
+        final collarId = (p['collar_id'] ?? '').toString().toLowerCase();
         final u = p['users'];
         final ownerName = u != null
             ? [u['first_name'], u['middle_name'], u['surname'], u['suffix']].where((s) => s != null && s.toString().isNotEmpty).join(' ').toLowerCase()
             : '';
-        return petName.contains(q) || ownerName.contains(q);
+        return petName.contains(q) ||
+            ownerName.contains(q) ||
+            barangay.contains(q) ||
+            breed.contains(q) ||
+            species.contains(q) ||
+            collarId.contains(q);
       }).toList();
     }
 
@@ -175,15 +211,69 @@ class _AdminPetsScreenState extends State<AdminPetsScreen> {
   }
 
   Widget _buildDesktopContent() {
+    final isSuperAdmin = _currentUserRole == UserRole.superAdmin;
+    final barangays = _availableBarangays;
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        // Summary pills Row
-        _buildSummaryRow(),
+        // Summary pills Row + Barangay Chip
+        Row(
+          children: [
+            _buildSummaryRow(),
+            const Spacer(),
+            _buildBarangayChip(),
+          ],
+        ),
         const SizedBox(height: 16),
 
-        // Search bar
-        _buildSearchBar(),
+        // Search bar + optional Barangay dropdown for Super Admin
+        Row(
+          children: [
+            Expanded(child: _buildSearchBar()),
+            if (isSuperAdmin && barangays.length > 1) ...[
+              const SizedBox(width: 12),
+              Container(
+                height: 48,
+                padding: const EdgeInsets.symmetric(horizontal: 14),
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(14),
+                  border: Border.all(color: Colors.grey.shade300),
+                ),
+                child: DropdownButtonHideUnderline(
+                  child: DropdownButton<String>(
+                    value: barangays.contains(_selectedBarangayFilter)
+                        ? _selectedBarangayFilter
+                        : 'All',
+                    icon: const Icon(Icons.arrow_drop_down, color: AppColors.primary),
+                    items: barangays.map((b) {
+                      return DropdownMenuItem<String>(
+                        value: b,
+                        child: Text(
+                          b == 'All' ? 'All Barangays' : 'Brgy. $b',
+                          style: GoogleFonts.inter(
+                            fontSize: 13,
+                            fontWeight: FontWeight.w600,
+                            color: AppColors.onSurface,
+                          ),
+                        ),
+                      );
+                    }).toList(),
+                    onChanged: (val) {
+                      if (val != null) {
+                        setState(() {
+                          _selectedBarangayFilter = val;
+                          _applyFilters();
+                        });
+                      }
+                    },
+                  ),
+                ),
+              ),
+            ],
+          ],
+        ),
         const SizedBox(height: 16),
 
         // Filter chips Row
@@ -216,6 +306,33 @@ class _AdminPetsScreenState extends State<AdminPetsScreen> {
                     ),
                   ),
                   const Spacer(),
+                  ElevatedButton.icon(
+                    onPressed: () async {
+                      await Navigator.pushNamed(
+                          context, AppRoutes.profilePetRegistration);
+                      fetchAllPets();
+                    },
+                    icon: const Icon(Icons.add, size: 16),
+                    label: Text(
+                      'Add Pet',
+                      style: GoogleFonts.inter(
+                        fontWeight: FontWeight.bold,
+                        fontSize: 13,
+                      ),
+                    ),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: AppColors.primary,
+                      foregroundColor: Colors.white,
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 16,
+                        vertical: 10,
+                      ),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
                   IconButton(
                     icon: const Icon(Icons.refresh),
                     tooltip: 'Refresh',
@@ -434,23 +551,40 @@ class _AdminPetsScreenState extends State<AdminPetsScreen> {
   }
 
   Widget _buildBarangayChip() {
+    final isSuperAdmin = _currentUserRole == UserRole.superAdmin;
     return Row(
       children: [
         Container(
           padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
           decoration: BoxDecoration(
-            color: AppColors.primary.withOpacity(0.1),
+            color: (isSuperAdmin ? const Color(0xFFFF6600) : AppColors.primary).withOpacity(0.1),
             borderRadius: BorderRadius.circular(999),
-            border: Border.all(color: AppColors.primary.withOpacity(0.3)),
+            border: Border.all(
+              color: (isSuperAdmin ? const Color(0xFFFF6600) : AppColors.primary).withOpacity(0.3),
+            ),
           ),
           child: Row(
             mainAxisSize: MainAxisSize.min,
             children: [
-              const Icon(Icons.location_on, size: 14, color: AppColors.primary),
-              const SizedBox(width: 4),
+              Icon(
+                isSuperAdmin ? Icons.shield_rounded : Icons.location_on,
+                size: 14,
+                color: isSuperAdmin ? const Color(0xFFFF6600) : AppColors.primary,
+              ),
+              const SizedBox(width: 6),
               Text(
-                'Brgy. $_adminBarangay',
-                style: GoogleFonts.inter(fontSize: 12, fontWeight: FontWeight.w700, color: AppColors.primary),
+                isSuperAdmin
+                    ? (_selectedBarangayFilter == 'All'
+                        ? 'All Barangays (Super Admin)'
+                        : 'Brgy. $_selectedBarangayFilter')
+                    : (_adminBarangay.isNotEmpty
+                        ? 'Brgy. $_adminBarangay'
+                        : 'Barangay Admin'),
+                style: GoogleFonts.inter(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w700,
+                  color: isSuperAdmin ? const Color(0xFFFF6600) : AppColors.primary,
+                ),
               ),
             ],
           ),

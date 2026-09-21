@@ -3,6 +3,7 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:responsive_framework/responsive_framework.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../core/app_colors.dart';
+import '../../core/app_constants.dart';
 import '../../core/app_routes.dart';
 import '../../services/auth_service.dart';
 import '../../widgets/admin_content_wrapper.dart';
@@ -28,7 +29,6 @@ class _UserManagementScreenState extends State<UserManagementScreen> {
 
   List<Map<String, dynamic>> _citizenUsers = [];
   List<Map<String, dynamic>> _barangayAdmins = [];
-  List<Map<String, dynamic>> _newsPosts = [];
 
   bool _isLoading = true;
   String _adminBarangay = '';
@@ -45,10 +45,7 @@ class _UserManagementScreenState extends State<UserManagementScreen> {
   Future<void> _init() async {
     _adminBarangay = await AuthService.instance.getCurrentUserBarangay();
     _currentUserRole = await AuthService.instance.getCurrentUserRole();
-    await Future.wait([
-      _fetchUsers(),
-      _fetchNewsPosts(),
-    ]);
+    await _fetchUsers();
   }
 
   Future<void> _fetchUsers() async {
@@ -102,66 +99,6 @@ class _UserManagementScreenState extends State<UserManagementScreen> {
       if (mounted) {
         setState(() => _isLoading = false);
       }
-    }
-  }
-
-  Future<void> _fetchNewsPosts() async {
-    try {
-      var query = Supabase.instance.client.from('news').select();
-      if (_currentUserRole != UserRole.superAdmin && _adminBarangay.isNotEmpty) {
-        query = query.eq('barangay', _adminBarangay);
-      }
-      final data = await query.order('created_at', ascending: false);
-      if (mounted) {
-        setState(() {
-          _newsPosts = List<Map<String, dynamic>>.from(data);
-        });
-      }
-    } catch (e) {
-      debugPrint('Error fetching news: $e');
-    }
-  }
-
-  Future<void> _deleteNewsPost(String id) async {
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        title: Text('Delete News Post?',
-            style: GoogleFonts.montserrat(fontWeight: FontWeight.bold)),
-        content: const Text('Are you sure you want to remove this announcement?'),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx, false),
-            child: const Text('Cancel'),
-          ),
-          ElevatedButton(
-            onPressed: () => Navigator.pop(ctx, true),
-            style: ElevatedButton.styleFrom(
-              backgroundColor: AppColors.error,
-              foregroundColor: Colors.white,
-            ),
-            child: const Text('Delete'),
-          ),
-        ],
-      ),
-    );
-
-    if (confirmed != true) return;
-
-    try {
-      await Supabase.instance.client.from('news').delete().eq('id', id);
-      await _fetchNewsPosts();
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('News post deleted'),
-            backgroundColor: Color(0xFF22C55E),
-          ),
-        );
-      }
-    } catch (e) {
-      debugPrint('Error deleting news: $e');
     }
   }
 
@@ -255,79 +192,12 @@ class _UserManagementScreenState extends State<UserManagementScreen> {
   }
 
   Widget _buildDesktopContent() {
+    final showAdmins = _currentUserRole == UserRole.superAdmin;
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        // ── 1. News Posts Section Card ──
-        Card(
-          elevation: 0,
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(16),
-            side: BorderSide(color: Colors.grey.shade200),
-          ),
-          color: Colors.white,
-          clipBehavior: Clip.antiAlias,
-          child: Theme(
-            data: Theme.of(context).copyWith(
-              cardColor: Colors.white,
-              dividerColor: Colors.grey.shade200,
-            ),
-            child: PaginatedDataTable(
-              header: Row(
-                children: [
-                  Text(
-                    'News Posts & Announcements (${_newsPosts.length})',
-                    style: GoogleFonts.montserrat(
-                      fontSize: 16,
-                      fontWeight: FontWeight.bold,
-                      color: AppColors.onSurface,
-                    ),
-                  ),
-                  const Spacer(),
-                  ElevatedButton.icon(
-                    onPressed: () async {
-                      await Navigator.pushNamed(context, AppRoutes.postNews);
-                      _fetchNewsPosts();
-                    },
-                    icon: const Icon(Icons.add, size: 16),
-                    label: Text(
-                      'Create Post',
-                      style: GoogleFonts.inter(
-                          fontWeight: FontWeight.w600, fontSize: 12),
-                    ),
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: AppColors.primary,
-                      foregroundColor: Colors.white,
-                      padding: const EdgeInsets.symmetric(
-                          horizontal: 14, vertical: 8),
-                      minimumSize: Size.zero,
-                      tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                      shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(8)),
-                    ),
-                  ),
-                ],
-              ),
-              rowsPerPage: 10,
-              showFirstLastButtons: true,
-              columns: const [
-                DataColumn(label: Text('Category')),
-                DataColumn(label: Text('Title')),
-                DataColumn(label: Text('Source')),
-                DataColumn(label: Text('Date')),
-                DataColumn(label: Text('Actions')),
-              ],
-              source: _NewsDataTableSource(
-                _newsPosts,
-                onDelete: _deleteNewsPost,
-              ),
-            ),
-          ),
-        ),
-
-        const SizedBox(height: 24),
-
-        // ── 2. Registered Users Section Card ──
+        // ── 1. Registered Users Section Card ──
         Card(
           elevation: 0,
           shape: RoundedRectangleBorder(
@@ -370,13 +240,33 @@ class _UserManagementScreenState extends State<UserManagementScreen> {
                           ),
                         ),
                         const Spacer(),
+                        ElevatedButton.icon(
+                          onPressed: _showAddUserModal,
+                          icon: const Icon(Icons.add, size: 16),
+                          label: Text(
+                            'Add User',
+                            style: GoogleFonts.inter(
+                              fontWeight: FontWeight.bold,
+                              fontSize: 13,
+                            ),
+                          ),
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: AppColors.primary,
+                            foregroundColor: Colors.white,
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 16,
+                              vertical: 10,
+                            ),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(8),
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 8),
                         IconButton(
                           icon: const Icon(Icons.refresh),
                           tooltip: 'Refresh',
-                          onPressed: () {
-                            _fetchUsers();
-                            _fetchNewsPosts();
-                          },
+                          onPressed: _fetchUsers,
                         ),
                       ],
                     ),
@@ -387,6 +277,7 @@ class _UserManagementScreenState extends State<UserManagementScreen> {
                       DataColumn(label: Text('Name')),
                       DataColumn(label: Text('Email')),
                       DataColumn(label: Text('Phone')),
+                      DataColumn(label: Text('Barangay')),
                       DataColumn(label: Text('Role')),
                       DataColumn(label: Text('Status')),
                       DataColumn(label: Text('Actions')),
@@ -401,11 +292,389 @@ class _UserManagementScreenState extends State<UserManagementScreen> {
             ),
           ),
         ),
+
+        // ── 2. Barangay Administrators Section Card (Super Admin only) ──
+        if (showAdmins) ...[
+          const SizedBox(height: 24),
+          Card(
+            elevation: 0,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(16),
+              side: BorderSide(color: Colors.grey.shade200),
+            ),
+            color: Colors.white,
+            clipBehavior: Clip.antiAlias,
+            child: Padding(
+              padding: const EdgeInsets.only(top: 16),
+              child: Theme(
+                data: Theme.of(context).copyWith(
+                  cardColor: Colors.white,
+                  dividerColor: Colors.grey.shade200,
+                ),
+                child: PaginatedDataTable(
+                  header: Row(
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.all(6),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFF00796B).withOpacity(0.12),
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        child: const Icon(
+                          Icons.shield_rounded,
+                          color: Color(0xFF00796B),
+                          size: 18,
+                        ),
+                      ),
+                      const SizedBox(width: 10),
+                      Text(
+                        'Barangay Administrators (${_filteredAdmins.length})',
+                        style: GoogleFonts.montserrat(
+                          fontSize: 16,
+                          fontWeight: FontWeight.bold,
+                          color: AppColors.onSurface,
+                        ),
+                      ),
+                      const Spacer(),
+                      ElevatedButton.icon(
+                        onPressed: _showAddAdminModal,
+                        icon: const Icon(Icons.add, size: 16),
+                        label: Text(
+                          'Add Admin',
+                          style: GoogleFonts.inter(
+                            fontWeight: FontWeight.bold,
+                            fontSize: 13,
+                          ),
+                        ),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: const Color(0xFF00796B),
+                          foregroundColor: Colors.white,
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 16,
+                            vertical: 10,
+                          ),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      IconButton(
+                        icon: const Icon(Icons.refresh),
+                        tooltip: 'Refresh',
+                        onPressed: _fetchUsers,
+                      ),
+                    ],
+                  ),
+                  rowsPerPage: 10,
+                  showFirstLastButtons: true,
+                  columns: const [
+                    DataColumn(label: Text('Avatar')),
+                    DataColumn(label: Text('Name')),
+                    DataColumn(label: Text('Email')),
+                    DataColumn(label: Text('Phone')),
+                    DataColumn(label: Text('Barangay')),
+                    DataColumn(label: Text('Role')),
+                    DataColumn(label: Text('Status')),
+                    DataColumn(label: Text('Actions')),
+                  ],
+                  source: _UsersDataTableSource(
+                    _filteredAdmins,
+                    onAction: _handleUserAction,
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ],
       ],
     );
   }
 
-  void _handleUserAction(String action, Map<String, dynamic> user) {
+  void _showAddUserModal() {
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: Text(
+          'Add User',
+          style: GoogleFonts.montserrat(
+            fontSize: 18,
+            fontWeight: FontWeight.bold,
+            color: AppColors.onSurface,
+          ),
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'Select citizen account type to register:',
+              style: GoogleFonts.inter(
+                fontSize: 13,
+                color: AppColors.onSurfaceVariant,
+              ),
+            ),
+            const SizedBox(height: 16),
+            ListTile(
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(12),
+                side: BorderSide(color: Colors.grey.shade200),
+              ),
+              leading: Container(
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  color: AppColors.primary.withOpacity(0.1),
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: const Icon(Icons.person,
+                    color: AppColors.primary, size: 22),
+              ),
+              title: Text('Pet Owner',
+                  style: GoogleFonts.inter(
+                      fontSize: 14, fontWeight: FontWeight.w600)),
+              subtitle: Text('Can register, track, and manage pets',
+                  style: GoogleFonts.inter(
+                      fontSize: 12, color: AppColors.onSurfaceVariant)),
+              onTap: () {
+                Navigator.pop(ctx);
+                Navigator.pushNamed(context, AppRoutes.register);
+              },
+            ),
+            const SizedBox(height: 10),
+            ListTile(
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(12),
+                side: BorderSide(color: Colors.grey.shade200),
+              ),
+              leading: Container(
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  color: const Color(0xFF9333EA).withOpacity(0.1),
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: const Icon(Icons.search,
+                    color: Color(0xFF9333EA), size: 22),
+              ),
+              title: Text('Finder',
+                  style: GoogleFonts.inter(
+                      fontSize: 14, fontWeight: FontWeight.w600)),
+              subtitle: Text('Can report and scan found pets',
+                  style: GoogleFonts.inter(
+                      fontSize: 12, color: AppColors.onSurfaceVariant)),
+              onTap: () {
+                Navigator.pop(ctx);
+                Navigator.pushNamed(context, AppRoutes.register);
+              },
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('Close'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _showAddAdminModal() {
+    final formKey = GlobalKey<FormState>();
+    final fNameCtrl = TextEditingController();
+    final sNameCtrl = TextEditingController();
+    final emailCtrl = TextEditingController();
+    final phoneCtrl = TextEditingController();
+    final passCtrl = TextEditingController();
+    String selectedBrgy = AppConstants.barangays.first;
+    bool isSubmitting = false;
+
+    showDialog(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setDialogState) => AlertDialog(
+          shape:
+              RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+          title: Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(6),
+                decoration: BoxDecoration(
+                  color: const Color(0xFF00796B).withOpacity(0.12),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: const Icon(Icons.admin_panel_settings,
+                    color: Color(0xFF00796B), size: 20),
+              ),
+              const SizedBox(width: 10),
+              Text(
+                'Register Barangay Admin',
+                style: GoogleFonts.montserrat(
+                    fontWeight: FontWeight.bold, fontSize: 17),
+              ),
+            ],
+          ),
+          content: SizedBox(
+            width: 440,
+            child: Form(
+              key: formKey,
+              child: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    TextFormField(
+                      controller: fNameCtrl,
+                      textCapitalization: TextCapitalization.words,
+                      decoration: InputDecoration(
+                        labelText: 'First Name *',
+                        prefixIcon: const Icon(Icons.person_outline),
+                        border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(10)),
+                      ),
+                      validator: (v) =>
+                          v == null || v.trim().isEmpty ? 'Required' : null,
+                    ),
+                    const SizedBox(height: 12),
+                    TextFormField(
+                      controller: sNameCtrl,
+                      textCapitalization: TextCapitalization.words,
+                      decoration: InputDecoration(
+                        labelText: 'Surname *',
+                        prefixIcon: const Icon(Icons.person_outline),
+                        border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(10)),
+                      ),
+                      validator: (v) =>
+                          v == null || v.trim().isEmpty ? 'Required' : null,
+                    ),
+                    const SizedBox(height: 12),
+                    TextFormField(
+                      controller: emailCtrl,
+                      keyboardType: TextInputType.emailAddress,
+                      decoration: InputDecoration(
+                        labelText: 'Email *',
+                        prefixIcon: const Icon(Icons.email_outlined),
+                        border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(10)),
+                      ),
+                      validator: (v) => v == null || !v.contains('@')
+                          ? 'Valid email required'
+                          : null,
+                    ),
+                    const SizedBox(height: 12),
+                    TextFormField(
+                      controller: phoneCtrl,
+                      keyboardType: TextInputType.phone,
+                      decoration: InputDecoration(
+                        labelText: 'Phone Number',
+                        prefixIcon: const Icon(Icons.phone_outlined),
+                        border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(10)),
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                    TextFormField(
+                      controller: passCtrl,
+                      obscureText: true,
+                      decoration: InputDecoration(
+                        labelText: 'Temp Password *',
+                        prefixIcon: const Icon(Icons.lock_outline),
+                        border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(10)),
+                      ),
+                      validator: (v) =>
+                          v == null || v.length < 6 ? 'Min 6 chars' : null,
+                    ),
+                    const SizedBox(height: 12),
+                    DropdownButtonFormField<String>(
+                      value: selectedBrgy,
+                      decoration: InputDecoration(
+                        labelText: 'Assigned Barangay *',
+                        prefixIcon: const Icon(Icons.location_city_outlined),
+                        border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(10)),
+                      ),
+                      items: AppConstants.barangays
+                          .map((b) => DropdownMenuItem(
+                              value: b, child: Text('Brgy. $b')))
+                          .toList(),
+                      onChanged: (val) {
+                        if (val != null) {
+                          setDialogState(() => selectedBrgy = val);
+                        }
+                      },
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: isSubmitting ? null : () => Navigator.pop(ctx),
+              child: const Text('Cancel'),
+            ),
+            ElevatedButton(
+              onPressed: isSubmitting
+                  ? null
+                  : () async {
+                      if (!formKey.currentState!.validate()) return;
+                      setDialogState(() => isSubmitting = true);
+                      try {
+                        await Supabase.instance.client.auth.signUp(
+                          email: emailCtrl.text.trim(),
+                          password: passCtrl.text.trim(),
+                          data: {
+                            'first_name': fNameCtrl.text.trim(),
+                            'surname': sNameCtrl.text.trim(),
+                            'phone': phoneCtrl.text.trim(),
+                            'barangay': selectedBrgy,
+                            'role': 'admin',
+                          },
+                        );
+                        if (ctx.mounted) Navigator.pop(ctx);
+                        _fetchUsers();
+                        if (mounted) {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(
+                              content: Text(
+                                  'Admin registered for Brgy. $selectedBrgy!'),
+                              backgroundColor: const Color(0xFF22C55E),
+                            ),
+                          );
+                        }
+                      } catch (e) {
+                        setDialogState(() => isSubmitting = false);
+                        if (mounted) {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(
+                              content: Text('Failed: $e'),
+                              backgroundColor: AppColors.error,
+                            ),
+                          );
+                        }
+                      }
+                    },
+              style: ElevatedButton.styleFrom(
+                backgroundColor: const Color(0xFF00796B),
+                foregroundColor: Colors.white,
+              ),
+              child: isSubmitting
+                  ? const SizedBox(
+                      width: 18,
+                      height: 18,
+                      child: CircularProgressIndicator(
+                          strokeWidth: 2, color: Colors.white),
+                    )
+                  : const Text('Register Admin'),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  void _handleUserAction(String action, Map<String, dynamic> user) async {
     final fName = user['first_name'] ?? '';
     final sName = user['surname'] ?? '';
     final fullName = '$fName $sName'.trim();
@@ -460,6 +729,90 @@ class _UserManagementScreenState extends State<UserManagementScreen> {
           backgroundColor: AppColors.primary,
         ),
       );
+    } else if (action == 'delete') {
+      final isSelf = user['user_id'] == Supabase.instance.client.auth.currentUser?.id;
+      if (isSelf) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('You cannot delete your own account.'),
+            backgroundColor: AppColors.error,
+          ),
+        );
+        return;
+      }
+
+      final confirmed = await showDialog<bool>(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+          title: Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(6),
+                decoration: BoxDecoration(
+                  color: AppColors.error.withOpacity(0.12),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: const Icon(Icons.delete_outline, color: AppColors.error, size: 20),
+              ),
+              const SizedBox(width: 10),
+              Text(
+                'Delete Account?',
+                style: GoogleFonts.montserrat(fontWeight: FontWeight.bold, fontSize: 17),
+              ),
+            ],
+          ),
+          content: Text(
+            'Are you sure you want to delete the account for "${fullName.isNotEmpty ? fullName : email}"?\n\nThis will remove their profile and access.',
+            style: GoogleFonts.inter(fontSize: 13, height: 1.5),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx, false),
+              child: const Text('Cancel'),
+            ),
+            ElevatedButton(
+              onPressed: () => Navigator.pop(ctx, true),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: AppColors.error,
+                foregroundColor: Colors.white,
+              ),
+              child: const Text('Delete Account'),
+            ),
+          ],
+        ),
+      );
+
+      if (confirmed != true) return;
+
+      try {
+        final userId = user['user_id'] ?? user['id'];
+        if (userId != null) {
+          try {
+            await Supabase.instance.client.from('users').delete().eq('user_id', userId);
+          } catch (_) {
+            await Supabase.instance.client.from('users').delete().eq('id', userId);
+          }
+        }
+        await _fetchUsers();
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('Account for "${fullName.isNotEmpty ? fullName : email}" deleted.'),
+              backgroundColor: const Color(0xFF22C55E),
+            ),
+          );
+        }
+      } catch (e) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('Failed to delete account: $e'),
+              backgroundColor: AppColors.error,
+            ),
+          );
+        }
+      }
     }
   }
 
@@ -761,8 +1114,7 @@ class _UserManagementScreenState extends State<UserManagementScreen> {
         prefixIcon: const Icon(Icons.search, color: AppColors.outline),
         hintText: 'Search by name, email, or barangay...',
         hintStyle: GoogleFonts.inter(
-            fontSize: 14,
-            color: AppColors.onSurfaceVariant.withOpacity(0.5)),
+            fontSize: 14, color: AppColors.onSurfaceVariant.withOpacity(0.5)),
         filled: true,
         fillColor: AppColors.surfaceContainerLow,
         border: OutlineInputBorder(
@@ -1286,11 +1638,9 @@ class _UserManagementScreenState extends State<UserManagementScreen> {
                       title: Text('Barangay Admin',
                           style: GoogleFonts.inter(
                               fontSize: 14, fontWeight: FontWeight.w600)),
-                      subtitle: Text(
-                          'Can manage a barangay\'s news and pets',
+                      subtitle: Text('Can manage a barangay\'s news and pets',
                           style: GoogleFonts.inter(
-                              fontSize: 12,
-                              color: AppColors.onSurfaceVariant)),
+                              fontSize: 12, color: AppColors.onSurfaceVariant)),
                       onTap: () => Navigator.pop(context),
                     ),
                   ],
@@ -1312,103 +1662,6 @@ class _UserManagementScreenState extends State<UserManagementScreen> {
   }
 }
 
-/// DataTableSource for News Posts on desktop web in UserManagementScreen.
-class _NewsDataTableSource extends DataTableSource {
-  final List<Map<String, dynamic>> news;
-  final Function(String id) onDelete;
-
-  _NewsDataTableSource(this.news, {required this.onDelete});
-
-  @override
-  DataRow? getRow(int index) {
-    if (index >= news.length) return null;
-    final item = news[index];
-
-    final id = item['id']?.toString() ?? '';
-    final title = item['title']?.toString() ?? 'Untitled';
-    final category = item['category']?.toString() ?? 'General';
-    final source = item['source']?.toString() ?? 'PawTrace';
-    final createdAt = item['created_at']?.toString() ?? '';
-
-    String formattedDate = '';
-    if (createdAt.isNotEmpty) {
-      try {
-        final dt = DateTime.parse(createdAt);
-        formattedDate = '${dt.month}/${dt.day}/${dt.year}';
-      } catch (_) {
-        formattedDate = createdAt;
-      }
-    }
-
-    final isEven = index % 2 == 0;
-
-    return DataRow.byIndex(
-      index: index,
-      color: WidgetStateProperty.resolveWith<Color?>(
-        (states) => isEven ? Colors.white : const Color(0xFFF9FAFB),
-      ),
-      cells: [
-        // Category chip
-        DataCell(
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-            decoration: BoxDecoration(
-              color: AppColors.primaryContainer.withOpacity(0.3),
-              borderRadius: BorderRadius.circular(12),
-            ),
-            child: Text(
-              category,
-              style: GoogleFonts.inter(
-                fontSize: 11,
-                fontWeight: FontWeight.w600,
-                color: AppColors.primary,
-              ),
-            ),
-          ),
-        ),
-        // Title
-        DataCell(
-          SizedBox(
-            width: 200,
-            child: Text(
-              title,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: GoogleFonts.inter(
-                fontWeight: FontWeight.w600,
-                fontSize: 13,
-                color: AppColors.onSurface,
-              ),
-            ),
-          ),
-        ),
-        // Source
-        DataCell(Text(source, style: GoogleFonts.inter(fontSize: 13))),
-        // Date
-        DataCell(Text(formattedDate, style: GoogleFonts.inter(fontSize: 13))),
-        // Delete action
-        DataCell(
-          IconButton(
-            icon: const Icon(Icons.delete_outline,
-                color: AppColors.error, size: 20),
-            tooltip: 'Delete Announcement',
-            onPressed: () => onDelete(id),
-          ),
-        ),
-      ],
-    );
-  }
-
-  @override
-  bool get isRowCountApproximate => false;
-
-  @override
-  int get rowCount => news.length;
-
-  @override
-  int get selectedRowCount => 0;
-}
-
 /// DataTableSource for Registered Users on desktop web in UserManagementScreen.
 class _UsersDataTableSource extends DataTableSource {
   final List<Map<String, dynamic>> users;
@@ -1427,8 +1680,9 @@ class _UsersDataTableSource extends DataTableSource {
     final email = user['email'] as String? ?? '';
     final phone = user['phone'] as String? ?? '';
     final role = (user['role'] as String? ?? 'user').toLowerCase();
-    final initial =
-        fullName.isNotEmpty ? fullName[0].toUpperCase() : (email.isNotEmpty ? email[0].toUpperCase() : 'U');
+    final initial = fullName.isNotEmpty
+        ? fullName[0].toUpperCase()
+        : (email.isNotEmpty ? email[0].toUpperCase() : 'U');
 
     final isVerified = phone.isNotEmpty;
     final isEven = index % 2 == 0;
@@ -1479,24 +1733,45 @@ class _UsersDataTableSource extends DataTableSource {
             style: GoogleFonts.inter(fontSize: 13),
           ),
         ),
+        // Barangay
+        DataCell(
+          Text(
+            (user['barangay'] ?? '-').toString().isNotEmpty
+                ? (user['barangay'] ?? '-').toString()
+                : '-',
+            style: GoogleFonts.inter(fontSize: 13),
+          ),
+        ),
         // Role badge chip
         DataCell(
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
             decoration: BoxDecoration(
-              color: role == 'admin' || role == 'super_admin'
+              color: role == 'admin'
                   ? const Color(0xFF00796B).withOpacity(0.15)
-                  : AppColors.primaryContainer.withOpacity(0.3),
+                  : (role == 'super_admin'
+                      ? const Color(0xFFEF4444).withOpacity(0.15)
+                      : AppColors.primaryContainer.withOpacity(0.3)),
               borderRadius: BorderRadius.circular(12),
             ),
             child: Text(
-              role.toUpperCase(),
+              role == 'admin'
+                  ? 'ADMIN'
+                  : (role == 'super_admin'
+                      ? 'SUPER ADMIN'
+                      : (role == 'owner'
+                          ? 'PET OWNER'
+                          : (role == 'finder'
+                              ? 'FINDER'
+                              : role.toUpperCase()))),
               style: GoogleFonts.inter(
                 fontSize: 10,
                 fontWeight: FontWeight.bold,
-                color: role == 'admin' || role == 'super_admin'
+                color: role == 'admin'
                     ? const Color(0xFF00796B)
-                    : AppColors.primary,
+                    : (role == 'super_admin'
+                        ? const Color(0xFFDC2626)
+                        : AppColors.primary),
               ),
             ),
           ),
@@ -1523,31 +1798,51 @@ class _UsersDataTableSource extends DataTableSource {
             ),
           ),
         ),
-        // Three dot PopupMenuButton
+        // Actions: Trash can button + three dot PopupMenuButton
         DataCell(
-          PopupMenuButton<String>(
-            icon: const Icon(Icons.more_vert, size: 20),
-            onSelected: (action) => onAction(action, user),
-            itemBuilder: (context) => [
-              const PopupMenuItem(
-                value: 'view',
-                child: Row(
-                  children: [
-                    Icon(Icons.visibility_outlined, size: 16),
-                    SizedBox(width: 8),
-                    Text('View Profile'),
-                  ],
-                ),
+          Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              IconButton(
+                icon: const Icon(Icons.delete_outline, size: 19, color: AppColors.error),
+                tooltip: 'Delete Account',
+                onPressed: () => onAction('delete', user),
               ),
-              const PopupMenuItem(
-                value: 'contact',
-                child: Row(
-                  children: [
-                    Icon(Icons.call_outlined, size: 16),
-                    SizedBox(width: 8),
-                    Text('Contact User'),
-                  ],
-                ),
+              PopupMenuButton<String>(
+                icon: const Icon(Icons.more_vert, size: 20),
+                onSelected: (action) => onAction(action, user),
+                itemBuilder: (context) => [
+                  const PopupMenuItem(
+                    value: 'view',
+                    child: Row(
+                      children: [
+                        Icon(Icons.visibility_outlined, size: 16),
+                        SizedBox(width: 8),
+                        Text('View Profile'),
+                      ],
+                    ),
+                  ),
+                  const PopupMenuItem(
+                    value: 'contact',
+                    child: Row(
+                      children: [
+                        Icon(Icons.call_outlined, size: 16),
+                        SizedBox(width: 8),
+                        Text('Contact User'),
+                      ],
+                    ),
+                  ),
+                  const PopupMenuItem(
+                    value: 'delete',
+                    child: Row(
+                      children: [
+                        Icon(Icons.delete_outline, size: 16, color: AppColors.error),
+                        SizedBox(width: 8),
+                        Text('Delete Account', style: TextStyle(color: AppColors.error)),
+                      ],
+                    ),
+                  ),
+                ],
               ),
             ],
           ),
@@ -1565,4 +1860,3 @@ class _UsersDataTableSource extends DataTableSource {
   @override
   int get selectedRowCount => 0;
 }
-

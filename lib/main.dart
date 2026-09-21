@@ -100,6 +100,7 @@ class PawTraceApp extends StatelessWidget {
         // ─── Lost pet flow ────────────────────────────────────────────────────
         AppRoutes.lostPetDetails: (_) => const LostPetDetailsScreen(),
         AppRoutes.reportLostPet: (_) => const ReportLostPetScreen(),
+        '/report-lost': (_) => const ReportLostPetScreen(),
 
         // ─── Pet management ───────────────────────────────────────────────────
         AppRoutes.locateMyPet: (_) => const LocateMyPetScreen(),

@@ -178,14 +178,19 @@ class _PostNewsScreenState extends State<PostNewsScreen> {
     }
   }
 
-  Future<void> _deletePost(String postId) async {
+  Future<void> _deletePost(Map<String, dynamic> post) async {
+    final postId =
+        (post['news_id'] ?? post['post_id'] ?? post['id'])?.toString() ?? '';
+    final title = post['title']?.toString() ?? 'this post';
+
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (_) => AlertDialog(
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
         title: Text('Delete Post?',
             style: GoogleFonts.montserrat(fontWeight: FontWeight.w700)),
-        content: Text('This will permanently remove the news post.',
+        content: Text(
+            'Are you sure you want to delete "$title"? This will permanently remove the news post.',
             style: GoogleFonts.inter(fontSize: 14)),
         actions: [
           TextButton(
@@ -208,8 +213,35 @@ class _PostNewsScreenState extends State<PostNewsScreen> {
     );
     if (confirmed != true || !mounted) return;
     try {
-      await Supabase.instance.client.from('news').delete().eq('id', postId);
+      bool deleted = false;
+      for (final idCol in ['news_id', 'post_id', 'id']) {
+        if (postId.isNotEmpty) {
+          try {
+            await Supabase.instance.client
+                .from('news')
+                .delete()
+                .eq(idCol, postId);
+            deleted = true;
+            break;
+          } catch (_) {}
+        }
+      }
+      if (!deleted && title.isNotEmpty) {
+        await Supabase.instance.client.from('news').delete().eq('title', title);
+      }
       _fetchNewsPosts();
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('News post deleted successfully.',
+                style: GoogleFonts.inter(fontWeight: FontWeight.w600)),
+            backgroundColor: const Color(0xFF22C55E),
+            behavior: SnackBarBehavior.floating,
+            shape:
+                RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+          ),
+        );
+      }
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(
@@ -491,7 +523,6 @@ class _PostNewsScreenState extends State<PostNewsScreen> {
     final imageUrl = post['image_url'] as String? ?? '';
     final accentHex = post['accent_color'] as String? ?? '#FF6600';
     final barangay = post['barangay'] as String? ?? '';
-    final postId = post['id']?.toString() ?? '';
 
     Color accentColor = AppColors.primary;
     try {
@@ -601,7 +632,7 @@ class _PostNewsScreenState extends State<PostNewsScreen> {
             icon: const Icon(Icons.delete_outline_rounded,
                 color: AppColors.error, size: 20),
             tooltip: 'Delete post',
-            onPressed: () => _deletePost(postId),
+            onPressed: () => _deletePost(post),
           ),
         ],
       ),

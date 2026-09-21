@@ -209,6 +209,24 @@ class _ProfilePetRegistrationScreenState
         return;
       }
 
+      // Check collar uniqueness if entered (1 collar for 1 pet rule)
+      final collarText = _collarCtrl.text.trim();
+      if (collarText.isNotEmpty && collarText.toUpperCase() != 'N/A') {
+        final existingPet = await _supabase
+            .from('pets')
+            .select('pet_id, name')
+            .eq('collar_id', collarText)
+            .maybeSingle();
+
+        if (existingPet != null) {
+          final otherName = existingPet['name'] ?? 'another pet';
+          _showError(
+            'Collar "$collarText" is already paired to "$otherName". A collar can only belong to 1 pet.',
+          );
+          return;
+        }
+      }
+
       // Step 2: Upload photo to Supabase Storage bucket 'pet-photos'
       final fileExt = _selectedImage!.path.split('.').last;
       final timestamp = DateTime.now().millisecondsSinceEpoch;
@@ -226,7 +244,6 @@ class _ProfilePetRegistrationScreenState
       final breedText = _breedCtrl.text.trim();
       final colorText = _colorCtrl.text.trim();
       final weightText = _weightCtrl.text.trim();
-      final collarText = _collarCtrl.text.trim();
 
       // Step 4: Insert row into 'pets' table (allowing N/A / null for unknown values)
       final insertedRows = await _supabase

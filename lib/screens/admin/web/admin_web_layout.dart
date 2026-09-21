@@ -4,6 +4,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../../core/app_colors.dart';
 import '../../../core/app_routes.dart';
 import '../../../services/auth_service.dart';
+import '../../../widgets/notification_bell_button.dart';
 
 /// Master desktop web layout widget for all PawTrace admin screens.
 ///
@@ -31,7 +32,6 @@ class _AdminWebLayoutState extends State<AdminWebLayout> {
 
   String _adminName = 'Admin';
   UserRole _role = UserRole.admin;
-  bool _notifHovered = false;
 
   @override
   void initState() {
@@ -128,8 +128,7 @@ class _AdminWebLayoutState extends State<AdminWebLayout> {
         Navigator.pushReplacementNamed(context, AppRoutes.postNews);
         break;
       case 5:
-        Navigator.pushReplacementNamed(context, AppRoutes.superAdminHome,
-            arguments: {'tab': 5});
+        Navigator.pushReplacementNamed(context, AppRoutes.userManagement);
         break;
     }
   }
@@ -275,13 +274,6 @@ class _AdminWebLayoutState extends State<AdminWebLayout> {
                         isSelected: widget.currentIndex == 4,
                         onTap: () => _onNavSelected(4),
                       ),
-                      if (_role == UserRole.superAdmin)
-                        _NavigationItem(
-                          icon: Icons.admin_panel_settings_rounded,
-                          label: 'Barangay Admins',
-                          isSelected: widget.currentIndex == 5,
-                          onTap: () => _onNavSelected(5),
-                        ),
                     ],
                   ),
                 ),
@@ -366,49 +358,8 @@ class _AdminWebLayoutState extends State<AdminWebLayout> {
                         ),
                         const SizedBox(width: 18),
 
-                        // Notification IconButton with red badge
-                        Stack(
-                          clipBehavior: Clip.none,
-                          children: [
-                            MouseRegion(
-                              cursor: SystemMouseCursors.click,
-                              onEnter: (_) =>
-                                  setState(() => _notifHovered = true),
-                              onExit: (_) =>
-                                  setState(() => _notifHovered = false),
-                              child: AnimatedContainer(
-                                duration: const Duration(milliseconds: 150),
-                                decoration: BoxDecoration(
-                                  color: _notifHovered
-                                      ? AppColors.surfaceContainerLow
-                                      : Colors.transparent,
-                                  borderRadius: BorderRadius.circular(8),
-                                ),
-                                child: IconButton(
-                                  icon: const Icon(
-                                    Icons.notifications_outlined,
-                                    color: AppColors.onSurfaceVariant,
-                                    size: 22,
-                                  ),
-                                  onPressed: () {},
-                                ),
-                              ),
-                            ),
-                            Positioned(
-                              right: 8,
-                              top: 8,
-                              child: Container(
-                                width: 8,
-                                height: 8,
-                                decoration: const BoxDecoration(
-                                  color: Colors.red,
-                                  shape: BoxShape.circle,
-                                ),
-                              ),
-                            ),
-                          ],
-                        ),
-                        const SizedBox(width: 14),
+                        const NotificationBellButton(size: 22),
+                        const SizedBox(width: 8),
 
                         // Admin name with CircleAvatar
                         Row(
