@@ -5,7 +5,6 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../core/app_colors.dart';
 import '../../core/app_routes.dart';
 import '../../services/auth_service.dart';
-import '../../widgets/bottom_nav_bar.dart';
 import '../../widgets/notification_bell_button.dart';
 import '../shared/news_detail_screen.dart';
 
@@ -211,7 +210,6 @@ class _DashboardHomeScreenState extends State<DashboardHomeScreen> {
                     ),
         ],
       ),
-      bottomNavigationBar: const BottomNavBar(currentIndex: 0),
     );
   }
 }

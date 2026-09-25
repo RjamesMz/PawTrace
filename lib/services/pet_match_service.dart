@@ -1,3 +1,5 @@
+import 'dart:convert';
+import 'package:flutter/foundation.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'pet_embedding_service.dart';
 
@@ -44,7 +46,41 @@ class PetMatchService {
     List<double> queryEmbedding, {
     required bool isDog,
     int topN = 5,
-    double minSimilarity = 0.50,
+    double minSimilarity = 0.40, // lowered from 0.50 — classification-based
+    // cosine similarity for the same pet typically falls in the 0.4-0.7 range.
+  }) async {
+    final results = await _findMatchesFiltered(
+      queryEmbedding,
+      isDog: isDog,
+      topN: topN,
+      minSimilarity: minSimilarity,
+      strictSpecies: true,
+    );
+
+    // Fallback: if strict species filter yields nothing, retry without the
+    // species constraint at a higher threshold (0.55) to catch edge cases
+    // where detectSpecies() misclassified the scanned photo.
+    if (results.isEmpty) {
+      debugPrint(
+          '[PawTrace] No matches with strict species filter — retrying without species filter');
+      return _findMatchesFiltered(
+        queryEmbedding,
+        isDog: isDog,
+        topN: topN,
+        minSimilarity: 0.55,
+        strictSpecies: false,
+      );
+    }
+
+    return results;
+  }
+
+  Future<List<PetMatchResult>> _findMatchesFiltered(
+    List<double> queryEmbedding, {
+    required bool isDog,
+    required int topN,
+    required double minSimilarity,
+    required bool strictSpecies,
   }) async {
     final data = await Supabase.instance.client
         .from('lost_reports')
@@ -62,15 +98,30 @@ class PetMatchService {
 
       final species =
           (petData['species'] as String? ?? '').trim().toLowerCase();
-      if (isDog && species != 'dog') continue;
-      if (!isDog && species != 'cat') continue;
+
+      // Apply species filter only in strict mode
+      if (strictSpecies) {
+        if (isDog && species != 'dog') continue;
+        if (!isDog && species != 'cat') continue;
+      }
 
       final rawEmb = petData['embedding'];
       if (rawEmb == null) continue;
 
+      List<dynamic> embList;
+      if (rawEmb is String) {
+        embList = jsonDecode(rawEmb) as List<dynamic>;
+      } else if (rawEmb is List) {
+        embList = rawEmb;
+      } else {
+        continue;
+      }
+
       final stored =
-          List<double>.from((rawEmb as List).map((v) => (v as num).toDouble()));
+          List<double>.from(embList.map((v) => (v as num).toDouble()));
       final sim = PetEmbeddingService.cosineSimilarity(queryEmbedding, stored);
+      debugPrint(
+          '[PawTrace] ${petData['name']} (${petData['species']}) sim=${sim.toStringAsFixed(3)}');
 
       if (sim >= minSimilarity) {
         // 'owner_id' is the FK-hint alias; fall back to 'users' key for safety

@@ -6,6 +6,7 @@ import 'package:image_picker/image_picker.dart';
 import 'package:responsive_framework/responsive_framework.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../core/app_colors.dart';
+import '../../core/app_toast.dart';
 import '../../services/auth_service.dart';
 import '../../widgets/admin_content_wrapper.dart';
 import '../../widgets/admin_layout.dart';
@@ -142,16 +143,7 @@ class _PostNewsScreenState extends State<PostNewsScreen> {
       });
 
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('News post published successfully!',
-              style: GoogleFonts.inter(fontWeight: FontWeight.w600)),
-          backgroundColor: const Color(0xFF22C55E),
-          behavior: SnackBarBehavior.floating,
-          shape:
-              RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-        ),
-      );
+      AppToast.success(context, 'News post published successfully!');
 
       _titleCtrl.clear();
       _summaryCtrl.clear();
@@ -163,16 +155,7 @@ class _PostNewsScreenState extends State<PostNewsScreen> {
       _fetchNewsPosts();
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Error posting news: $e',
-              style: GoogleFonts.inter(fontWeight: FontWeight.w600)),
-          backgroundColor: AppColors.error,
-          behavior: SnackBarBehavior.floating,
-          shape:
-              RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-        ),
-      );
+      AppToast.error(context, 'Error posting news: $e');
     } finally {
       if (mounted) setState(() => _isLoading = false);
     }
@@ -231,27 +214,11 @@ class _PostNewsScreenState extends State<PostNewsScreen> {
       }
       _fetchNewsPosts();
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('News post deleted successfully.',
-                style: GoogleFonts.inter(fontWeight: FontWeight.w600)),
-            backgroundColor: const Color(0xFF22C55E),
-            behavior: SnackBarBehavior.floating,
-            shape:
-                RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-          ),
-        );
+        AppToast.success(context, 'News post deleted successfully.');
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-          content: Text('Error deleting post: $e',
-              style: GoogleFonts.inter(fontWeight: FontWeight.w600)),
-          backgroundColor: AppColors.error,
-          behavior: SnackBarBehavior.floating,
-          shape:
-              RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-        ));
+        AppToast.error(context, 'Error deleting post: $e');
       }
     }
   }

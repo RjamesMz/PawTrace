@@ -5,6 +5,7 @@ import 'package:flutter_map/flutter_map.dart';
 import 'package:latlong2/latlong.dart' as ll;
 import 'package:intl/intl.dart';
 import '../../core/app_colors.dart';
+import '../../core/app_toast.dart';
 import '../../core/navigation_helpers.dart';
 import '../../services/alert_service.dart';
 
@@ -118,16 +119,7 @@ class _ReportLostPetScreenState extends State<ReportLostPetScreen> {
     if (pet == null) return;
 
     if (_descCtrl.text.trim().isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Please enter a last seen description.',
-              style: GoogleFonts.inter(fontWeight: FontWeight.w600)),
-          backgroundColor: AppColors.error,
-          behavior: SnackBarBehavior.floating,
-          shape:
-              RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-        ),
-      );
+      AppToast.error(context, 'Please enter a last seen description.');
       return;
     }
 
@@ -177,30 +169,11 @@ class _ReportLostPetScreenState extends State<ReportLostPetScreen> {
 
       if (!mounted) return;
 
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('${pet['name'] ?? 'Pet'} reported as lost!',
-              style: GoogleFonts.inter(fontWeight: FontWeight.w600)),
-          backgroundColor: const Color(0xFF22C55E),
-          behavior: SnackBarBehavior.floating,
-          shape:
-              RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-        ),
-      );
-
+      AppToast.success(context, '${pet['name'] ?? 'Pet'} reported as lost!');
       Navigator.pop(context);
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Failed to submit report: $e',
-              style: GoogleFonts.inter(fontWeight: FontWeight.w600)),
-          backgroundColor: AppColors.error,
-          behavior: SnackBarBehavior.floating,
-          shape:
-              RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-        ),
-      );
+      AppToast.error(context, 'Failed to submit report: $e');
     } finally {
       if (mounted) setState(() => _isSaving = false);
     }
@@ -241,7 +214,7 @@ class _ReportLostPetScreenState extends State<ReportLostPetScreen> {
       padding:
           EdgeInsets.fromLTRB(16, MediaQuery.of(context).padding.top, 16, 0),
       decoration: BoxDecoration(
-        color: AppColors.surface,
+        color: Colors.white,
         boxShadow: [
           BoxShadow(color: Colors.black.withOpacity(0.04), blurRadius: 8)
         ],

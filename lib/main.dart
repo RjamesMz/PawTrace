@@ -5,6 +5,7 @@ import 'package:responsive_framework/responsive_framework.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import 'core/app_routes.dart';
+import 'widgets/main_app_layout.dart';
 import 'core/app_theme.dart';
 import 'core/supabase_config.dart';
 
@@ -14,23 +15,18 @@ import 'screens/auth/login_screen.dart';
 import 'screens/auth/register_screen.dart';
 
 // Screens - User
-import 'screens/user/dashboard_home.dart';
-import 'screens/user/lost_pet_details.dart';
-import 'screens/user/ai_scan.dart';
 import 'screens/user/locate_my_pet.dart';
 import 'screens/user/pet_profile_detail.dart';
-import 'screens/user/profile_pet_registration.dart';
-import 'screens/user/report_lost_pet.dart';
-import 'screens/user/settings_screen.dart';
 import 'screens/user/my_pets_screen.dart';
+import 'screens/user/report_lost_pet.dart';
 
 // Screens - Admin
 import 'screens/admin/user_management.dart';
 import 'screens/admin/admin_pets_screen.dart';
-import 'screens/admin/post_news_screen.dart';
 import 'screens/admin/barangay_admin_home_screen.dart';
 import 'screens/admin/admin_reports_screen.dart';
 import 'screens/admin/super_admin_screen.dart';
+import 'screens/admin/post_news_screen.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -51,7 +47,7 @@ void main() async {
 
   // Set system UI overlay style to match PawTrace brand
   SystemChrome.setSystemUIOverlayStyle(const SystemUiOverlayStyle(
-    statusBarColor: Colors.transparent,
+    statusBarColor: Colors.white,
     statusBarIconBrightness: Brightness.dark,
     systemNavigationBarColor: Colors.white,
     systemNavigationBarIconBrightness: Brightness.dark,
@@ -93,29 +89,30 @@ class PawTraceApp extends StatelessWidget {
         AppRoutes.login: (_) => const LoginScreen(),
         AppRoutes.register: (_) => const RegisterScreen(),
 
-        // ─── Main tabs ────────────────────────────────────────────────────────
-        AppRoutes.home: (_) => const DashboardHomeScreen(),
-        AppRoutes.aiScan: (_) => const AiScanScreen(),
+        // ─── Main tabs (User & Admin via MainAppLayout) ──────────────────────
+        AppRoutes.home: (_) => const MainAppLayout(initialIndex: 0),
+        AppRoutes.lostPetDetails: (_) => const MainAppLayout(initialIndex: 1),
+        AppRoutes.aiScan: (_) => const MainAppLayout(initialIndex: 2),
+        AppRoutes.profilePetRegistration: (_) => const MainAppLayout(initialIndex: 3),
+        AppRoutes.settings: (_) => const MainAppLayout(initialIndex: 4),
+
+        AppRoutes.barangayAdminHome: (_) => const BarangayAdminHomeScreen(),
+        AppRoutes.superAdminHome: (_) => const SuperAdminScreen(),
+        AppRoutes.adminPets: (_) => const AdminPetsScreen(),
+        AppRoutes.adminReports: (_) => const AdminReportsScreen(),
+        AppRoutes.userManagement: (_) => const UserManagementScreen(),
 
         // ─── Lost pet flow ────────────────────────────────────────────────────
-        AppRoutes.lostPetDetails: (_) => const LostPetDetailsScreen(),
         AppRoutes.reportLostPet: (_) => const ReportLostPetScreen(),
         '/report-lost': (_) => const ReportLostPetScreen(),
 
         // ─── Pet management ───────────────────────────────────────────────────
         AppRoutes.locateMyPet: (_) => const LocateMyPetScreen(),
         AppRoutes.petProfileDetail: (_) => const PetProfileDetailScreen(),
-        AppRoutes.profilePetRegistration: (_) => const ProfilePetRegistrationScreen(),
 
         // ─── Admin ────────────────────────────────────────────────────────────
-        AppRoutes.userManagement: (_) => const UserManagementScreen(),
-        AppRoutes.settings: (_) => const SettingsScreen(),
         AppRoutes.myPets: (_) => const MyPetsScreen(),
-        AppRoutes.adminPets: (_) => const AdminPetsScreen(),
         AppRoutes.postNews: (_) => const PostNewsScreen(),
-        AppRoutes.barangayAdminHome: (_) => const BarangayAdminHomeScreen(),
-        AppRoutes.adminReports: (_) => const AdminReportsScreen(),
-        AppRoutes.superAdminHome: (_) => const SuperAdminScreen(),
       },
 
       // Fallback for unknown routes

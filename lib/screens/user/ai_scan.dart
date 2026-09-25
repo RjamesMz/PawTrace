@@ -5,9 +5,9 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:image_picker/image_picker.dart';
 import '../../core/app_colors.dart';
 import '../../core/app_routes.dart';
+import '../../core/app_toast.dart';
 import '../../services/pet_embedding_service.dart';
 import '../../services/pet_match_service.dart';
-import '../../widgets/bottom_nav_bar.dart';
 
 /// AI Scan screen – pick or photograph a pet and find visual matches.
 class AiScanScreen extends StatefulWidget {
@@ -61,28 +61,10 @@ class _AiScanScreenState extends State<AiScanScreen>
       final message = source == ImageSource.camera
           ? 'Camera is unavailable or permission was denied. Please allow camera access in device settings and try again.'
           : 'Photo access was denied. Please allow gallery access in device settings and try again.';
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('$message (${e.code})',
-              style: GoogleFonts.inter(fontWeight: FontWeight.w600)),
-          backgroundColor: AppColors.error,
-          behavior: SnackBarBehavior.floating,
-          shape:
-              RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-        ),
-      );
+      AppToast.error(context, '$message (${e.code})');
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Failed to open image source: $e',
-              style: GoogleFonts.inter(fontWeight: FontWeight.w600)),
-          backgroundColor: AppColors.error,
-          behavior: SnackBarBehavior.floating,
-          shape:
-              RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-        ),
-      );
+      AppToast.error(context, 'Failed to open image source: $e');
     }
   }
 
@@ -415,7 +397,6 @@ class _AiScanScreenState extends State<AiScanScreen>
               ),
             ),
           ),
-          const BottomNavBar(currentIndex: 2),
         ],
       ),
     );

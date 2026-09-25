@@ -25,7 +25,7 @@ class AppColors {
   static const Color onTertiaryContainer = Color(0xFF3C3F41);
 
   // Surface
-  static const Color surface = Color(0xFFF8F9FF);
+  static const Color surface = Colors.white;
   static const Color onSurface = Color(0xFF121C28);
   static const Color surfaceDim = Color(0xFFD1DBEC);
   static const Color surfaceBright = Color(0xFFF8F9FF);

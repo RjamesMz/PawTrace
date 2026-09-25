@@ -212,6 +212,15 @@ Future<String?> showPairCollarDialog({
                                     });
 
                                     try {
+                                      // Delete all location history for this collar first,
+                                      // then clear the pet's collar_id.
+                                      if (currentCollarId != null) {
+                                        await Supabase.instance.client
+                                            .from('collar_locations')
+                                            .delete()
+                                            .eq('collar_id', currentCollarId!);
+                                      }
+
                                       await Supabase.instance.client
                                           .from('pets')
                                           .update({'collar_id': null})

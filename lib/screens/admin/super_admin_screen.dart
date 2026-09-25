@@ -3,6 +3,7 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:responsive_framework/responsive_framework.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../core/app_colors.dart';
+import '../../core/app_toast.dart';
 import '../../services/auth_service.dart';
 import '../../widgets/admin_content_wrapper.dart';
 import '../../widgets/admin_layout.dart';
@@ -252,13 +253,7 @@ class _SuperAdminScreenState extends State<SuperAdminScreen> {
       );
 
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Barangay Admin registered successfully!',
-                style: GoogleFonts.inter(fontWeight: FontWeight.w600)),
-            backgroundColor: const Color(0xFF22C55E),
-          ),
-        );
+        AppToast.success(context, 'Barangay Admin registered successfully!');
         _firstNameCtrl.clear();
         _surnameCtrl.clear();
         _emailCtrl.clear();
@@ -269,13 +264,7 @@ class _SuperAdminScreenState extends State<SuperAdminScreen> {
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Failed to register admin: $e',
-                style: GoogleFonts.inter(fontWeight: FontWeight.w600)),
-            backgroundColor: AppColors.error,
-          ),
-        );
+        AppToast.error(context, 'Failed to register admin: $e');
       }
     } finally {
       if (mounted) setState(() => _isRegistering = false);
@@ -318,24 +307,12 @@ class _SuperAdminScreenState extends State<SuperAdminScreen> {
     try {
       await _supabase.from('users').delete().eq('user_id', userId);
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Admin account removed successfully.',
-                style: GoogleFonts.inter(fontWeight: FontWeight.w600)),
-            backgroundColor: const Color(0xFF22C55E),
-          ),
-        );
+        AppToast.success(context, 'Admin account removed successfully.');
         _loadDashboard();
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Failed to delete admin: $e',
-                style: GoogleFonts.inter(fontWeight: FontWeight.w600)),
-            backgroundColor: AppColors.error,
-          ),
-        );
+        AppToast.error(context, 'Failed to delete admin: $e');
       }
     }
   }

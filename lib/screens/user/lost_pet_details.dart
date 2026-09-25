@@ -1,9 +1,12 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:flutter_map/flutter_map.dart';
+import 'package:latlong2/latlong.dart' as ll;
 
 import '../../core/app_colors.dart';
-import '../../widgets/bottom_nav_bar.dart';
+import '../../core/app_toast.dart';
 
 /// Lost Pet screen – full overview of the current lost-pet reports.
 class LostPetDetailsScreen extends StatefulWidget {
@@ -52,20 +55,7 @@ class _LostPetDetailsScreenState extends State<LostPetDetailsScreen> {
         slivers: [
           SliverToBoxAdapter(child: _buildHeader(context)),
 
-          const SliverToBoxAdapter(
-            child: Padding(
-              padding: EdgeInsets.fromLTRB(20, 24, 20, 12),
-              child: Row(
-                children: [
-                  _FilterChip(label: 'All', active: true),
-                  SizedBox(width: 10),
-                  _FilterChip(label: 'Recent'),
-                  SizedBox(width: 10),
-                  _FilterChip(label: 'Urgent'),
-                ],
-              ),
-            ),
-          ),
+          const SliverToBoxAdapter(child: SizedBox(height: 16)),
           _isLoading
               ? const SliverToBoxAdapter(
                   child: Padding(
@@ -99,7 +89,6 @@ class _LostPetDetailsScreenState extends State<LostPetDetailsScreen> {
                     ),
         ],
       ),
-      bottomNavigationBar: const BottomNavBar(currentIndex: 1),
     );
   }
 
@@ -108,7 +97,7 @@ class _LostPetDetailsScreenState extends State<LostPetDetailsScreen> {
       height: 64 + MediaQuery.of(context).padding.top,
       padding: EdgeInsets.fromLTRB(20, MediaQuery.of(context).padding.top, 20, 0),
       decoration: BoxDecoration(
-        color: AppColors.surface,
+        color: Colors.white,
         boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.04), blurRadius: 8, offset: const Offset(0, 2))],
       ),
       child: Row(
@@ -172,8 +161,12 @@ class _LostPetCard extends StatelessWidget {
     final timeAgo = _formatTimeAgo(pet['reported_at']);
     
     final ownerName = userData != null
-        ? [userData['first_name'], userData['middle_name'], userData['surname'], userData['suffix']].where((s) => s != null && s.toString().isNotEmpty).join(' ')
+        ? [userData['first_name'], userData['middle_name'], userData['surname'], userData['suffix']]
+            .where((s) => s != null && s.toString().isNotEmpty)
+            .join(' ')
         : 'Unknown Owner';
+    final ownerPhone = (userData?['phone'] as String? ?? '').trim();
+    final ownerEmail = (userData?['email'] as String? ?? '').trim();
 
     return Container(
       decoration: BoxDecoration(
@@ -262,7 +255,12 @@ class _LostPetCard extends StatelessWidget {
                   children: [
                     Expanded(
                       child: OutlinedButton.icon(
-                        onPressed: () {},
+                        onPressed: () => _showContactSheet(
+                          context,
+                          ownerName: ownerName,
+                          phone: ownerPhone,
+                          email: ownerEmail,
+                        ),
                         icon: const Icon(Icons.call, size: 18),
                         label: const Text('Contact owner'),
                         style: OutlinedButton.styleFrom(
@@ -275,7 +273,31 @@ class _LostPetCard extends StatelessWidget {
                     const SizedBox(width: 12),
                     Expanded(
                       child: ElevatedButton.icon(
-                        onPressed: () {},
+                        onPressed: () {
+                          // Try to parse lat/lng from last_seen_address, e.g. "Barangay (Lat: 12.123, Lng: 12.123)"
+                          final regExp = RegExp(r'Lat:\s*([-\d.]+),\s*Lng:\s*([-\d.]+)');
+                          final match = regExp.firstMatch(location);
+                          
+                          if (match != null) {
+                            final lat = double.tryParse(match.group(1)!);
+                            final lng = double.tryParse(match.group(2)!);
+                            if (lat != null && lng != null) {
+                              Navigator.push(
+                                context,
+                                MaterialPageRoute(
+                                  builder: (_) => LostPetMapScreen(
+                                    petName: petName,
+                                    lat: lat,
+                                    lon: lng,
+                                    address: location,
+                                  ),
+                                ),
+                              );
+                              return;
+                            }
+                          }
+                          AppToast.info(context, 'No GPS coordinates available for this location.');
+                        },
                         icon: const Icon(Icons.map_outlined, size: 18),
                         label: const Text('View map'),
                         style: ElevatedButton.styleFrom(minimumSize: const Size.fromHeight(50)),
@@ -304,5 +326,347 @@ String _formatTimeAgo(String? timestamp) {
     return '${diff.inDays}d ago';
   } catch (_) {
     return 'Recent';
+  }
+}
+
+// ── Contact Owner Bottom Sheet ──────────────────────────────────────────────
+
+void _showContactSheet(
+  BuildContext context, {
+  required String ownerName,
+  required String phone,
+  required String email,
+}) {
+  showModalBottomSheet(
+    context: context,
+    shape: const RoundedRectangleBorder(
+      borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
+    ),
+    builder: (ctx) => SafeArea(
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(24, 16, 24, 24),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // Handle bar
+            Center(
+              child: Container(
+                width: 44,
+                height: 4,
+                decoration: BoxDecoration(
+                  color: Colors.grey.shade300,
+                  borderRadius: BorderRadius.circular(999),
+                ),
+              ),
+            ),
+            const SizedBox(height: 20),
+            // Owner name header
+            Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(10),
+                  decoration: BoxDecoration(
+                    color: AppColors.primary.withOpacity(0.1),
+                    shape: BoxShape.circle,
+                  ),
+                  child: const Icon(Icons.person_rounded,
+                      color: AppColors.primary, size: 22),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        ownerName.isNotEmpty ? ownerName : 'Pet Owner',
+                        style: GoogleFonts.montserrat(
+                          fontSize: 17,
+                          fontWeight: FontWeight.w700,
+                          color: AppColors.onSurface,
+                        ),
+                      ),
+                      Text(
+                        'Contact information',
+                        style: GoogleFonts.inter(
+                          fontSize: 12,
+                          color: AppColors.onSurfaceVariant,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 20),
+            const Divider(height: 1),
+            const SizedBox(height: 16),
+
+            // Phone row
+            if (phone.isNotEmpty) ...[
+              _contactRow(
+                icon: Icons.call_rounded,
+                label: 'Phone',
+                value: phone,
+                color: const Color(0xFF22C55E),
+                onTap: () {
+                  Navigator.pop(ctx);
+                  Clipboard.setData(ClipboardData(text: phone));
+                  AppToast.show(
+                    context,
+                    'Phone number copied: $phone',
+                    icon: Icons.copy_rounded,
+                    backgroundColor: const Color(0xFF22C55E),
+                  );
+                },
+                actionLabel: 'Copy & Call',
+              ),
+              const SizedBox(height: 12),
+            ] else
+              _noInfoRow('Phone number not provided'),
+
+            // Email row
+            if (email.isNotEmpty) ...[
+              _contactRow(
+                icon: Icons.email_rounded,
+                label: 'Email',
+                value: email,
+                color: AppColors.primary,
+                onTap: () {
+                  Navigator.pop(ctx);
+                  Clipboard.setData(ClipboardData(text: email));
+                  AppToast.show(
+                    context,
+                    'Email copied: $email',
+                    icon: Icons.copy_rounded,
+                    backgroundColor: AppColors.primary,
+                  );
+                },
+                actionLabel: 'Copy Email',
+              ),
+            ] else
+              _noInfoRow('Email not provided'),
+
+            const SizedBox(height: 20),
+            SizedBox(
+              width: double.infinity,
+              child: TextButton(
+                onPressed: () => Navigator.pop(ctx),
+                child: Text('Close',
+                    style: GoogleFonts.inter(
+                        fontWeight: FontWeight.w600,
+                        color: AppColors.onSurfaceVariant)),
+              ),
+            ),
+          ],
+        ),
+      ),
+    ),
+  );
+}
+
+Widget _contactRow({
+  required IconData icon,
+  required String label,
+  required String value,
+  required Color color,
+  required VoidCallback onTap,
+  required String actionLabel,
+}) {
+  return InkWell(
+    onTap: onTap,
+    borderRadius: BorderRadius.circular(16),
+    child: Container(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+      decoration: BoxDecoration(
+        color: color.withOpacity(0.07),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: color.withOpacity(0.2)),
+      ),
+      child: Row(
+        children: [
+          Container(
+            padding: const EdgeInsets.all(8),
+            decoration: BoxDecoration(
+              color: color.withOpacity(0.12),
+              shape: BoxShape.circle,
+            ),
+            child: Icon(icon, color: color, size: 20),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(label,
+                    style: GoogleFonts.inter(
+                        fontSize: 11,
+                        fontWeight: FontWeight.w600,
+                        color: AppColors.onSurfaceVariant)),
+                Text(value,
+                    style: GoogleFonts.inter(
+                        fontSize: 14,
+                        fontWeight: FontWeight.w600,
+                        color: AppColors.onSurface)),
+              ],
+            ),
+          ),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+            decoration: BoxDecoration(
+              color: color,
+              borderRadius: BorderRadius.circular(999),
+            ),
+            child: Text(actionLabel,
+                style: GoogleFonts.inter(
+                    fontSize: 11,
+                    fontWeight: FontWeight.w700,
+                    color: Colors.white)),
+          ),
+        ],
+      ),
+    ),
+  );
+}
+
+Widget _noInfoRow(String message) {
+  return Container(
+    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+    decoration: BoxDecoration(
+      color: AppColors.surfaceContainerLow,
+      borderRadius: BorderRadius.circular(14),
+    ),
+    child: Row(
+      children: [
+        Icon(Icons.info_outline_rounded,
+            size: 16, color: AppColors.onSurfaceVariant.withOpacity(0.5)),
+        const SizedBox(width: 8),
+        Text(message,
+            style: GoogleFonts.inter(
+                fontSize: 13, color: AppColors.onSurfaceVariant)),
+      ],
+    ),
+  );
+}
+
+// ── Simple Map Screen for Lost Pets ─────────────────────────────────────────
+
+class LostPetMapScreen extends StatelessWidget {
+  final String petName;
+  final double lat;
+  final double lon;
+  final String address;
+
+  const LostPetMapScreen({
+    super.key,
+    required this.petName,
+    required this.lat,
+    required this.lon,
+    required this.address,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(
+        title: Text('Last Known Location',
+            style: GoogleFonts.montserrat(
+                fontWeight: FontWeight.w600, fontSize: 16)),
+        backgroundColor: Colors.white,
+        foregroundColor: AppColors.onSurface,
+        elevation: 0,
+      ),
+      body: Stack(
+        children: [
+          FlutterMap(
+            options: MapOptions(
+              initialCenter: ll.LatLng(lat, lon),
+              initialZoom: 16.0,
+            ),
+            children: [
+              TileLayer(
+                urlTemplate: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
+                userAgentPackageName: 'com.pawtrace.app',
+              ),
+              MarkerLayer(
+                markers: [
+                  Marker(
+                    point: ll.LatLng(lat, lon),
+                    width: 140,
+                    height: 80,
+                    alignment: Alignment.topCenter,
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                          decoration: BoxDecoration(
+                            color: Colors.white,
+                            borderRadius: BorderRadius.circular(8),
+                            boxShadow: [
+                              BoxShadow(color: Colors.black.withOpacity(0.1), blurRadius: 4, offset: const Offset(0,2))
+                            ],
+                          ),
+                          child: Text(petName,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: GoogleFonts.inter(fontSize: 12, fontWeight: FontWeight.w700, color: AppColors.error)),
+                        ),
+                        const Icon(Icons.location_on, color: AppColors.error, size: 36),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
+          Positioned(
+            bottom: 30,
+            left: 20,
+            right: 20,
+            child: Container(
+              padding: const EdgeInsets.all(16),
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(16),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withOpacity(0.08),
+                    blurRadius: 16,
+                    offset: const Offset(0, 4),
+                  )
+                ],
+              ),
+              child: Row(
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(10),
+                    decoration: BoxDecoration(
+                      color: AppColors.errorContainer,
+                      shape: BoxShape.circle,
+                    ),
+                    child: const Icon(Icons.my_location_rounded, color: AppColors.error, size: 24),
+                  ),
+                  const SizedBox(width: 16),
+                  Expanded(
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text('Reported Location',
+                            style: GoogleFonts.inter(fontSize: 12, color: AppColors.onSurfaceVariant)),
+                        const SizedBox(height: 2),
+                        Text(address,
+                            style: GoogleFonts.inter(fontSize: 14, fontWeight: FontWeight.w600, color: AppColors.onSurface)),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
   }
 }

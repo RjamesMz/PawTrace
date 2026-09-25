@@ -5,6 +5,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../core/app_colors.dart';
 import '../../core/app_constants.dart';
 import '../../core/app_routes.dart';
+import '../../core/app_toast.dart';
 import '../../services/auth_service.dart';
 import '../../widgets/admin_content_wrapper.dart';
 import '../../widgets/admin_layout.dart';
@@ -635,23 +636,12 @@ class _UserManagementScreenState extends State<UserManagementScreen> {
                         if (ctx.mounted) Navigator.pop(ctx);
                         _fetchUsers();
                         if (mounted) {
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            SnackBar(
-                              content: Text(
-                                  'Admin registered for Brgy. $selectedBrgy!'),
-                              backgroundColor: const Color(0xFF22C55E),
-                            ),
-                          );
+                          AppToast.success(context, 'Admin registered for Brgy. $selectedBrgy!');
                         }
                       } catch (e) {
                         setDialogState(() => isSubmitting = false);
                         if (mounted) {
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            SnackBar(
-                              content: Text('Failed: $e'),
-                              backgroundColor: AppColors.error,
-                            ),
-                          );
+                          AppToast.error(context, 'Failed: $e');
                         }
                       }
                     },
@@ -721,23 +711,15 @@ class _UserManagementScreenState extends State<UserManagementScreen> {
         ),
       );
     } else if (action == 'contact') {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(phone.isNotEmpty
-              ? 'Contacting $phone...'
-              : 'No phone number for $fullName'),
-          backgroundColor: AppColors.primary,
-        ),
+      AppToast.show(
+        context,
+        phone.isNotEmpty ? 'Contacting $phone...' : 'No phone number for $fullName',
+        icon: Icons.phone_rounded,
       );
     } else if (action == 'delete') {
       final isSelf = user['user_id'] == Supabase.instance.client.auth.currentUser?.id;
       if (isSelf) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('You cannot delete your own account.'),
-            backgroundColor: AppColors.error,
-          ),
-        );
+        AppToast.error(context, 'You cannot delete your own account.');
         return;
       }
 
@@ -796,21 +778,11 @@ class _UserManagementScreenState extends State<UserManagementScreen> {
         }
         await _fetchUsers();
         if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text('Account for "${fullName.isNotEmpty ? fullName : email}" deleted.'),
-              backgroundColor: const Color(0xFF22C55E),
-            ),
-          );
+          AppToast.success(context, 'Account for "${fullName.isNotEmpty ? fullName : email}" deleted.');
         }
       } catch (e) {
         if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text('Failed to delete account: $e'),
-              backgroundColor: AppColors.error,
-            ),
-          );
+          AppToast.error(context, 'Failed to delete account: $e');
         }
       }
     }

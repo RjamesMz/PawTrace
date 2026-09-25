@@ -5,6 +5,7 @@ import 'dart:math';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart' show rootBundle;
 import 'package:image/image.dart' as img;
+import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:tflite_flutter/tflite_flutter.dart';
 
 /// Result of AI pet classification checking if an image is a dog or cat.
@@ -69,6 +70,14 @@ class PetEmbeddingService {
   }
 
   bool _isWildAnimalIndexOrLabel(int idx, String label) {
+  
+    const domesticExceptions = [
+      'tiger cat',   
+      'tabby',        // all tabby variations
+      'fox squirrel', // squirrel, not a fox
+    ];
+    if (domesticExceptions.any((e) => label.contains(e))) return false;
+
     // 1. Wild canids in MobileNet: timber wolf (270), white wolf (271), red wolf (272), coyote (273), dingo (274), dhole (275), african hunting dog (276), hyena (277), foxes (278..281)
     if (idx >= 270 && idx <= 281) return true;
     // 2. Wild felids / big cats in MobileNet: cougar (287), lynx (288), leopard (289), snow leopard (290), jaguar (291), lion (292), tiger (293), cheetah (294)
@@ -186,6 +195,7 @@ class PetEmbeddingService {
     // MobileNet domestic cat indices strictly span 282 through 286 (tabby, tiger cat, persian, siamese, egyptian)
     if (idx >= 282 && idx <= 286) return true;
     const catKeywords = [
+      'cat',           // catches 'tiger cat', 'domestic cat', 'wildcat', etc.
       'domestic cat',
       'tabby',
       'persian',
@@ -194,6 +204,7 @@ class PetEmbeddingService {
       'kitten',
       'feline',
       'puspin',
+      'ginger',        // common MobileNet label for orange cats
     ];
     return catKeywords.any((k) => label.contains(k));
   }
@@ -438,16 +449,29 @@ class PetEmbeddingService {
     }).join(' ');
   }
 
+  /// Extracts a stable visual embedding from [imageFile] using MobileNetV1.
+  ///
+  /// **Why float output?**
+  /// The model is quantized (uint8). Using a `double` output buffer tells
+  /// tflite_flutter to automatically dequantize the raw uint8 scores into
+  /// proper float32 probabilities using the tensor's scale/zero_point.
+  ///
+  /// **Why temperature softmax?**
+  /// The raw classification output is winner-takes-all (one class dominates).
+  /// Applying temperature-scaled softmax (T=3) redistributes probability mass
+  /// across many classes, so the L2-normalised vector uses many dimensions —
+  /// making cosine similarity stable across different photos of the same pet.
   Future<List<double>?> extractEmbedding(File imageFile) async {
     try {
-      debugPrint('[PawTrace] loadModels() start');
+      debugPrint('[PawTrace] extractEmbedding: loadModels() start');
       await loadModels();
-      debugPrint('[PawTrace] loadModels() done');
+      debugPrint('[PawTrace] extractEmbedding: loadModels() done');
       final interpreter = mobileNet;
       if (interpreter == null) {
         debugPrint('[PawTrace] ERROR: MobileNet interpreter unavailable');
         return null;
       }
+
       final rawBytes = await imageFile.readAsBytes();
       debugPrint('[PawTrace] image bytes: ${rawBytes.length}');
       final decoded = img.decodeImage(rawBytes);
@@ -456,6 +480,7 @@ class PetEmbeddingService {
         return null;
       }
       debugPrint('[PawTrace] image decoded OK');
+
       final resized =
           img.copyResize(decoded, width: _inputSize, height: _inputSize);
       final input = List.generate(
@@ -466,16 +491,98 @@ class PetEmbeddingService {
                     final pixel = resized.getPixel(x, y);
                     return [pixel.r.toInt(), pixel.g.toInt(), pixel.b.toInt()];
                   })));
-      final output = List.generate(1, (_) => List.filled(1001, 0));
+
+      // Use a double (float32) output buffer so tflite_flutter auto-dequantizes
+      // the uint8 model output into proper float32 probabilities.
+      final output = List.generate(1, (_) => List.filled(1001, 0.0));
       interpreter.run(input, output);
       debugPrint('[PawTrace] inference done');
-      final raw = output[0].map((v) => v.toDouble()).toList();
-      return _l2Normalize(raw);
+
+      final floatScores = List<double>.from(output[0]);
+
+      // Apply temperature-scaled softmax (T=3) to spread the signal across
+      // more dimensions. Without this, one class dominates and the embedding
+      // is almost a one-hot vector — extremely unstable for cosine similarity.
+      final embedding = _temperatureSoftmax(floatScores, temperature: 3.0);
+      final normalised = _l2Normalize(embedding);
+
+      debugPrint(
+          '[PawTrace] embedding ready (${normalised.length} dims, norm≈1)');
+      return normalised;
     } catch (e, stack) {
-      debugPrint('[PawTrace] EXCEPTION: $e');
+      debugPrint('[PawTrace] extractEmbedding EXCEPTION: $e');
       debugPrint('[PawTrace] stack: $stack');
       return null;
     }
+  }
+
+  /// Re-embeds every pet in the Supabase `pets` table using the current
+  /// (improved) embedding method and updates the `embedding` column.
+  ///
+  /// Returns the number of pets successfully re-embedded.
+  Future<int> reEmbedAllPets({
+    void Function(int done, int total)? onProgress,
+  }) async {
+    await loadModels();
+    final supabase = Supabase.instance.client;
+
+    final rows = await supabase
+        .from('pets')
+        .select('pet_id, photo_url, species')
+        .order('created_at', ascending: false);
+
+    final pets = List<Map<String, dynamic>>.from(rows);
+    int done = 0;
+
+    for (final pet in pets) {
+      final photoUrl = (pet['photo_url'] as String? ?? '').trim();
+      final petId = pet['pet_id']?.toString();
+      if (photoUrl.isEmpty || petId == null) continue;
+
+      try {
+        // Download the photo to a temp file
+        final httpClient = HttpClient();
+        final request = await httpClient.getUrl(Uri.parse(photoUrl));
+        final response = await request.close();
+        final bytes = await response.fold<List<int>>(
+            [], (acc, chunk) => acc..addAll(chunk));
+        httpClient.close();
+
+        final tmpFile = File(
+            '${Directory.systemTemp.path}/pawtrace_reembed_$petId.jpg');
+        await tmpFile.writeAsBytes(bytes);
+
+        final embedding = await extractEmbedding(tmpFile);
+        await tmpFile.delete();
+
+        if (embedding != null) {
+          await supabase
+              .from('pets')
+              .update({'embedding': embedding}).eq('pet_id', petId);
+          done++;
+          debugPrint('[PawTrace] Re-embedded pet $petId ($done/${pets.length})');
+        }
+      } catch (e) {
+        debugPrint('[PawTrace] Re-embed failed for pet $petId: $e');
+      }
+
+      onProgress?.call(done, pets.length);
+    }
+
+    debugPrint('[PawTrace] Re-embed complete: $done/${pets.length} pets updated');
+    return done;
+  }
+
+  /// Temperature-scaled softmax: softens the probability distribution so that
+  /// more dimensions carry signal, improving cosine-similarity stability.
+  /// Higher temperature → softer distribution (more dims contribute).
+  List<double> _temperatureSoftmax(List<double> logits,
+      {double temperature = 3.0}) {
+    final scaled = logits.map((v) => v / temperature).toList();
+    final maxVal = scaled.reduce(max);
+    final exps = scaled.map((v) => exp(v - maxVal)).toList();
+    final sumExp = exps.reduce((a, b) => a + b);
+    return exps.map((v) => v / sumExp).toList();
   }
 
   List<double> _l2Normalize(List<double> vec) {

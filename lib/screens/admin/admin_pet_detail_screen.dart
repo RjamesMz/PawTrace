@@ -3,6 +3,7 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../core/app_colors.dart';
 import '../../core/app_routes.dart';
+import '../../core/app_toast.dart';
 import '../../core/navigation_helpers.dart';
 import '../../widgets/admin_content_wrapper.dart';
 
@@ -35,24 +36,10 @@ class _AdminPetDetailScreenState extends State<AdminPetDetailScreen> {
       await _supabase.from('pets').update({'status': 'lost'}).eq('pet_id', petId);
       if (!mounted) return;
       setState(() => pet['status'] = 'lost');
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('${pet['name']} marked as lost', style: GoogleFonts.inter(fontWeight: FontWeight.w600)),
-          backgroundColor: AppColors.primary,
-          behavior: SnackBarBehavior.floating,
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-        ),
-      );
+      AppToast.show(context, '${pet['name']} marked as lost', icon: Icons.warning_amber_rounded);
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Error: $e', style: GoogleFonts.inter(fontWeight: FontWeight.w600)),
-          backgroundColor: AppColors.error,
-          behavior: SnackBarBehavior.floating,
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-        ),
-      );
+      AppToast.error(context, 'Error: $e');
     } finally {
       if (mounted) setState(() => _isUpdating = false);
     }
@@ -89,25 +76,11 @@ class _AdminPetDetailScreenState extends State<AdminPetDetailScreen> {
       final petId = pet['pet_id'] ?? pet['id'];
       await _supabase.from('pets').delete().eq('pet_id', petId);
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('${pet['name']} removed successfully', style: GoogleFonts.inter(fontWeight: FontWeight.w600)),
-          backgroundColor: const Color(0xFF22C55E),
-          behavior: SnackBarBehavior.floating,
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-        ),
-      );
+      AppToast.success(context, '${pet['name']} removed successfully');
       Navigator.pushReplacementNamed(context, AppRoutes.adminPets);
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Error: $e', style: GoogleFonts.inter(fontWeight: FontWeight.w600)),
-          backgroundColor: AppColors.error,
-          behavior: SnackBarBehavior.floating,
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-        ),
-      );
+      AppToast.error(context, 'Error: $e');
     } finally {
       if (mounted) setState(() => _isUpdating = false);
     }

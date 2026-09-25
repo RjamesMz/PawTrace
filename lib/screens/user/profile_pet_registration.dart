@@ -7,8 +7,8 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../core/app_colors.dart';
 import '../../core/app_constants.dart';
 import '../../core/app_routes.dart';
+import '../../core/app_toast.dart';
 import '../../services/pet_embedding_service.dart';
-import '../../widgets/bottom_nav_bar.dart';
 
 /// Pet Registration screen – saves pet data and photo to Supabase.
 class ProfilePetRegistrationScreen extends StatefulWidget {
@@ -299,15 +299,9 @@ class _ProfilePetRegistrationScreenState
       if (!mounted) return;
 
       // Show success message
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('${_nameCtrl.text.trim()} registered successfully!',
-              style: GoogleFonts.inter(fontWeight: FontWeight.w600)),
-          backgroundColor: const Color(0xFF22C55E),
-          behavior: SnackBarBehavior.floating,
-          shape:
-              RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-        ),
+      AppToast.success(
+        context,
+        '${_nameCtrl.text.trim()} registered successfully!',
       );
 
       // Navigate to MyPetsScreen replacing current route
@@ -329,15 +323,7 @@ class _ProfilePetRegistrationScreenState
   }
 
   void _showError(String message) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(message,
-            style: GoogleFonts.inter(fontWeight: FontWeight.w600)),
-        backgroundColor: AppColors.error,
-        behavior: SnackBarBehavior.floating,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-      ),
-    );
+    AppToast.error(context, message);
   }
 
   @override
@@ -350,13 +336,12 @@ class _ProfilePetRegistrationScreenState
           Expanded(
             child: ListView(
               controller: _scrollController,
-              padding: const EdgeInsets.fromLTRB(20, 20, 20, 100),
+              padding: const EdgeInsets.fromLTRB(20, 20, 20, 24),
               children: [
                 _buildRegistrationForm(),
               ],
             ),
           ),
-          const BottomNavBar(currentIndex: 3),
         ],
       ),
     );

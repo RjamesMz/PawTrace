@@ -14,11 +14,24 @@ import '../services/auth_service.dart';
 ///
 /// Active item color: #FF6600 / [AppColors.orange].
 /// Inactive item color: gray [Colors.grey].
-class BottomNavBar extends StatelessWidget {
+class BottomNavBar extends StatefulWidget {
   /// Index of the currently active tab (0–4).
   final int currentIndex;
+  
+  /// Optional callback for tab selection. If provided, BottomNavBar will NOT
+  /// perform navigation, and will instead just call this function.
+  final void Function(int)? onTabSelected;
 
-  const BottomNavBar({super.key, required this.currentIndex});
+  const BottomNavBar({super.key, required this.currentIndex, this.onTabSelected});
+
+  @override
+  State<BottomNavBar> createState() => _BottomNavBarState();
+}
+
+class _BottomNavBarState extends State<BottomNavBar> {
+  // Role is fetched once and cached — prevents FutureBuilder from re-firing
+  // on every rebuild which caused the nav bar to flicker/refresh on each tap.
+  UserRole? _cachedRole;
 
   static const List<_NavItem> _userItems = [
     _NavItem(icon: Icons.home_rounded, label: 'Home', route: AppRoutes.home),
@@ -59,10 +72,45 @@ class BottomNavBar extends StatelessWidget {
         route: AppRoutes.settings),
   ];
 
-  void _onTap(
-      BuildContext context, int index, List<_NavItem> items, int activeIndex) {
+  @override
+  void initState() {
+    super.initState();
+    _loadRole();
+  }
+
+  Future<void> _loadRole() async {
+    final role = await AuthService.instance.getCurrentUserRole();
+    if (mounted) {
+      setState(() => _cachedRole = role);
+    }
+  }
+
+  List<_NavItem> get _items {
+    final role = _cachedRole ?? UserRole.user;
+    if (role == UserRole.superAdmin) {
+      return [
+        const _NavItem(
+            icon: Icons.home_rounded,
+            label: 'Home',
+            route: AppRoutes.superAdminHome),
+        ..._adminItems.sublist(1),
+      ];
+    } else if (role == UserRole.admin) {
+      return _adminItems;
+    } else {
+      return _userItems;
+    }
+  }
+
+  void _onTap(BuildContext context, int index, int activeIndex) {
     if (index == activeIndex) return;
-    final route = items[index].route;
+    
+    if (widget.onTabSelected != null) {
+      widget.onTabSelected!(index);
+      return;
+    }
+
+    final route = _items[index].route;
     if (route.isNotEmpty) {
       Navigator.pushReplacementNamed(context, route);
     }
@@ -70,73 +118,56 @@ class BottomNavBar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return FutureBuilder<UserRole>(
-      future: AuthService.instance.getCurrentUserRole(),
-      builder: (context, snapshot) {
-        final role = snapshot.data ?? UserRole.user;
-        final List<_NavItem> items;
-        if (role == UserRole.superAdmin) {
-          items = [
-            const _NavItem(
-                icon: Icons.home_rounded,
-                label: 'Home',
-                route: AppRoutes.superAdminHome),
-            ..._adminItems.sublist(1),
-          ];
-        } else if (role == UserRole.admin) {
-          items = _adminItems;
-        } else {
-          items = _userItems;
-        }
+    final items = _items;
 
-        final currentRoute = ModalRoute.of(context)?.settings.name;
-        int activeIndex = currentIndex;
-        if (currentRoute != null) {
-          final foundIndex =
-              items.indexWhere((item) => item.route == currentRoute);
-          if (foundIndex != -1) {
-            activeIndex = foundIndex;
-          }
-        }
+    final currentRoute = ModalRoute.of(context)?.settings.name;
+    int activeIndex = widget.currentIndex;
+    if (currentRoute != null) {
+      final foundIndex = items.indexWhere((item) => item.route == currentRoute);
+      if (foundIndex != -1) activeIndex = foundIndex;
+    }
 
-        return SizedBox(
-          height: 72,
-          child: Stack(
-            clipBehavior: Clip.none,
-            children: [
-              // Background bar
-              Positioned.fill(
-                child: Container(
-                  decoration: BoxDecoration(
-                    color: AppColors.surface.withOpacity(0.95),
-                    border: Border(
-                        top: BorderSide(
-                            color: AppColors.outlineVariant.withOpacity(0.3))),
-                    boxShadow: [
-                      BoxShadow(
-                          color: Colors.black.withOpacity(0.05),
-                          blurRadius: 20,
-                          offset: const Offset(0, -4))
-                    ],
-                  ),
-                ),
+    // While role is loading, render a sized placeholder so layout doesn't shift.
+    if (_cachedRole == null) {
+      return const SizedBox(height: 72);
+    }
+
+    return SizedBox(
+      height: 72,
+      child: Stack(
+        clipBehavior: Clip.none,
+        children: [
+          // Background bar
+          Positioned.fill(
+            child: Container(
+              decoration: BoxDecoration(
+                color: AppColors.surface.withOpacity(0.95),
+                border: Border(
+                    top: BorderSide(
+                        color: AppColors.outlineVariant.withOpacity(0.3))),
+                boxShadow: [
+                  BoxShadow(
+                      color: Colors.black.withOpacity(0.05),
+                      blurRadius: 20,
+                      offset: const Offset(0, -4))
+                ],
               ),
-              Positioned.fill(
-                child: Row(
-                  children: List.generate(
-                    items.length,
-                    (i) => Expanded(
-                      child: Center(
-                        child: _buildItem(context, i, items, activeIndex),
-                      ),
-                    ),
-                  ),
-                ),
-              ),
-            ],
+            ),
           ),
-        );
-      },
+          Positioned.fill(
+            child: Row(
+              children: List.generate(
+                items.length,
+                (i) => Expanded(
+                  child: Center(
+                    child: _buildItem(context, i, items, activeIndex),
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
     );
   }
 
@@ -148,7 +179,7 @@ class BottomNavBar extends StatelessWidget {
     // Center Scan item: elevated orange circle (user nav only)
     if (i == 2 && items == _userItems) {
       return GestureDetector(
-        onTap: () => _onTap(context, i, items, activeIndex),
+        onTap: () => _onTap(context, i, activeIndex),
         child: SizedBox(
           width: 64,
           height: 72,
@@ -195,7 +226,7 @@ class BottomNavBar extends StatelessWidget {
 
     // Regular item
     return GestureDetector(
-      onTap: () => _onTap(context, i, items, activeIndex),
+      onTap: () => _onTap(context, i, activeIndex),
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 200),
         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),

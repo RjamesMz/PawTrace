@@ -1,14 +1,18 @@
+import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:image_picker/image_picker.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../core/app_colors.dart';
 import '../../core/app_constants.dart';
 import '../../core/app_routes.dart';
-import '../../services/auth_service.dart';
+import '../../core/app_toast.dart';
 import '../../widgets/bottom_nav_bar.dart';
+import '../../services/auth_service.dart';
 
 class SettingsScreen extends StatefulWidget {
-  const SettingsScreen({super.key});
+  final bool showBottomNav;
+  const SettingsScreen({super.key, this.showBottomNav = true});
 
   @override
   State<SettingsScreen> createState() => _SettingsScreenState();
@@ -18,7 +22,12 @@ class _SettingsScreenState extends State<SettingsScreen> {
   bool _notificationsEnabled = true;
   bool _isLoading = true;
   bool _isSavingAddress = false;
+  bool _isUploadingPhoto = false;
   String _displayName = '';
+  String _firstName = '';
+  String _middleName = '';
+  String _surname = '';
+  String _suffix = '';
   String _email = '';
   String _roleText = 'PET OWNER';
   String? _photoUrl;
@@ -37,11 +46,11 @@ class _SettingsScreenState extends State<SettingsScreen> {
       final profile = await AuthService.instance.getCurrentUserProfile();
       if (profile != null && mounted) {
         setState(() {
-          final fName = profile['first_name'] as String? ?? '';
-          final mName = profile['middle_name'] as String? ?? '';
-          final sName = profile['surname'] as String? ?? '';
-          final suffix = profile['suffix'] as String? ?? '';
-          _displayName = [fName, mName, sName, suffix]
+          _firstName = profile['first_name'] as String? ?? '';
+          _middleName = profile['middle_name'] as String? ?? '';
+          _surname = profile['surname'] as String? ?? '';
+          _suffix = profile['suffix'] as String? ?? '';
+          _displayName = [_firstName, _middleName, _surname, _suffix]
               .where((s) => s.isNotEmpty)
               .join(' ');
           _email = profile['email'] ?? '';
@@ -71,15 +80,470 @@ class _SettingsScreenState extends State<SettingsScreen> {
     }
   }
 
-  void _showMockActionMessage(String featureName) {
-    ScaffoldMessenger.of(context).clearSnackBars();
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text('$featureName is a demonstration feature.'),
-        behavior: SnackBarBehavior.floating,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-        backgroundColor: AppColors.primaryContainer,
+  // ── Edit Profile Photo ──────────────────────────────────────────────────
+  Future<void> _handleEditPhoto() async {
+    final source = await showModalBottomSheet<ImageSource>(
+      context: context,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
       ),
+      builder: (ctx) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const SizedBox(height: 8),
+            Container(
+              width: 44,
+              height: 4,
+              decoration: BoxDecoration(
+                color: Colors.grey.shade300,
+                borderRadius: BorderRadius.circular(999),
+              ),
+            ),
+            const SizedBox(height: 16),
+            Text('Update Profile Photo',
+                style: GoogleFonts.montserrat(
+                    fontSize: 16, fontWeight: FontWeight.w700)),
+            const SizedBox(height: 8),
+            ListTile(
+              leading: const Icon(Icons.camera_alt_rounded,
+                  color: AppColors.primary),
+              title: Text('Take a photo',
+                  style: GoogleFonts.inter(fontWeight: FontWeight.w500)),
+              onTap: () => Navigator.pop(ctx, ImageSource.camera),
+            ),
+            ListTile(
+              leading: const Icon(Icons.photo_library_rounded,
+                  color: AppColors.primary),
+              title: Text('Choose from gallery',
+                  style: GoogleFonts.inter(fontWeight: FontWeight.w500)),
+              onTap: () => Navigator.pop(ctx, ImageSource.gallery),
+            ),
+            const SizedBox(height: 8),
+          ],
+        ),
+      ),
+    );
+    if (source == null || !mounted) return;
+
+    final picker = ImagePicker();
+    final picked = await picker.pickImage(
+      source: source,
+      maxWidth: 800,
+      maxHeight: 800,
+      imageQuality: 85,
+    );
+    if (picked == null || !mounted) return;
+
+    final uid = Supabase.instance.client.auth.currentUser?.id;
+    if (uid == null) {
+      AppToast.error(context, 'Not signed in.');
+      return;
+    }
+
+    setState(() => _isUploadingPhoto = true);
+    try {
+      final file = File(picked.path);
+      final ext = picked.path.split('.').last.toLowerCase();
+      final storagePath = 'avatars/$uid.$ext';
+
+      // Upload to Supabase Storage (upsert so re-uploads work)
+      await Supabase.instance.client.storage
+          .from('user-photos')
+          .upload(storagePath, file,
+              fileOptions:
+                  const FileOptions(upsert: true, contentType: 'image/jpeg'));
+
+      final publicUrl = Supabase.instance.client.storage
+          .from('user-photos')
+          .getPublicUrl(storagePath);
+
+      // Cache-bust the URL so the widget re-fetches the new image
+      final bustUrl =
+          '$publicUrl?t=${DateTime.now().millisecondsSinceEpoch}';
+
+      await Supabase.instance.client
+          .from('users')
+          .update({'photo_url': publicUrl}).eq('user_id', uid);
+
+      if (!mounted) return;
+      setState(() => _photoUrl = bustUrl);
+      AppToast.success(context, 'Profile photo updated!');
+    } catch (e) {
+      if (!mounted) return;
+      AppToast.error(context, 'Failed to upload photo: $e');
+    } finally {
+      if (mounted) setState(() => _isUploadingPhoto = false);
+    }
+  }
+
+  // ── Edit Profile Info ────────────────────────────────────────────────────
+  Future<void> _showEditProfileDialog() async {
+    final firstCtrl = TextEditingController(text: _firstName);
+    final middleCtrl = TextEditingController(text: _middleName);
+    final surnameCtrl = TextEditingController(text: _surname);
+    final suffixCtrl = TextEditingController(text: _suffix);
+    String? errorText;
+
+    final saved = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setDlg) => AlertDialog(
+          shape:
+              RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+          title: Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(10),
+                decoration: BoxDecoration(
+                  color: AppColors.primary.withOpacity(0.12),
+                  shape: BoxShape.circle,
+                ),
+                child: const Icon(Icons.person_rounded,
+                    color: AppColors.primary, size: 22),
+              ),
+              const SizedBox(width: 14),
+              Text('Edit Profile',
+                  style: GoogleFonts.montserrat(
+                      fontWeight: FontWeight.w800, fontSize: 18)),
+            ],
+          ),
+          content: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                _dialogField(firstCtrl, 'First Name', Icons.badge_outlined,
+                    onChanged: (_) {
+                  if (errorText != null) setDlg(() => errorText = null);
+                }),
+                const SizedBox(height: 12),
+                _dialogField(
+                    middleCtrl, 'Middle Name (optional)', Icons.badge_outlined),
+                const SizedBox(height: 12),
+                _dialogField(surnameCtrl, 'Surname', Icons.badge_outlined,
+                    onChanged: (_) {
+                  if (errorText != null) setDlg(() => errorText = null);
+                }),
+                const SizedBox(height: 12),
+                _dialogField(
+                    suffixCtrl, 'Suffix (e.g. Jr.)', Icons.badge_outlined),
+                if (errorText != null) ...[
+                  const SizedBox(height: 10),
+                  Row(
+                    children: [
+                      const Icon(Icons.error_outline,
+                          size: 15, color: AppColors.error),
+                      const SizedBox(width: 6),
+                      Expanded(
+                          child: Text(errorText!,
+                              style: GoogleFonts.inter(
+                                  fontSize: 12, color: AppColors.error))),
+                    ],
+                  ),
+                ],
+              ],
+            ),
+          ),
+          actionsPadding: const EdgeInsets.fromLTRB(20, 0, 20, 20),
+          actions: [
+            Row(
+              children: [
+                Expanded(
+                  child: OutlinedButton(
+                    onPressed: () => Navigator.pop(ctx, false),
+                    style: OutlinedButton.styleFrom(
+                      padding: const EdgeInsets.symmetric(vertical: 14),
+                      shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(14)),
+                    ),
+                    child: Text('Cancel',
+                        style: GoogleFonts.inter(
+                            fontWeight: FontWeight.w600)),
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: ElevatedButton(
+                    onPressed: () {
+                      if (firstCtrl.text.trim().isEmpty ||
+                          surnameCtrl.text.trim().isEmpty) {
+                        setDlg(() => errorText =
+                            'First name and surname are required.');
+                        return;
+                      }
+                      Navigator.pop(ctx, true);
+                    },
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: AppColors.primary,
+                      foregroundColor: Colors.white,
+                      elevation: 0,
+                      padding: const EdgeInsets.symmetric(vertical: 14),
+                      shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(14)),
+                    ),
+                    child: Text('Save',
+                        style: GoogleFonts.inter(
+                            fontWeight: FontWeight.w700)),
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+
+    if (saved != true || !mounted) return;
+
+    final uid = Supabase.instance.client.auth.currentUser?.id;
+    if (uid == null) return;
+
+    try {
+      final fn = firstCtrl.text.trim();
+      final mn = middleCtrl.text.trim();
+      final sn = surnameCtrl.text.trim();
+      final sfx = suffixCtrl.text.trim();
+
+      await Supabase.instance.client.from('users').update({
+        'first_name': fn,
+        'middle_name': mn.isEmpty ? null : mn,
+        'surname': sn,
+        'suffix': sfx.isEmpty ? null : sfx,
+      }).eq('user_id', uid);
+
+      if (!mounted) return;
+      setState(() {
+        _firstName = fn;
+        _middleName = mn;
+        _surname = sn;
+        _suffix = sfx;
+        _displayName =
+            [fn, mn, sn, sfx].where((s) => s.isNotEmpty).join(' ');
+      });
+      AppToast.success(context, 'Profile updated successfully!');
+    } catch (e) {
+      if (!mounted) return;
+      AppToast.error(context, 'Failed to update profile: $e');
+    }
+  }
+
+  // ── Change Password ──────────────────────────────────────────────────────
+  Future<void> _showChangePasswordDialog() async {
+    final newCtrl = TextEditingController();
+    final confirmCtrl = TextEditingController();
+    bool obscureNew = true;
+    bool obscureConfirm = true;
+    String? errorText;
+
+    final saved = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setDlg) => AlertDialog(
+          shape:
+              RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+          title: Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(10),
+                decoration: BoxDecoration(
+                  color: AppColors.primary.withOpacity(0.12),
+                  shape: BoxShape.circle,
+                ),
+                child: const Icon(Icons.lock_rounded,
+                    color: AppColors.primary, size: 22),
+              ),
+              const SizedBox(width: 14),
+              Text('Change Password',
+                  style: GoogleFonts.montserrat(
+                      fontWeight: FontWeight.w800, fontSize: 18)),
+            ],
+          ),
+          content: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                TextField(
+                  controller: newCtrl,
+                  obscureText: obscureNew,
+                  style: GoogleFonts.inter(fontSize: 14),
+                  decoration: InputDecoration(
+                    labelText: 'New Password',
+                    prefixIcon:
+                        const Icon(Icons.lock_outline_rounded, size: 20),
+                    suffixIcon: IconButton(
+                      icon: Icon(obscureNew
+                          ? Icons.visibility_off_outlined
+                          : Icons.visibility_outlined,
+                          size: 20),
+                      onPressed: () => setDlg(() => obscureNew = !obscureNew),
+                    ),
+                    filled: true,
+                    fillColor: AppColors.surfaceContainerLow,
+                    border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(14),
+                        borderSide: BorderSide.none),
+                    enabledBorder: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(14),
+                        borderSide: BorderSide(
+                            color:
+                                AppColors.outlineVariant.withOpacity(0.3))),
+                    focusedBorder: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(14),
+                        borderSide: const BorderSide(
+                            color: AppColors.primary, width: 1.5)),
+                  ),
+                  onChanged: (_) {
+                    if (errorText != null) setDlg(() => errorText = null);
+                  },
+                ),
+                const SizedBox(height: 12),
+                TextField(
+                  controller: confirmCtrl,
+                  obscureText: obscureConfirm,
+                  style: GoogleFonts.inter(fontSize: 14),
+                  decoration: InputDecoration(
+                    labelText: 'Confirm New Password',
+                    prefixIcon:
+                        const Icon(Icons.lock_outline_rounded, size: 20),
+                    suffixIcon: IconButton(
+                      icon: Icon(obscureConfirm
+                          ? Icons.visibility_off_outlined
+                          : Icons.visibility_outlined,
+                          size: 20),
+                      onPressed: () =>
+                          setDlg(() => obscureConfirm = !obscureConfirm),
+                    ),
+                    filled: true,
+                    fillColor: AppColors.surfaceContainerLow,
+                    border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(14),
+                        borderSide: BorderSide.none),
+                    enabledBorder: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(14),
+                        borderSide: BorderSide(
+                            color:
+                                AppColors.outlineVariant.withOpacity(0.3))),
+                    focusedBorder: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(14),
+                        borderSide: const BorderSide(
+                            color: AppColors.primary, width: 1.5)),
+                  ),
+                  onChanged: (_) {
+                    if (errorText != null) setDlg(() => errorText = null);
+                  },
+                ),
+                if (errorText != null) ...[
+                  const SizedBox(height: 10),
+                  Row(
+                    children: [
+                      const Icon(Icons.error_outline,
+                          size: 15, color: AppColors.error),
+                      const SizedBox(width: 6),
+                      Expanded(
+                          child: Text(errorText!,
+                              style: GoogleFonts.inter(
+                                  fontSize: 12, color: AppColors.error))),
+                    ],
+                  ),
+                ],
+              ],
+            ),
+          ),
+          actionsPadding: const EdgeInsets.fromLTRB(20, 0, 20, 20),
+          actions: [
+            Row(
+              children: [
+                Expanded(
+                  child: OutlinedButton(
+                    onPressed: () => Navigator.pop(ctx, false),
+                    style: OutlinedButton.styleFrom(
+                      padding: const EdgeInsets.symmetric(vertical: 14),
+                      shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(14)),
+                    ),
+                    child: Text('Cancel',
+                        style: GoogleFonts.inter(
+                            fontWeight: FontWeight.w600)),
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: ElevatedButton(
+                    onPressed: () {
+                      final pw = newCtrl.text;
+                      if (pw.length < 6) {
+                        setDlg(() => errorText =
+                            'Password must be at least 6 characters.');
+                        return;
+                      }
+                      if (pw != confirmCtrl.text) {
+                        setDlg(() => errorText = 'Passwords do not match.');
+                        return;
+                      }
+                      Navigator.pop(ctx, true);
+                    },
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: AppColors.primary,
+                      foregroundColor: Colors.white,
+                      elevation: 0,
+                      padding: const EdgeInsets.symmetric(vertical: 14),
+                      shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(14)),
+                    ),
+                    child: Text('Update',
+                        style: GoogleFonts.inter(
+                            fontWeight: FontWeight.w700)),
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+
+    if (saved != true || !mounted) return;
+
+    try {
+      await Supabase.instance.client.auth
+          .updateUser(UserAttributes(password: newCtrl.text));
+      if (!mounted) return;
+      AppToast.success(context, 'Password changed successfully!');
+    } catch (e) {
+      if (!mounted) return;
+      AppToast.error(context, 'Failed to change password: $e');
+    }
+  }
+
+  // ── Shared dialog text field helper ─────────────────────────────────────
+  Widget _dialogField(
+    TextEditingController ctrl,
+    String label,
+    IconData icon, {
+    void Function(String)? onChanged,
+  }) {
+    return TextField(
+      controller: ctrl,
+      textCapitalization: TextCapitalization.words,
+      style: GoogleFonts.inter(fontSize: 14),
+      decoration: InputDecoration(
+        labelText: label,
+        prefixIcon: Icon(icon, size: 20),
+        filled: true,
+        fillColor: AppColors.surfaceContainerLow,
+        border: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(14),
+            borderSide: BorderSide.none),
+        enabledBorder: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(14),
+            borderSide: BorderSide(
+                color: AppColors.outlineVariant.withOpacity(0.3))),
+        focusedBorder: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(14),
+            borderSide:
+                const BorderSide(color: AppColors.primary, width: 1.5)),
+      ),
+      onChanged: onChanged,
     );
   }
 
@@ -367,16 +831,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
     final uid = Supabase.instance.client.auth.currentUser?.id;
     if (uid == null) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Unable to update address. Please sign in again.',
-              style: GoogleFonts.inter(fontWeight: FontWeight.w600)),
-          backgroundColor: AppColors.error,
-          behavior: SnackBarBehavior.floating,
-          shape:
-              RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-        ),
-      );
+      AppToast.error(context, 'Unable to update address. Please sign in again.');
       return;
     }
 
@@ -398,28 +853,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
         _address = addr.isEmpty ? null : addr;
         _barangay = baranga.isEmpty ? null : baranga;
       });
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Address updated successfully.',
-              style: GoogleFonts.inter(fontWeight: FontWeight.w600)),
-          backgroundColor: const Color(0xFF22C55E),
-          behavior: SnackBarBehavior.floating,
-          shape:
-              RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-        ),
-      );
+      AppToast.success(context, 'Address updated successfully.');
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Failed to update address: $e',
-              style: GoogleFonts.inter(fontWeight: FontWeight.w600)),
-          backgroundColor: AppColors.error,
-          behavior: SnackBarBehavior.floating,
-          shape:
-              RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-        ),
-      );
+      AppToast.error(context, 'Failed to update address: $e');
     } finally {
       if (mounted) setState(() => _isSavingAddress = false);
     }
@@ -460,7 +897,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
           ],
         ),
       ),
-      bottomNavigationBar: const BottomNavBar(currentIndex: 4),
+      bottomNavigationBar: widget.showBottomNav ? const BottomNavBar(currentIndex: 4) : null,
     );
   }
 
@@ -495,11 +932,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
               ),
             ],
           ),
-          IconButton(
-            icon: Icon(Icons.account_circle_outlined,
-                color: titleColor, size: 28),
-            onPressed: () => _showMockActionMessage('Profile Account Details'),
-          ),
+
         ],
       ),
     );
@@ -509,66 +942,82 @@ class _SettingsScreenState extends State<SettingsScreen> {
     return Column(
       children: [
         const SizedBox(height: 12),
-        // Avatar stack with Camera Button
-        Stack(
-          alignment: Alignment.center,
-          children: [
-            Container(
-              decoration: BoxDecoration(
-                shape: BoxShape.circle,
-                border: Border.all(color: Colors.white, width: 4),
-                boxShadow: [
-                  BoxShadow(
-                    color: Colors.black.withOpacity(0.12),
-                    blurRadius: 16,
-                    offset: const Offset(0, 8),
-                  ),
-                ],
-              ),
-              child: _photoUrl != null && _photoUrl!.isNotEmpty
-                  ? CircleAvatar(
-                      radius: 60,
-                      backgroundColor: AppColors.surfaceContainerHighest,
-                      backgroundImage: NetworkImage(_photoUrl!),
-                      onBackgroundImageError: (exception, stackTrace) {
-                        debugPrint('Failed to load profile image');
-                      },
-                    )
-                  : CircleAvatar(
-                      radius: 60,
-                      backgroundColor: AppColors.surfaceContainerHighest,
-                      child: Icon(Icons.person,
-                          size: 60,
-                          color: AppColors.onSurfaceVariant.withOpacity(0.5)),
-                    ),
-            ),
-            Positioned(
-              bottom: 2,
-              right: 2,
-              child: GestureDetector(
-                onTap: () => _showMockActionMessage('Edit Profile Photo'),
+        // Avatar + camera button — fixed size so Positioned anchors correctly
+        SizedBox(
+          width: 136,
+          height: 136,
+          child: Stack(
+            clipBehavior: Clip.none,
+            children: [
+              // Avatar fills the SizedBox
+              Positioned.fill(
                 child: Container(
-                  padding: const EdgeInsets.all(8),
                   decoration: BoxDecoration(
-                    color: AppColors.primaryContainer,
                     shape: BoxShape.circle,
+                    border: Border.all(color: Colors.white, width: 4),
                     boxShadow: [
                       BoxShadow(
-                        color: AppColors.primaryContainer.withOpacity(0.3),
-                        blurRadius: 8,
-                        offset: const Offset(0, 4),
+                        color: Colors.black.withOpacity(0.12),
+                        blurRadius: 16,
+                        offset: const Offset(0, 8),
                       ),
                     ],
                   ),
-                  child: const Icon(
-                    Icons.photo_camera_rounded,
-                    color: Colors.white,
-                    size: 20,
+                  child: _photoUrl != null && _photoUrl!.isNotEmpty
+                      ? CircleAvatar(
+                          radius: 60,
+                          backgroundColor: AppColors.surfaceContainerHighest,
+                          backgroundImage: NetworkImage(_photoUrl!),
+                          onBackgroundImageError: (_, __) {
+                            debugPrint('Failed to load profile image');
+                          },
+                        )
+                      : CircleAvatar(
+                          radius: 60,
+                          backgroundColor: AppColors.surfaceContainerHighest,
+                          child: Icon(Icons.person,
+                              size: 60,
+                              color:
+                                  AppColors.onSurfaceVariant.withOpacity(0.5)),
+                        ),
+                ),
+              ),
+              // Camera button — bottom-right corner
+              Positioned(
+                bottom: 0,
+                right: 0,
+                child: GestureDetector(
+                  onTap: _isUploadingPhoto ? null : _handleEditPhoto,
+                  child: Container(
+                    padding: const EdgeInsets.all(8),
+                    decoration: BoxDecoration(
+                      color: AppColors.primaryContainer,
+                      shape: BoxShape.circle,
+                      boxShadow: [
+                        BoxShadow(
+                          color: AppColors.primaryContainer.withOpacity(0.3),
+                          blurRadius: 8,
+                          offset: const Offset(0, 4),
+                        ),
+                      ],
+                    ),
+                    child: _isUploadingPhoto
+                        ? const SizedBox(
+                            width: 20,
+                            height: 20,
+                            child: CircularProgressIndicator(
+                                strokeWidth: 2, color: Colors.white),
+                          )
+                        : const Icon(
+                            Icons.photo_camera_rounded,
+                            color: Colors.white,
+                            size: 20,
+                          ),
                   ),
                 ),
               ),
-            ),
-          ],
+            ],
+          ),
         ),
         const SizedBox(height: 16),
         // Name
@@ -612,6 +1061,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
     );
   }
 
+
   Widget _buildSettingsCard() {
     return Container(
       decoration: BoxDecoration(
@@ -645,13 +1095,13 @@ class _SettingsScreenState extends State<SettingsScreen> {
           _buildSettingsTile(
             icon: Icons.person_outline_rounded,
             title: 'Edit Profile',
-            onTap: () => _showMockActionMessage('Edit Profile'),
+            onTap: _showEditProfileDialog,
           ),
           _buildDivider(),
           _buildSettingsTile(
             icon: Icons.lock_outline_rounded,
             title: 'Change Password',
-            onTap: () => _showMockActionMessage('Change Password'),
+            onTap: _showChangePasswordDialog,
           ),
           _buildDivider(),
           _buildSettingsTile(

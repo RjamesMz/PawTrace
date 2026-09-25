@@ -3,6 +3,7 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../core/app_colors.dart';
 import '../../core/app_routes.dart';
+import '../../core/app_toast.dart';
 import '../../widgets/bottom_nav_bar.dart';
 import 'pet_profile_detail.dart';
 
@@ -38,15 +39,7 @@ class _MyPetsScreenState extends State<MyPetsScreen> {
       setState(() => myPets = List<Map<String, dynamic>>.from(data));
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Error loading pets: $e',
-              style: GoogleFonts.inter(fontWeight: FontWeight.w600)),
-          backgroundColor: AppColors.error,
-          behavior: SnackBarBehavior.floating,
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-        ),
-      );
+      AppToast.error(context, 'Error loading pets: $e');
     } finally {
       if (mounted) setState(() => isLoading = false);
     }

@@ -97,11 +97,14 @@ class _AdminLayoutState extends State<AdminLayout> {
   // ─── Mobile Layout ────────────────────────────────────────────────────────
 
   Widget _buildMobileLayout() {
-    return Column(
-      children: [
-        Expanded(child: widget.child),
-        BottomNavBar(currentIndex: widget.currentIndex),
-      ],
+    return SafeArea(
+      bottom: false, // BottomNavBar handles its own bottom insets
+      child: Column(
+        children: [
+          Expanded(child: widget.child),
+          BottomNavBar(currentIndex: widget.currentIndex),
+        ],
+      ),
     );
   }
 

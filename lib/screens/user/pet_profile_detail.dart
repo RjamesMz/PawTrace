@@ -3,6 +3,7 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../core/app_colors.dart';
 import '../../core/app_routes.dart';
+import '../../core/app_toast.dart';
 import '../../core/navigation_helpers.dart';
 import '../../widgets/bottom_nav_bar.dart';
 import '../../widgets/pair_collar_dialog.dart';
@@ -77,30 +78,15 @@ class _PetProfileDetailScreenState extends State<PetProfileDetailScreen> {
 
       if (!mounted) return;
 
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(
-            '${pet['name'] ?? 'Pet'} has been marked as found! 🎉',
-            style: GoogleFonts.inter(fontWeight: FontWeight.w600),
-          ),
-          backgroundColor: const Color(0xFF22C55E),
-          behavior: SnackBarBehavior.floating,
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-        ),
+      AppToast.success(
+        context,
+        '${pet['name'] ?? 'Pet'} has been marked as found! 🎉',
       );
 
       _reloadPet();
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Failed to mark as found: $e',
-              style: GoogleFonts.inter(fontWeight: FontWeight.w600)),
-          backgroundColor: AppColors.error,
-          behavior: SnackBarBehavior.floating,
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-        ),
-      );
+      AppToast.error(context, 'Failed to mark as found: $e');
     } finally {
       if (mounted) setState(() => _isMarkingFound = false);
     }
@@ -111,6 +97,16 @@ class _PetProfileDetailScreenState extends State<PetProfileDetailScreen> {
     try {
       final petId = pet['pet_id'];
       if (petId == null) throw Exception('Pet ID is missing.');
+      // Delete the pet's photo from the storage bucket
+      final photoUrl = pet['photo_url'] as String?;
+      if (photoUrl != null && photoUrl.isNotEmpty && photoUrl.contains('pet-photos/')) {
+        try {
+          final filePath = photoUrl.split('pet-photos/').last;
+          await Supabase.instance.client.storage.from('pet-photos').remove([filePath]);
+        } catch (e) {
+          debugPrint('Failed to delete pet photo: $e');
+        }
+      }
 
       // Perform delete operation in Supabase
       await Supabase.instance.client
@@ -120,29 +116,16 @@ class _PetProfileDetailScreenState extends State<PetProfileDetailScreen> {
 
       if (!mounted) return;
 
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('${pet['name'] ?? 'Pet'} profile removed. Reason: $reason',
-              style: GoogleFonts.inter(fontWeight: FontWeight.w600)),
-          backgroundColor: const Color(0xFF22C55E),
-          behavior: SnackBarBehavior.floating,
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-        ),
+      AppToast.success(
+        context,
+        '${pet['name'] ?? 'Pet'} profile removed. Reason: $reason',
       );
 
       // Return back to My Pets list screen
       Navigator.pop(context);
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Failed to remove pet: $e',
-              style: GoogleFonts.inter(fontWeight: FontWeight.w600)),
-          backgroundColor: AppColors.error,
-          behavior: SnackBarBehavior.floating,
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-        ),
-      );
+      AppToast.error(context, 'Failed to remove pet: $e');
     } finally {
       if (mounted) setState(() => _isRemoving = false);
     }
@@ -383,11 +366,15 @@ class _PetProfileDetailScreenState extends State<PetProfileDetailScreen> {
     final photoUrl = pet['photo_url'] ?? '';
 
     return Scaffold(
-      backgroundColor: AppColors.background,
+      backgroundColor: Colors.white, // Status bar area becomes white
       body: _isRemoving
           ? const Center(child: CircularProgressIndicator(color: AppColors.primary))
-          : CustomScrollView(
-              slivers: [
+          : SafeArea(
+              bottom: false,
+              child: Container(
+                color: AppColors.background,
+                child: CustomScrollView(
+                  slivers: [
                 SliverAppBar(
                   expandedHeight: 360,
                   toolbarHeight: 76,
@@ -404,21 +391,7 @@ class _PetProfileDetailScreenState extends State<PetProfileDetailScreen> {
                       ),
                     ),
                   ),
-                  actions: [
-                    Padding(
-                      padding: const EdgeInsets.only(right: 8, top: 12),
-                      child: Row(children: [
-                        _appBarBtn(Icons.share),
-                        const SizedBox(width: 4),
-                        _appBarBtn(Icons.edit),
-                      ]),
-                    ),
-                  ],
-                  title: Row(children: [
-                    const Icon(Icons.pets, color: AppColors.primary, size: 18),
-                    const SizedBox(width: 6),
-                    Text('PawTrace', style: GoogleFonts.montserrat(fontSize: 18, fontWeight: FontWeight.w700, color: AppColors.primary)),
-                  ]),
+                  // Removed PawTrace logo, share and edit icons per user request
                   flexibleSpace: FlexibleSpaceBar(
                     background: Stack(
                       fit: StackFit.expand,
@@ -453,6 +426,8 @@ class _PetProfileDetailScreenState extends State<PetProfileDetailScreen> {
                 ),
               ],
             ),
+          ),
+        ),
       bottomNavigationBar: const BottomNavBar(currentIndex: 4),
     );
   }

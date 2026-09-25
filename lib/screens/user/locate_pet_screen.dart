@@ -6,6 +6,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../../core/app_colors.dart';
 import '../../core/app_routes.dart';
+import '../../core/app_toast.dart';
 import '../../widgets/pair_collar_dialog.dart';
 
 class LocatePetScreen extends StatefulWidget {
@@ -23,8 +24,8 @@ class _LocatePetScreenState extends State<LocatePetScreen> {
   Timer? _statusTimer;
 
   String? currentCollarId;
-  double lat = 13.9747; // default Virac coordinates
-  double lon = 124.2432;
+  double? lat;
+  double? lon;
   bool isOnline = false;
   int battery = 0;
   String lastUpdated = '';
@@ -35,7 +36,7 @@ class _LocatePetScreenState extends State<LocatePetScreen> {
   /// (Since testing interval is 30 seconds, anything > 45 seconds means the collar is offline or powered off).
   bool get isGpsActive {
     final hasCollar = currentCollarId != null && currentCollarId!.isNotEmpty;
-    if (!hasCollar || !isOnline || lastUpdated.isEmpty) return false;
+    if (!hasCollar || !isOnline || lastUpdated.isEmpty || lat == null) return false;
     try {
       DateTime dt = DateTime.parse(lastUpdated);
       if (!lastUpdated.endsWith('Z') && !lastUpdated.contains('+')) {
@@ -100,7 +101,7 @@ class _LocatePetScreenState extends State<LocatePetScreen> {
           lastUpdated = data['recorded_at'] ?? '';
           isLoading = false;
         });
-        _mapController.move(ll.LatLng(lat, lon), 16.0);
+        _mapController.move(ll.LatLng(lat!, lon!), 16.0);
       } else {
         setState(() => isLoading = false);
       }
@@ -132,8 +133,8 @@ class _LocatePetScreenState extends State<LocatePetScreen> {
             lastUpdated = latest['recorded_at'] ?? '';
           });
 
-          // Move map camera to new location
-          _mapController.move(ll.LatLng(lat, lon), 16.0);
+          // Move map camera to new location (lat/lon are set above so they're non-null here)
+          _mapController.move(ll.LatLng(lat!, lon!), 16.0);
         }, onError: (err) {
           debugPrint('[LocatePetScreen] Stream error: $err');
         });
@@ -152,17 +153,19 @@ class _LocatePetScreenState extends State<LocatePetScreen> {
       setState(() {
         currentCollarId = null;
         widget.pet['collar_id'] = null;
+        widget.pet['barangay'] = null; // clear stale location pill
         isOnline = false;
         battery = 0;
         lastUpdated = '';
+        lat = null; // no location — collar is gone
+        lon = null;
         isLoading = false;
       });
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Collar unpaired from this pet.'),
-            behavior: SnackBarBehavior.floating,
-          ),
+        AppToast.show(
+          context,
+          'Collar unpaired from this pet.',
+          icon: Icons.link_off_rounded,
         );
       }
     } else {
@@ -172,11 +175,9 @@ class _LocatePetScreenState extends State<LocatePetScreen> {
         isLoading = true;
       });
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Collar $result successfully paired!'),
-            behavior: SnackBarBehavior.floating,
-          ),
+        AppToast.success(
+          context,
+          'Collar $result successfully paired!',
         );
       }
       loadCollarLocation();
@@ -192,7 +193,8 @@ class _LocatePetScreenState extends State<LocatePetScreen> {
         dt = DateTime.parse('${timestamp}Z');
       }
       final diff = DateTime.now().difference(dt.toLocal());
-      if (diff.isNegative || diff.inSeconds < 60) return '${diff.inSeconds.abs()}s ago';
+      if (diff.isNegative || diff.inSeconds < 60)
+        return '${diff.inSeconds.abs()}s ago';
       if (diff.inMinutes < 60) return '${diff.inMinutes}m ago';
       if (diff.inHours < 24) return '${diff.inHours}h ago';
       return '${diff.inDays}d ago';
@@ -204,7 +206,8 @@ class _LocatePetScreenState extends State<LocatePetScreen> {
   Widget _buildPetMarker(String petName) {
     final photoUrl = widget.pet['photo_url'] as String?;
     final active = isGpsActive;
-    final markerColor = active ? const Color(0xFFFF6600) : const Color(0xFF64748B);
+    final markerColor =
+        active ? const Color(0xFFFF6600) : const Color(0xFF64748B);
 
     return Column(
       mainAxisSize: MainAxisSize.min,
@@ -234,7 +237,9 @@ class _LocatePetScreenState extends State<LocatePetScreen> {
                 width: 6,
                 height: 6,
                 decoration: BoxDecoration(
-                  color: active ? const Color(0xFF22C55E) : const Color(0xFFEF4444),
+                  color: active
+                      ? const Color(0xFF22C55E)
+                      : const Color(0xFFEF4444),
                   shape: BoxShape.circle,
                 ),
               ),
@@ -317,32 +322,98 @@ class _LocatePetScreenState extends State<LocatePetScreen> {
                       ),
                     ),
                   )
-                : FlutterMap(
-                    mapController: _mapController,
-                    options: MapOptions(
-                      initialCenter: ll.LatLng(lat, lon),
-                      initialZoom: 16.0,
-                    ),
-                    children: [
-                      TileLayer(
-                        urlTemplate:
-                            'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
-                        userAgentPackageName: 'com.pawtrace.app',
-                      ),
-                      if (hasCollar)
-                        MarkerLayer(
-                          markers: [
-                            Marker(
-                              point: ll.LatLng(lat, lon),
-                              width: 160,
-                              height: 80,
-                              alignment: Alignment.center,
-                              child: _buildPetMarker(petName),
-                            ),
-                          ],
+                : (lat == null || lon == null)
+                    // No location available — show placeholder
+                    ? Container(
+                        decoration: BoxDecoration(
+                          gradient: LinearGradient(
+                            begin: Alignment.topCenter,
+                            end: Alignment.bottomCenter,
+                            colors: [
+                              const Color(0xFFE2E8F0),
+                              const Color(0xFFF1F5F9),
+                            ],
+                          ),
                         ),
-                    ],
-                  ),
+                        child: Center(
+                          child: Column(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Container(
+                                padding: const EdgeInsets.all(20),
+                                decoration: BoxDecoration(
+                                  color: Colors.white.withOpacity(0.8),
+                                  shape: BoxShape.circle,
+                                  boxShadow: [
+                                    BoxShadow(
+                                      color: Colors.black.withOpacity(0.08),
+                                      blurRadius: 20,
+                                      spreadRadius: 4,
+                                    ),
+                                  ],
+                                ),
+                                child: Icon(
+                                  hasCollar
+                                      ? Icons.gps_not_fixed_rounded
+                                      : Icons.location_off_rounded,
+                                  size: 48,
+                                  color: hasCollar
+                                      ? AppColors.primary
+                                      : const Color(0xFF94A3B8),
+                                ),
+                              ),
+                              const SizedBox(height: 16),
+                              Text(
+                                hasCollar
+                                    ? 'Getting Location…'
+                                    : 'No Location Available',
+                                style: GoogleFonts.inter(
+                                  fontSize: 16,
+                                  fontWeight: FontWeight.w700,
+                                  color: const Color(0xFF475569),
+                                ),
+                              ),
+                              const SizedBox(height: 6),
+                              Text(
+                                hasCollar
+                                    ? 'Waiting for the collar to send its first GPS ping.'
+                                    : 'Pair a GPS collar to start tracking your pet.',
+                                style: GoogleFonts.inter(
+                                  fontSize: 13,
+                                  color: const Color(0xFF94A3B8),
+                                ),
+                                textAlign: TextAlign.center,
+                              ),
+                            ],
+                          ),
+                        ),
+                      )
+                    : FlutterMap(
+                        mapController: _mapController,
+                        options: MapOptions(
+                          initialCenter: ll.LatLng(lat!, lon!),
+                          initialZoom: 16.0,
+                        ),
+                        children: [
+                          TileLayer(
+                            urlTemplate:
+                                'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
+                            userAgentPackageName: 'com.pawtrace.app',
+                          ),
+                          if (hasCollar)
+                            MarkerLayer(
+                              markers: [
+                                Marker(
+                                  point: ll.LatLng(lat!, lon!),
+                                  width: 160,
+                                  height: 80,
+                                  alignment: Alignment.center,
+                                  child: _buildPetMarker(petName),
+                                ),
+                              ],
+                            ),
+                        ],
+                      ),
           ),
 
           // ── 2. Top Controls: Back button ──
@@ -462,6 +533,7 @@ class _LocatePetScreenState extends State<LocatePetScreen> {
           ),
 
           // ── 5. Floating Re-center button (slides above the bottom card) ──
+          if (lat != null && lon != null)
           AnimatedPositioned(
             duration: const Duration(milliseconds: 280),
             curve: Curves.easeOutCubic,
@@ -469,7 +541,7 @@ class _LocatePetScreenState extends State<LocatePetScreen> {
             right: 14,
             child: GestureDetector(
               onTap: () => _mapController.move(
-                ll.LatLng(lat, lon),
+                ll.LatLng(lat!, lon!),
                 16.0,
               ),
               child: Container(
@@ -611,7 +683,8 @@ class _LocatePetScreenState extends State<LocatePetScreen> {
                                                   ? const Color(0xFF92400E)
                                                   : (isGpsActive
                                                       ? const Color(0xFF065F46)
-                                                      : const Color(0xFFB91C1C)),
+                                                      : const Color(
+                                                          0xFFB91C1C)),
                                             ),
                                           ),
                                         ),
@@ -653,7 +726,7 @@ class _LocatePetScreenState extends State<LocatePetScreen> {
                                     Text(
                                       _isCardMinimized
                                           ? 'Show Details'
-                                          : 'Minimize Map',
+                                          : 'Minimize',
                                       style: GoogleFonts.inter(
                                         fontSize: 11,
                                         fontWeight: FontWeight.w600,
@@ -724,7 +797,9 @@ class _LocatePetScreenState extends State<LocatePetScreen> {
                                     child: Text(
                                       !hasCollar
                                           ? 'Unpaired'
-                                          : (isGpsActive ? 'Active' : 'Offline'),
+                                          : (isGpsActive
+                                              ? 'Active'
+                                              : 'Offline'),
                                       style: GoogleFonts.inter(
                                         fontSize: 12,
                                         fontWeight: FontWeight.w700,
@@ -925,7 +1000,9 @@ class _LocatePetScreenState extends State<LocatePetScreen> {
                                 ),
                                 const SizedBox(height: 4),
                                 Text(
-                                  'Lat: ${lat.toStringAsFixed(6)}, Lon: ${lon.toStringAsFixed(6)}',
+                                  lat != null && lon != null
+                                      ? 'Lat: ${lat!.toStringAsFixed(6)}, Lon: ${lon!.toStringAsFixed(6)}'
+                                      : 'Waiting for GPS signal…',
                                   style: GoogleFonts.inter(
                                     fontSize: 13,
                                     color: AppColors.onSurfaceVariant,
@@ -963,17 +1040,14 @@ class _LocatePetScreenState extends State<LocatePetScreen> {
                                   Expanded(
                                     child: OutlinedButton.icon(
                                       onPressed: () {
-                                        ScaffoldMessenger.of(context)
-                                            .showSnackBar(
-                                          SnackBar(
-                                            content: Text(
-                                              hasCollar
-                                                  ? "$petName's coordinates: $lat, $lon"
-                                                  : "No collar paired to $petName.",
-                                            ),
-                                            behavior:
-                                                SnackBarBehavior.floating,
-                                          ),
+                                        AppToast.show(
+                                          context,
+                                          hasCollar
+                                              ? (lat != null && lon != null
+                                                  ? "$petName's coordinates: ${lat!.toStringAsFixed(6)}, ${lon!.toStringAsFixed(6)}"
+                                                  : "No GPS location yet for $petName.")
+                                              : "No collar paired to $petName.",
+                                          icon: Icons.share_rounded,
                                         );
                                       },
                                       icon: const Icon(Icons.share),

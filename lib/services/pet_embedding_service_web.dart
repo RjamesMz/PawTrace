@@ -55,6 +55,14 @@ class PetEmbeddingService {
 
   Future<List<double>?> extractEmbedding(dynamic imageFile) async => null;
 
+  /// Web stub — re-embedding is not available on web (TFLite unavailable).
+  Future<int> reEmbedAllPets({
+    void Function(int done, int total)? onProgress,
+  }) async {
+    debugPrint('[PawTrace] reEmbedAllPets: not available on web.');
+    return 0;
+  }
+
   static double cosineSimilarity(List<double> a, List<double> b) {
     if (a.length != b.length) return 0;
     double dot = 0;

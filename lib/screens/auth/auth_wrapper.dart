@@ -5,7 +5,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../services/auth_service.dart';
 import '../../core/app_colors.dart';
 import 'login_screen.dart';
-import '../user/dashboard_home.dart';
+import '../../widgets/main_app_layout.dart';
 import '../admin/barangay_admin_home_screen.dart';
 import '../admin/super_admin_screen.dart';
 
@@ -58,7 +58,7 @@ class AuthWrapper extends StatelessWidget {
               return const _WebAccessDeniedScreen();
             }
 
-            return const DashboardHomeScreen();
+            return const MainAppLayout(initialIndex: 0);
           },
         );
       },
