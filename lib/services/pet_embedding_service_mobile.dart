@@ -1,19 +1,36 @@
-// Mobile implementation of PetEmbeddingService using tflite_flutter.
-// Only compiled on non-web platforms.
-import 'dart:io';
-import 'dart:math';
-import 'package:flutter/foundation.dart';
-import 'package:flutter/services.dart' show rootBundle;
-import 'package:image/image.dart' as img;
-import 'package:supabase_flutter/supabase_flutter.dart';
-import 'package:tflite_flutter/tflite_flutter.dart';
+// PawTrace AI Service — server-backed implementation.
+//
+// All AI inference (species detection + DINOv2 embedding) is delegated to the
+// PawTrace AI Server (FastAPI + YOLOv11 + DINOv2) running on the local laptop.
+//
+// The server URL is configured via [PetEmbeddingService.serverUrl].
+// Change it to your ngrok URL when testing on a real device over the internet.
 
-/// Result of AI pet classification checking if an image is a dog or cat.
+import 'dart:io';
+import 'package:flutter/foundation.dart';
+import 'package:http/http.dart' as http;
+import 'dart:convert';
+import 'package:supabase_flutter/supabase_flutter.dart';
+
+// ─── Typed exception for server unavailability ───────────────────────────────
+
+/// Thrown when the PawTrace AI server cannot be reached.
+/// The UI can catch this specifically to show a maintenance message.
+class PawTraceServerException implements Exception {
+  final String message;
+  const PawTraceServerException([this.message = 'AI server is unreachable.']);
+
+  @override
+  String toString() => 'PawTraceServerException: $message';
+}
+
+// ─── Public result type (unchanged API) ──────────────────────────────────────
+
 class PetClassificationResult {
   final bool isDogOrCat;
-  final String detectedSpecies; // 'Dog', 'Cat', or specific non-dog/cat label
-  final String label; // e.g. "Golden Retriever", "Tabby", "Macaw"
-  final double confidence; // 0.0 to 1.0
+  final String detectedSpecies;
+  final String label;
+  final double confidence;
   final int classIndex;
   final String? errorMessage;
 
@@ -27,508 +44,175 @@ class PetClassificationResult {
   });
 }
 
+// ─── Service ─────────────────────────────────────────────────────────────────
+
 class PetEmbeddingService {
   PetEmbeddingService._();
   static final PetEmbeddingService instance = PetEmbeddingService._();
-  Interpreter? mobileNet;
-  Interpreter? aspinPuspin;
-  List<String> mobileNetLabels = [];
-  static const int _inputSize = 224;
 
+  /// Fallback URL used if Supabase config cannot be fetched.
+  /// Update this to your local IP for development without internet.
+  static const String _fallbackUrl = 'http://192.168.1.5:8000';
+
+  /// Cached server URL — fetched from Supabase `app_config` on first use.
+  String? _resolvedUrl;
+
+  // ── Internal helpers ──────────────────────────────────────────────────────
+
+  /// Fetches the AI server URL from Supabase `app_config` table.
+  /// Caches the result for the rest of the session.
+  Future<String> _resolveServerUrl() async {
+    if (_resolvedUrl != null) return _resolvedUrl!;
+
+    try {
+      final row = await Supabase.instance.client
+          .from('app_config')
+          .select('value')
+          .eq('key', 'ai_server_url')
+          .maybeSingle();
+
+      final url = (row?['value'] as String?)?.trim();
+      if (url != null && url.isNotEmpty) {
+        _resolvedUrl = url;
+        debugPrint('[PawTrace] AI server URL loaded from Supabase: $url');
+        return url;
+      }
+    } catch (e) {
+      debugPrint('[PawTrace] Could not fetch server URL from Supabase: $e');
+    }
+
+    debugPrint('[PawTrace] Using fallback server URL: $_fallbackUrl');
+    _resolvedUrl = _fallbackUrl;
+    return _fallbackUrl;
+  }
+
+  /// Clears the cached URL so the next call re-fetches from Supabase.
+  /// Call this if you update the URL in Supabase and want the app to pick it
+  /// up without restarting.
+  void clearUrlCache() => _resolvedUrl = null;
+
+  Future<Uri> _uri(String path) async =>
+      Uri.parse('${await _resolveServerUrl()}$path');
+
+
+  /// Posts [imageFile] as multipart to [path] and returns the decoded JSON.
+  ///
+  /// Throws [PawTraceServerException] when the server cannot be reached
+  /// (connection refused, timeout, or non-200 response).
+  Future<Map<String, dynamic>> _post(String path, File imageFile) async {
+    try {
+      final request = http.MultipartRequest('POST', await _uri(path));
+      request.files.add(
+        await http.MultipartFile.fromPath('file', imageFile.path),
+      );
+      final streamed = await request.send().timeout(const Duration(seconds: 30));
+      final body = await streamed.stream.bytesToString();
+      if (streamed.statusCode != 200) {
+        debugPrint('[PawTrace] Server error ${streamed.statusCode}: $body');
+        throw PawTraceServerException(
+            'Server returned status ${streamed.statusCode}.');
+      }
+      return jsonDecode(body) as Map<String, dynamic>;
+    } on PawTraceServerException {
+      rethrow;
+    } on SocketException catch (e) {
+      debugPrint('[PawTrace] Connection refused ($path): $e');
+      throw const PawTraceServerException(
+          'Could not connect to the AI server. It may be offline.');
+    } on http.ClientException catch (e) {
+      debugPrint('[PawTrace] HTTP client error ($path): $e');
+      throw const PawTraceServerException(
+          'Could not connect to the AI server. It may be offline.');
+    } catch (e) {
+      // Only convert timeout errors to PawTraceServerException.
+      // All other errors (e.g. FormatException) propagate as-is so they
+      // don't wrongly trigger the "server under maintenance" dialog.
+      final msg = e.toString();
+      debugPrint('[PawTrace] Server call failed ($path): $msg');
+      if (msg.contains('TimeoutException') || msg.contains('timed out')) {
+        throw const PawTraceServerException(
+            'The AI server did not respond in time. Please try again.');
+      }
+      rethrow; // not a connectivity problem — let it surface normally
+    }
+  }
+
+  // ── Public API ────────────────────────────────────────────────────────────
+
+  /// Loads models — no-op for the server-backed implementation.
+  /// Kept for API compatibility with callers that await this.
   Future<void> loadModels() async {
-    if (mobileNet == null) {
-      debugPrint('[PawTrace] Loading MobileNet model...');
-      mobileNet = await Interpreter.fromAsset(
-          'assets/models/mobilenet_v1_1.0_224_quant.tflite');
-      debugPrint('[PawTrace] MobileNet model loaded');
-    }
-
-    if (aspinPuspin == null) {
-      try {
-        debugPrint('[PawTrace] Loading Aspin/Puspin model...');
-        aspinPuspin =
-            await Interpreter.fromAsset('assets/models/pawtrace_model.tflite');
-        debugPrint('[PawTrace] Aspin/Puspin model loaded');
-      } catch (e) {
-        debugPrint('[PawTrace] Aspin/Puspin model load failed: $e');
-      }
-    }
-
-    if (mobileNetLabels.isEmpty) {
-      try {
-        final raw = await rootBundle.loadString('assets/models/labels.txt');
-        mobileNetLabels = raw
-            .split('\n')
-            .map((l) => l.trim())
-            .where((l) => l.isNotEmpty)
-            .toList();
-      } catch (e) {
-        debugPrint('[PawTrace] labels.txt load failed: $e');
-        mobileNetLabels = const [];
-      }
-    }
+    debugPrint('[PawTrace] Server-backed mode — no local models to load.');
   }
 
-  bool _isWildAnimalIndexOrLabel(int idx, String label) {
-  
-    const domesticExceptions = [
-      'tiger cat',   
-      'tabby',        // all tabby variations
-      'fox squirrel', // squirrel, not a fox
-    ];
-    if (domesticExceptions.any((e) => label.contains(e))) return false;
-
-    // 1. Wild canids in MobileNet: timber wolf (270), white wolf (271), red wolf (272), coyote (273), dingo (274), dhole (275), african hunting dog (276), hyena (277), foxes (278..281)
-    if (idx >= 270 && idx <= 281) return true;
-    // 2. Wild felids / big cats in MobileNet: cougar (287), lynx (288), leopard (289), snow leopard (290), jaguar (291), lion (292), tiger (293), cheetah (294)
-    if (idx >= 287 && idx <= 294) return true;
-    // 3. Bears: brown bear (295), american black bear (296), ice/polar bear (297), sloth bear (298)
-    if (idx >= 295 && idx <= 298) return true;
-    // 4. Tiger shark (4)
-    if (idx == 4) return true;
-
-    const wildKeywords = [
-      'wolf',
-      'timber wolf',
-      'white wolf',
-      'red wolf',
-      'coyote',
-      'dingo',
-      'dhole',
-      'hyena',
-      'fox',
-      'jackal',
-      'tiger',
-      'lion',
-      'leopard',
-      'jaguar',
-      'cheetah',
-      'panther',
-      'cougar',
-      'puma',
-      'lynx',
-      'bobcat',
-      'ocelot',
-      'caracal',
-      'serval',
-      'bear',
-    ];
-    return wildKeywords.any((k) => label.contains(k));
-  }
-
-  bool _isDogIndexOrLabel(int idx, String label) {
-    // Explicitly reject wild animals from ever being considered a dog
-    if (_isWildAnimalIndexOrLabel(idx, label)) return false;
-    // MobileNet domestic dog indices strictly span 152 through 269
-    if (idx >= 152 && idx <= 269) return true;
-    const dogKeywords = [
-      'dog',
-      'hound',
-      'retriever',
-      'shepherd',
-      'terrier',
-      'poodle',
-      'bulldog',
-      'beagle',
-      'husky',
-      'pug',
-      'boxer',
-      'collie',
-      'spaniel',
-      'setter',
-      'pointer',
-      'malamute',
-      'samoyed',
-      'corgi',
-      'dachshund',
-      'dalmatian',
-      'doberman',
-      'labrador',
-      'chihuahua',
-      'shih',
-      'maltese',
-      'pomeranian',
-      'schnauzer',
-      'rottweiler',
-      'mastiff',
-      'greyhound',
-      'basenji',
-      'ridgeback',
-      'kelpie',
-      'whippet',
-      'saluki',
-      'borzoi',
-      'pekinese',
-      'papillon',
-      'kuvasz',
-      'briard',
-      'komondor',
-      'malinois',
-      'groenendael',
-      'schipperke',
-      'lhasa',
-      'vizsla',
-      'clumber',
-      'airedale',
-      'cairn',
-      'appenzeller',
-      'entlebucher',
-      'leonberg',
-      'newfoundland',
-      'great pyrenees',
-      'chow',
-      'keeshond',
-      'pembroke',
-      'cardigan',
-      'hairless',
-      'puppy',
-      'mutt',
-      'mongrel',
-      'aspin',
-    ];
-    return dogKeywords.any((k) => label.contains(k));
-  }
-
-  bool _isCatIndexOrLabel(int idx, String label) {
-    // Explicitly reject wild animals / big cats from ever being considered a domestic cat
-    if (_isWildAnimalIndexOrLabel(idx, label)) return false;
-    // MobileNet domestic cat indices strictly span 282 through 286 (tabby, tiger cat, persian, siamese, egyptian)
-    if (idx >= 282 && idx <= 286) return true;
-    const catKeywords = [
-      'cat',           // catches 'tiger cat', 'domestic cat', 'wildcat', etc.
-      'domestic cat',
-      'tabby',
-      'persian',
-      'siamese',
-      'egyptian',
-      'kitten',
-      'feline',
-      'puspin',
-      'ginger',        // common MobileNet label for orange cats
-    ];
-    return catKeywords.any((k) => label.contains(k));
-  }
-
+  /// Calls /detect on the AI server to classify the pet species.
+  ///
+  /// Returns a map with keys: isAccepted, species, confidence, isDog, isCat.
+  /// Throws [PawTraceServerException] if the server is unreachable.
   Future<Map<String, dynamic>> detectSpecies(File imageFile) async {
-    try {
-      await loadModels();
-      if (mobileNet == null) {
-        return {
-          'label': 'Not a Pet',
-          'isAccepted': false,
-          'isDog': false,
-          'isCat': false,
-          'isAspin': false,
-          'isPuspin': false,
-          'confidence': 0.0,
-        };
-      }
+    // _post now throws PawTraceServerException on failure — let it propagate.
+    final result = await _post('/detect', imageFile);
 
-      final rawBytes = await imageFile.readAsBytes();
-      final decoded = img.decodeImage(rawBytes);
-      if (decoded == null) {
-        return {
-          'label': 'Not a Pet',
-          'isAccepted': false,
-          'isDog': false,
-          'isCat': false,
-          'isAspin': false,
-          'isPuspin': false,
-          'confidence': 0.0,
-        };
-      }
+    final species    = result['species'] as String? ?? '';
+    final isAccepted = result['isAccepted'] as bool? ?? false;
+    final isDog      = result['isDog']      as bool? ?? false;
+    final isCat      = result['isCat']      as bool? ?? false;
+    final confidence = (result['confidence'] as num? ?? 0.0).toDouble();
 
-      final resized =
-          img.copyResize(decoded, width: _inputSize, height: _inputSize);
-      final input = List.generate(
-        1,
-        (_) => List.generate(
-            _inputSize,
-            (y) => List.generate(_inputSize, (x) {
-                  final pixel = resized.getPixel(x, y);
-                  return [pixel.r.toInt(), pixel.g.toInt(), pixel.b.toInt()];
-                })),
-      );
+    debugPrint('[PawTrace] detectSpecies: $species (conf=${confidence.toStringAsFixed(2)})');
 
-      final mobileNetOutput = List.generate(1, (_) => List.filled(1001, 0));
-      mobileNet!.run(input, mobileNetOutput);
-
-      final scores = mobileNetOutput[0];
-      final indexedScores =
-          List.generate(scores.length, (i) => MapEntry(i, scores[i]))
-            ..sort((a, b) => b.value.compareTo(a.value));
-
-      // 1. FIRST: Check top predictions for wild animals (wolf, tiger, lion, bear, etc.)
-      for (int i = 0; i < 5 && i < indexedScores.length; i++) {
-        final entry = indexedScores[i];
-        final idx = entry.key;
-        final score = entry.value;
-        if (score < 8) continue;
-
-        final lbl = idx < mobileNetLabels.length
-            ? mobileNetLabels[idx].toLowerCase()
-            : '';
-        if (_isWildAnimalIndexOrLabel(idx, lbl)) {
-          debugPrint(
-              '[PawTrace] Wild animal detected: $lbl (idx: $idx, score: $score). Rejecting registration.');
-          return {
-            'label': 'Wild Animal (${_formatLabel(lbl)})',
-            'breed': _formatLabel(lbl),
-            'isAccepted': false,
-            'isDog': false,
-            'isCat': false,
-            'isWildAnimal': true,
-            'confidence': (score / 255.0).clamp(0.0, 1.0),
-          };
-        }
-      }
-
-      int topDogIndex = -1;
-      int topDogScore = 0;
-
-      int topCatIndex = -1;
-      int topCatScore = 0;
-
-      for (int i = 0; i < 5 && i < indexedScores.length; i++) {
-        final entry = indexedScores[i];
-        final idx = entry.key;
-        final score = entry.value;
-        if (score < 5) continue;
-
-        final lbl = idx < mobileNetLabels.length
-            ? mobileNetLabels[idx].toLowerCase()
-            : '';
-        if (_isDogIndexOrLabel(idx, lbl)) {
-          if (score > topDogScore) {
-            topDogScore = score;
-            topDogIndex = idx;
-          }
-        } else if (_isCatIndexOrLabel(idx, lbl)) {
-          if (score > topCatScore) {
-            topCatScore = score;
-            topCatIndex = idx;
-          }
-        }
-      }
-
-      bool isDog = topDogScore >= 5 && topDogScore >= topCatScore;
-      bool isCat = topCatScore >= 5 && topCatScore > topDogScore;
-      bool isAspin = false;
-      bool isPuspin = false;
-      double confidence =
-          (isDog ? topDogScore : (isCat ? topCatScore : 0)) / 255.0;
-
-      // Second check: run custom Aspin/Puspin model ONLY IF image doesn't match an inanimate non-pet object
-      final topEntry = indexedScores.isNotEmpty ? indexedScores.first : null;
-      final topScore = topEntry?.value ?? 0;
-      final topIdx = topEntry?.key ?? -1;
-      final topLbl = topIdx >= 0 && topIdx < mobileNetLabels.length
-          ? mobileNetLabels[topIdx].toLowerCase()
-          : '';
-
-      final bool isConfidentNonPet = topScore >= 40 &&
-          !_isDogIndexOrLabel(topIdx, topLbl) &&
-          !_isCatIndexOrLabel(topIdx, topLbl);
-
-      if (!isDog && !isCat && !isConfidentNonPet && aspinPuspin != null) {
-        final secondOutput = List.generate(1, (_) => List.filled(2, 0.0));
-        try {
-          aspinPuspin!.run(input, secondOutput);
-          final aspinScore = (secondOutput[0][0] as num).toDouble();
-          final puspinScore = (secondOutput[0][1] as num).toDouble();
-
-          if (aspinScore >= 0.82) {
-            isDog = true;
-            isAspin = true;
-            confidence = aspinScore;
-          } else if (puspinScore >= 0.82) {
-            isCat = true;
-            isPuspin = true;
-            confidence = puspinScore;
-          }
-        } catch (e) {
-          debugPrint('[PawTrace] aspinPuspin inference error: $e');
-        }
-      }
-
-      if (isDog) {
-        final breedName = isAspin
-            ? 'Aspin - Philippine Street Dog'
-            : (topDogIndex >= 0 && topDogIndex < mobileNetLabels.length
-                ? _formatLabel(mobileNetLabels[topDogIndex])
-                : 'Dog');
-        return {
-          'label': 'Dog',
-          'breed': breedName,
-          'isAccepted': true,
-          'isDog': true,
-          'isCat': false,
-          'isAspin': isAspin,
-          'isPuspin': false,
-          'confidence': confidence.clamp(0.0, 1.0),
-        };
-      }
-
-      if (isCat) {
-        final breedName = isPuspin
-            ? 'Puspin - Philippine Street Cat'
-            : (topCatIndex >= 0 && topCatIndex < mobileNetLabels.length
-                ? _formatLabel(mobileNetLabels[topCatIndex])
-                : 'Cat');
-        return {
-          'label': 'Cat',
-          'breed': breedName,
-          'isAccepted': true,
-          'isDog': false,
-          'isCat': true,
-          'isAspin': false,
-          'isPuspin': isPuspin,
-          'confidence': confidence.clamp(0.0, 1.0),
-        };
-      }
-
-      return {
-        'label': 'Not a Pet',
-        'isAccepted': false,
-        'isDog': false,
-        'isCat': false,
-        'isAspin': false,
-        'isPuspin': false,
-        'confidence': 0.0,
-      };
-    } catch (e) {
-      debugPrint('[PawTrace] detectSpecies error: $e');
-      return {
-        'label': 'Not a Pet',
-        'isAccepted': false,
-        'isDog': false,
-        'isCat': false,
-        'isAspin': false,
-        'isPuspin': false,
-        'confidence': 0.0,
-      };
-    }
+    return {
+      'label':      isAccepted ? species : 'Not a Pet',
+      'breed':      species,
+      'isAccepted': isAccepted,
+      'isDog':      isDog,
+      'isCat':      isCat,
+      'isAspin':    false,   // server does not distinguish aspin/puspin
+      'isPuspin':   false,
+      'confidence': confidence,
+    };
   }
 
-  /// Classifies whether an image is a Dog, Cat, or another animal/subject.
-  Future<PetClassificationResult> classifyImage(File imageFile) async {
-    try {
-      final detected = await detectSpecies(imageFile);
-      final isDog = detected['isDog'] == true;
-      final isCat = detected['isCat'] == true;
-      final accepted = detected['isAccepted'] == true;
-      final label =
-          (detected['breed'] ?? detected['label'] ?? 'Unknown').toString();
-      final confidence = (detected['confidence'] as num?)?.toDouble() ?? 0.0;
-      return PetClassificationResult(
-        isDogOrCat: accepted,
-        detectedSpecies: isDog ? 'Dog' : (isCat ? 'Cat' : 'Unknown'),
-        label: label,
-        confidence: confidence,
-        classIndex: -1,
-        errorMessage:
-            accepted ? null : 'No supported dog/cat species detected.',
-      );
-    } catch (e) {
-      debugPrint('[PawTrace] Classification exception: $e');
-      return PetClassificationResult(
-        isDogOrCat: false,
-        detectedSpecies: 'Unknown',
-        label: 'Error',
-        confidence: 0,
-        classIndex: -1,
-        errorMessage: 'Classification error: $e',
-      );
-    }
-  }
-
-  static String _formatLabel(String raw) {
-    return raw.split(' ').map((w) {
-      if (w.isEmpty) return '';
-      return w[0].toUpperCase() + w.substring(1).toLowerCase();
-    }).join(' ');
-  }
-
-  /// Extracts a stable visual embedding from [imageFile] using MobileNetV1.
+  /// Calls /embed on the AI server to get the DINOv2 embedding.
   ///
-  /// **Why float output?**
-  /// The model is quantized (uint8). Using a `double` output buffer tells
-  /// tflite_flutter to automatically dequantize the raw uint8 scores into
-  /// proper float32 probabilities using the tensor's scale/zero_point.
-  ///
-  /// **Why temperature softmax?**
-  /// The raw classification output is winner-takes-all (one class dominates).
-  /// Applying temperature-scaled softmax (T=3) redistributes probability mass
-  /// across many classes, so the L2-normalised vector uses many dimensions —
-  /// making cosine similarity stable across different photos of the same pet.
+  /// Returns a 768-dim L2-normalised list, or null if no pet was detected.
+  /// Throws [PawTraceServerException] if the server is unreachable.
   Future<List<double>?> extractEmbedding(File imageFile) async {
-    try {
-      debugPrint('[PawTrace] extractEmbedding: loadModels() start');
-      await loadModels();
-      debugPrint('[PawTrace] extractEmbedding: loadModels() done');
-      final interpreter = mobileNet;
-      if (interpreter == null) {
-        debugPrint('[PawTrace] ERROR: MobileNet interpreter unavailable');
-        return null;
-      }
+    // _post throws PawTraceServerException on server failure — let it propagate.
+    final result = await _post('/embed', imageFile);
 
-      final rawBytes = await imageFile.readAsBytes();
-      debugPrint('[PawTrace] image bytes: ${rawBytes.length}');
-      final decoded = img.decodeImage(rawBytes);
-      if (decoded == null) {
-        debugPrint('[PawTrace] ERROR: image decode null!');
-        return null;
-      }
-      debugPrint('[PawTrace] image decoded OK');
-
-      final resized =
-          img.copyResize(decoded, width: _inputSize, height: _inputSize);
-      final input = List.generate(
-          1,
-          (_) => List.generate(
-              _inputSize,
-              (y) => List.generate(_inputSize, (x) {
-                    final pixel = resized.getPixel(x, y);
-                    return [pixel.r.toInt(), pixel.g.toInt(), pixel.b.toInt()];
-                  })));
-
-      // Use a double (float32) output buffer so tflite_flutter auto-dequantizes
-      // the uint8 model output into proper float32 probabilities.
-      final output = List.generate(1, (_) => List.filled(1001, 0.0));
-      interpreter.run(input, output);
-      debugPrint('[PawTrace] inference done');
-
-      final floatScores = List<double>.from(output[0]);
-
-      // Apply temperature-scaled softmax (T=3) to spread the signal across
-      // more dimensions. Without this, one class dominates and the embedding
-      // is almost a one-hot vector — extremely unstable for cosine similarity.
-      final embedding = _temperatureSoftmax(floatScores, temperature: 3.0);
-      final normalised = _l2Normalize(embedding);
-
-      debugPrint(
-          '[PawTrace] embedding ready (${normalised.length} dims, norm≈1)');
-      return normalised;
-    } catch (e, stack) {
-      debugPrint('[PawTrace] extractEmbedding EXCEPTION: $e');
-      debugPrint('[PawTrace] stack: $stack');
+    final isAccepted = result['isAccepted'] as bool? ?? false;
+    if (!isAccepted) {
+      debugPrint('[PawTrace] extractEmbedding: no pet detected by server.');
       return null;
     }
+
+    final raw = result['embedding'];
+    if (raw == null) return null;
+
+    final embedding = List<double>.from((raw as List).map((v) => (v as num).toDouble()));
+    debugPrint('[PawTrace] extractEmbedding: ${embedding.length}-dim DINOv2 vector received.');
+    return embedding;
   }
 
-  /// Re-embeds every pet in the Supabase `pets` table using the current
-  /// (improved) embedding method and updates the `embedding` column.
-  ///
-  /// Returns the number of pets successfully re-embedded.
+  /// Cosine similarity between two L2-normalised vectors.
+  static double cosineSimilarity(List<double> a, List<double> b) {
+    if (a.length != b.length) return 0;
+    double dot = 0;
+    for (int i = 0; i < a.length; i++) {
+      dot += a[i] * b[i];
+    }
+    return dot.clamp(-1.0, 1.0);
+  }
+
+  /// Re-embeds every pet in the Supabase pets table using DINOv2 via the server.
   Future<int> reEmbedAllPets({
     void Function(int done, int total)? onProgress,
   }) async {
-    await loadModels();
     final supabase = Supabase.instance.client;
-
     final rows = await supabase
         .from('pets')
-        .select('pet_id, photo_url, species')
+        .select('pet_id, photo_url')
         .order('created_at', ascending: false);
 
     final pets = List<Map<String, dynamic>>.from(rows);
@@ -536,29 +220,24 @@ class PetEmbeddingService {
 
     for (final pet in pets) {
       final photoUrl = (pet['photo_url'] as String? ?? '').trim();
-      final petId = pet['pet_id']?.toString();
+      final petId    = pet['pet_id']?.toString();
       if (photoUrl.isEmpty || petId == null) continue;
 
       try {
-        // Download the photo to a temp file
         final httpClient = HttpClient();
-        final request = await httpClient.getUrl(Uri.parse(photoUrl));
+        final request  = await httpClient.getUrl(Uri.parse(photoUrl));
         final response = await request.close();
-        final bytes = await response.fold<List<int>>(
-            [], (acc, chunk) => acc..addAll(chunk));
+        final bytes    = await response.fold<List<int>>([], (acc, chunk) => acc..addAll(chunk));
         httpClient.close();
 
-        final tmpFile = File(
-            '${Directory.systemTemp.path}/pawtrace_reembed_$petId.jpg');
+        final tmpFile = File('${Directory.systemTemp.path}/pawtrace_reembed_$petId.jpg');
         await tmpFile.writeAsBytes(bytes);
 
         final embedding = await extractEmbedding(tmpFile);
         await tmpFile.delete();
 
         if (embedding != null) {
-          await supabase
-              .from('pets')
-              .update({'embedding': embedding}).eq('pet_id', petId);
+          await supabase.from('pets').update({'embedding': embedding}).eq('pet_id', petId);
           done++;
           debugPrint('[PawTrace] Re-embedded pet $petId ($done/${pets.length})');
         }
@@ -573,41 +252,7 @@ class PetEmbeddingService {
     return done;
   }
 
-  /// Temperature-scaled softmax: softens the probability distribution so that
-  /// more dimensions carry signal, improving cosine-similarity stability.
-  /// Higher temperature → softer distribution (more dims contribute).
-  List<double> _temperatureSoftmax(List<double> logits,
-      {double temperature = 3.0}) {
-    final scaled = logits.map((v) => v / temperature).toList();
-    final maxVal = scaled.reduce(max);
-    final exps = scaled.map((v) => exp(v - maxVal)).toList();
-    final sumExp = exps.reduce((a, b) => a + b);
-    return exps.map((v) => v / sumExp).toList();
-  }
-
-  List<double> _l2Normalize(List<double> vec) {
-    double sumSq = 0;
-    for (final v in vec) {
-      sumSq += v * v;
-    }
-    final norm = sqrt(sumSq);
-    if (norm == 0) return vec;
-    return vec.map((v) => v / norm).toList();
-  }
-
-  static double cosineSimilarity(List<double> a, List<double> b) {
-    if (a.length != b.length) return 0;
-    double dot = 0;
-    for (int i = 0; i < a.length; i++) {
-      dot += a[i] * b[i];
-    }
-    return dot.clamp(-1.0, 1.0);
-  }
-
   void dispose() {
-    mobileNet?.close();
-    aspinPuspin?.close();
-    mobileNet = null;
-    aspinPuspin = null;
+    // No local resources to free in server-backed mode.
   }
 }

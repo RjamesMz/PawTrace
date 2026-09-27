@@ -50,9 +50,9 @@ class _AdminPetDetailScreenState extends State<AdminPetDetailScreen> {
       context: context,
       builder: (ctx) => AlertDialog(
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        title: Text('Remove Pet', style: GoogleFonts.montserrat(fontWeight: FontWeight.w600)),
+        title: Text('Archive Pet', style: GoogleFonts.montserrat(fontWeight: FontWeight.w600)),
         content: Text(
-          'Are you sure you want to remove ${pet['name']}? This action cannot be undone.',
+          'Are you sure you want to archive ${pet['name']}? The profile will be safely archived and unlinked from active records.',
           style: GoogleFonts.inter(fontSize: 14, color: AppColors.onSurfaceVariant),
         ),
         actions: [
@@ -63,7 +63,7 @@ class _AdminPetDetailScreenState extends State<AdminPetDetailScreen> {
           ElevatedButton(
             onPressed: () => Navigator.pop(ctx, true),
             style: ElevatedButton.styleFrom(backgroundColor: AppColors.error, foregroundColor: Colors.white),
-            child: Text('Remove', style: GoogleFonts.inter(fontWeight: FontWeight.w700)),
+            child: Text('Archive', style: GoogleFonts.inter(fontWeight: FontWeight.w700)),
           ),
         ],
       ),
@@ -74,9 +74,9 @@ class _AdminPetDetailScreenState extends State<AdminPetDetailScreen> {
     setState(() => _isUpdating = true);
     try {
       final petId = pet['pet_id'] ?? pet['id'];
-      await _supabase.from('pets').delete().eq('pet_id', petId);
+      await _supabase.from('pets').update({'status': 'archived', 'collar_id': null}).eq('pet_id', petId);
       if (!mounted) return;
-      AppToast.success(context, '${pet['name']} removed successfully');
+      AppToast.success(context, '${pet['name']} archived successfully');
       Navigator.pushReplacementNamed(context, AppRoutes.adminPets);
     } catch (e) {
       if (!mounted) return;
@@ -488,8 +488,8 @@ class _AdminPetDetailScreenState extends State<AdminPetDetailScreen> {
           height: 52,
           child: OutlinedButton.icon(
             onPressed: _removePet,
-            icon: const Icon(Icons.delete_outline, size: 20),
-            label: const Text('Remove Pet'),
+            icon: const Icon(Icons.archive_outlined, size: 20),
+            label: const Text('Archive Pet'),
             style: OutlinedButton.styleFrom(
               side: const BorderSide(color: AppColors.error, width: 2),
               foregroundColor: AppColors.error,

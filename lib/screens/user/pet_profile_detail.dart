@@ -92,25 +92,25 @@ class _PetProfileDetailScreenState extends State<PetProfileDetailScreen> {
     }
   }
 
-  Future<void> _removePet(Map<String, dynamic> pet, String reason) async {
+  Future<void> _archivePet(Map<String, dynamic> pet, String reason) async {
     setState(() => _isRemoving = true);
     try {
       final petId = pet['pet_id'];
       if (petId == null) throw Exception('Pet ID is missing.');
-      // Delete the pet's photo from the storage bucket
-      final photoUrl = pet['photo_url'] as String?;
-      if (photoUrl != null && photoUrl.isNotEmpty && photoUrl.contains('pet-photos/')) {
-        try {
-          final filePath = photoUrl.split('pet-photos/').last;
-          await Supabase.instance.client.storage.from('pet-photos').remove([filePath]);
-        } catch (e) {
-          debugPrint('Failed to delete pet photo: $e');
-        }
-      }
 
-      // Perform delete operation in Supabase
+      // Soft delete: Update status to 'archived' in Supabase
+      // Preserves photo, medical/biometric records, and audit history
       await Supabase.instance.client
           .from('pets')
+          .update({
+            'status': 'archived',
+            'collar_id': null, // Unpair collar so it can be reused
+          })
+          .eq('pet_id', petId);
+
+      // Close any active lost reports for this pet
+      await Supabase.instance.client
+          .from('lost_reports')
           .delete()
           .eq('pet_id', petId);
 
@@ -118,14 +118,14 @@ class _PetProfileDetailScreenState extends State<PetProfileDetailScreen> {
 
       AppToast.success(
         context,
-        '${pet['name'] ?? 'Pet'} profile removed. Reason: $reason',
+        '${pet['name'] ?? 'Pet'} profile has been archived. Reason: $reason',
       );
 
       // Return back to My Pets list screen
       Navigator.pop(context);
     } catch (e) {
       if (!mounted) return;
-      AppToast.error(context, 'Failed to remove pet: $e');
+      AppToast.error(context, 'Failed to archive pet: $e');
     } finally {
       if (mounted) setState(() => _isRemoving = false);
     }
@@ -222,7 +222,7 @@ class _PetProfileDetailScreenState extends State<PetProfileDetailScreen> {
                                 color: Colors.white,
                                 borderRadius: BorderRadius.circular(12),
                               ),
-                              child: const Icon(Icons.delete_forever_rounded, color: AppColors.error, size: 22),
+                              child: const Icon(Icons.archive_outlined, color: AppColors.error, size: 22),
                             ),
                             const SizedBox(width: 12),
                             Expanded(
@@ -230,7 +230,7 @@ class _PetProfileDetailScreenState extends State<PetProfileDetailScreen> {
                                 crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
                                   Text(
-                                    'Remove Pet Profile',
+                                    'Archive Pet Profile',
                                     style: GoogleFonts.montserrat(
                                       fontSize: 17,
                                       fontWeight: FontWeight.w800,
@@ -239,7 +239,7 @@ class _PetProfileDetailScreenState extends State<PetProfileDetailScreen> {
                                   ),
                                   const SizedBox(height: 4),
                                   Text(
-                                    'You are removing $petName from your profiles. This cannot be undone.',
+                                    'Archive $petName from your active pets list. Their records and biometrics are safely preserved in history.',
                                     style: GoogleFonts.inter(
                                       fontSize: 12.5,
                                       height: 1.35,
@@ -263,9 +263,11 @@ class _PetProfileDetailScreenState extends State<PetProfileDetailScreen> {
                         ),
                       ),
                       const SizedBox(height: 8),
-                      reasonChip('Deceased', Icons.favorite_border_rounded),
+                      reasonChip('Passed Away', Icons.favorite_border_rounded),
                       const SizedBox(height: 8),
-                      reasonChip('Adopted', Icons.home_rounded),
+                      reasonChip('Rehomed / Adopted', Icons.home_rounded),
+                      const SizedBox(height: 8),
+                      reasonChip('No longer in my care', Icons.pets_rounded),
                       const SizedBox(height: 8),
                       reasonChip('Other', Icons.edit_note_rounded),
                       if (selectedReason == 'Other') ...[
@@ -318,11 +320,11 @@ class _PetProfileDetailScreenState extends State<PetProfileDetailScreen> {
                                       final finalReason =
                                           selectedReason == 'Other' ? reasonCtrl.text.trim() : selectedReason;
                                       Navigator.pop(context);
-                                      _removePet(pet, finalReason!);
+                                      _archivePet(pet, finalReason!);
                                     },
-                              icon: const Icon(Icons.delete_outline_rounded, size: 18),
+                              icon: const Icon(Icons.archive_rounded, size: 18),
                               label: Text(
-                                'Remove',
+                                'Archive',
                                 style: GoogleFonts.montserrat(fontWeight: FontWeight.w700),
                               ),
                               style: ElevatedButton.styleFrom(
@@ -439,25 +441,18 @@ class _PetProfileDetailScreenState extends State<PetProfileDetailScreen> {
     );
   }
 
-  Widget _appBarBtn(IconData icon) {
-    return GestureDetector(
-      onTap: () {},
-      child: Container(
-        padding: const EdgeInsets.all(6),
-        decoration: BoxDecoration(color: Colors.white.withOpacity(0.15), borderRadius: BorderRadius.circular(999)),
-        child: Icon(icon, color: AppColors.onSurfaceVariant, size: 20),
-      ),
-    );
-  }
 
   Widget _buildIdentityHeader(String name, String breed, String species, String status) {
     return Row(
       mainAxisAlignment: MainAxisAlignment.spaceBetween,
       children: [
-        Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-          Text(name, style: GoogleFonts.montserrat(fontSize: 22, fontWeight: FontWeight.w600, color: AppColors.onSurface)),
-          Text('$breed • $species', style: GoogleFonts.inter(fontSize: 15, color: AppColors.onSurfaceVariant)),
-        ]),
+        Expanded(
+          child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            Text(name, style: GoogleFonts.montserrat(fontSize: 22, fontWeight: FontWeight.w600, color: AppColors.onSurface), overflow: TextOverflow.ellipsis),
+            Text('$breed • $species', style: GoogleFonts.inter(fontSize: 15, color: AppColors.onSurfaceVariant), overflow: TextOverflow.ellipsis),
+          ]),
+        ),
+        const SizedBox(width: 8),
         Container(
           padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 5),
           decoration: BoxDecoration(
@@ -680,8 +675,8 @@ class _PetProfileDetailScreenState extends State<PetProfileDetailScreen> {
           height: 52,
           child: ElevatedButton.icon(
             onPressed: () => _showRemovePetDialog(pet),
-            icon: const Icon(Icons.delete_outline, size: 20),
-            label: const Text('Remove Pet Profile'),
+            icon: const Icon(Icons.archive_outlined, size: 20),
+            label: const Text('Archive Pet Profile'),
             style: ElevatedButton.styleFrom(
               backgroundColor: AppColors.error,
               foregroundColor: Colors.white,

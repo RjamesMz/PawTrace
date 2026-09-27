@@ -87,7 +87,7 @@ class _NotificationsSheetState extends State<NotificationsSheet> {
     if (lostReportId != null && mounted) {
       // Close sheet and navigate to lost pet details
       Navigator.pop(context);
-      Navigator.pushNamed(context, AppRoutes.lostPetDetails);
+      Navigator.pushNamed(context, AppRoutes.lostPetScreen);
     }
   }
 

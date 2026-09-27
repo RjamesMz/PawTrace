@@ -28,9 +28,6 @@ dependencies:
   # Image processing for AI
   image: ^4.1.7
 
-  # On-device AI / TFLite
-  tflite_flutter: ^0.11.0
-
   # Charts
   fl_chart: ^0.69.0
 
@@ -39,14 +36,11 @@ dependencies:
   responsive_framework: ^1.5.1
   flutter_map: ^8.3.2
   latlong2: ^0.10.1
+  http: ^1.2.0
+  url_launcher: ^6.3.2
 
 flutter:
   uses-material-design: true
-
-  assets:
-    - assets/models/mobilenet_v1_1.0_224_quant.tflite
-    - assets/models/labels.txt
-    - assets/models/pawtrace_model.tflite
 
 dev_dependencies:
   flutter_test:

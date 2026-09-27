@@ -7,7 +7,7 @@ import 'bottom_nav_bar.dart';
 
 // User Screens
 import '../screens/user/dashboard_home.dart';
-import '../screens/user/lost_pet_details.dart';
+import '../screens/user/lost_pet_screen.dart';
 import '../screens/user/ai_scan.dart';
 import '../screens/user/profile_pet_registration.dart';
 import '../screens/user/settings_screen.dart';
@@ -34,7 +34,7 @@ class _MainAppLayoutState extends State<MainAppLayout> {
 
   final List<Widget> _userScreens = [
     const DashboardHomeScreen(),
-    const LostPetDetailsScreen(),
+    const LostPetScreen(),
     const AiScanScreen(),
     const ProfilePetRegistrationScreen(),
     const SettingsScreen(showBottomNav: false),

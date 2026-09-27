@@ -201,7 +201,7 @@ class _DashboardHomeScreenState extends State<DashboardHomeScreen> {
                             child: _LostPetPreviewCard(
                               pet: pet,
                               onTap: () => Navigator.pushNamed(
-                                  context, AppRoutes.lostPetDetails),
+                                  context, AppRoutes.lostPetScreen),
                             ),
                           );
                         },
@@ -540,9 +540,9 @@ class _LostPetPreviewCard extends StatelessWidget {
     final breed = petData?['breed'] as String? ?? 'Unknown Breed';
     final imageUrl =
         pet['photo_url'] as String? ?? petData?['photo_url'] as String? ?? '';
-    final location = pet['last_seen_address'] as String? ??
-        pet['barangay'] as String? ??
-        'Calatagan';
+    final rawAddress =
+        pet['last_seen_address'] as String? ?? pet['barangay'] as String? ?? 'Calatagan';
+    final location = rawAddress.replaceAll(RegExp(r'\s*\(?Lat:\s*[-\d.]+,\s*Lng:\s*[-\d.]+\)?'), '').trim();
     final timeAgo = _formatTimeAgo(pet['created_at']);
 
     final ownerName = userData != null
@@ -617,7 +617,9 @@ class _LostPetPreviewCard extends StatelessWidget {
                   const SizedBox(height: 3),
                   Text(breed,
                       style: GoogleFonts.inter(
-                          fontSize: 13, color: AppColors.onSurfaceVariant)),
+                          fontSize: 13, color: AppColors.onSurfaceVariant),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis),
                   const SizedBox(height: 8),
                   Row(
                     children: [
@@ -638,7 +640,9 @@ class _LostPetPreviewCard extends StatelessWidget {
                       style: GoogleFonts.inter(
                           fontSize: 11,
                           fontWeight: FontWeight.w600,
-                          color: AppColors.onSurfaceVariant)),
+                          color: AppColors.onSurfaceVariant),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis),
                 ],
               ),
             ),

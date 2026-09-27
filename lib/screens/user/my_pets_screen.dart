@@ -34,6 +34,7 @@ class _MyPetsScreenState extends State<MyPetsScreen> {
           .from('pets')
           .select()
           .eq('owner_id', _supabase.auth.currentUser!.id)
+          .neq('status', 'archived')
           .order('created_at', ascending: false);
       if (!mounted) return;
       setState(() => myPets = List<Map<String, dynamic>>.from(data));

@@ -1,13 +1,14 @@
 import 'dart:io';
+import 'dart:ui' show ImageFilter;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:image_picker/image_picker.dart';
 import '../../core/app_colors.dart';
-import '../../core/app_routes.dart';
 import '../../core/app_toast.dart';
 import '../../services/pet_embedding_service.dart';
 import '../../services/pet_match_service.dart';
+import 'lost_pet_detail_screen.dart';
 
 /// AI Scan screen – pick or photograph a pet and find visual matches.
 class AiScanScreen extends StatefulWidget {
@@ -117,6 +118,18 @@ class _AiScanScreenState extends State<AiScanScreen>
           _done = true;
         });
       }
+    } on PawTraceServerException catch (e) {
+      // AI server is down — show a dedicated maintenance dialog.
+      if (mounted) {
+        setState(() {
+          _scanning = false;
+          _done = false;
+        });
+        await _showServerMaintenanceDialog(
+          detail: e.message,
+          onRetry: () => _runScan(),
+        );
+      }
     } catch (e) {
       if (mounted) {
         setState(() {
@@ -126,6 +139,171 @@ class _AiScanScreenState extends State<AiScanScreen>
         });
       }
     }
+  }
+
+  /// Shows a bottom dialog explaining that the AI server is under maintenance.
+  Future<void> _showServerMaintenanceDialog({String? detail, VoidCallback? onRetry}) async {
+    await showDialog<void>(
+      context: context,
+      barrierDismissible: true,
+      builder: (ctx) => Dialog(
+        backgroundColor: Colors.transparent,
+        insetPadding: const EdgeInsets.symmetric(horizontal: 22, vertical: 24),
+        child: Container(
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(28),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withOpacity(0.14),
+                blurRadius: 32,
+                offset: const Offset(0, 12),
+              ),
+            ],
+          ),
+          padding: const EdgeInsets.fromLTRB(24, 28, 24, 24),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              // Icon
+              Container(
+                width: 78,
+                height: 78,
+                decoration: BoxDecoration(
+                  gradient: const LinearGradient(
+                    colors: [Color(0xFFFFE0B2), Color(0xFFFFA726)],
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
+                  ),
+                  shape: BoxShape.circle,
+                  boxShadow: [
+                    BoxShadow(
+                      color: const Color(0xFFFFA726).withOpacity(0.35),
+                      blurRadius: 20,
+                      offset: const Offset(0, 6),
+                    ),
+                  ],
+                ),
+                child: const Center(
+                  child: Icon(
+                    Icons.build_circle_rounded,
+                    size: 38,
+                    color: Colors.white,
+                  ),
+                ),
+              ),
+              const SizedBox(height: 20),
+
+              // Title
+              Text(
+                'Server Under Maintenance',
+                style: GoogleFonts.montserrat(
+                  fontSize: 20,
+                  fontWeight: FontWeight.w700,
+                  color: AppColors.onSurface,
+                  letterSpacing: -0.3,
+                ),
+                textAlign: TextAlign.center,
+              ),
+              const SizedBox(height: 8),
+
+              // Subtitle
+              Text(
+                'The PawTrace AI scanning service is currently unavailable. Please try again later.',
+                style: GoogleFonts.inter(
+                  fontSize: 13,
+                  color: AppColors.onSurfaceVariant,
+                  height: 1.5,
+                ),
+                textAlign: TextAlign.center,
+              ),
+              const SizedBox(height: 16),
+
+              // Info banner
+              Container(
+                padding: const EdgeInsets.all(14),
+                decoration: BoxDecoration(
+                  color: const Color(0xFFFFF3E0),
+                  borderRadius: BorderRadius.circular(14),
+                  border: Border.all(
+                    color: const Color(0xFFFFB74D).withOpacity(0.5),
+                  ),
+                ),
+                child: Row(
+                  children: [
+                    const Icon(
+                      Icons.info_outline_rounded,
+                      size: 18,
+                      color: Color(0xFFE65100),
+                    ),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: Text(
+                        'Manual search via Lost Pets tab is still available.',
+                        style: GoogleFonts.inter(
+                          fontSize: 12,
+                          fontWeight: FontWeight.w500,
+                          color: const Color(0xFFBF360C),
+                          height: 1.4,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 22),
+
+              // Retry button
+              SizedBox(
+                width: double.infinity,
+                child: ElevatedButton.icon(
+                  onPressed: () {
+                    Navigator.pop(ctx);
+                    // Clear cached URL so the latest ngrok URL is re-fetched
+                    // from Supabase before retrying.
+                    PetEmbeddingService.instance.clearUrlCache();
+                    onRetry?.call();
+                  },
+                  icon: const Icon(Icons.refresh_rounded, size: 19),
+                  label: Text(
+                    'Retry Now',
+                    style: GoogleFonts.montserrat(
+                      fontSize: 14,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: const Color(0xFFF57C00),
+                    foregroundColor: Colors.white,
+                    padding: const EdgeInsets.symmetric(vertical: 14),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(16),
+                    ),
+                    elevation: 3,
+                    shadowColor: const Color(0xFFF57C00).withOpacity(0.35),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 8),
+              // Dismiss button
+              SizedBox(
+                width: double.infinity,
+                child: TextButton(
+                  onPressed: () => Navigator.pop(ctx),
+                  child: Text(
+                    'Dismiss',
+                    style: GoogleFonts.inter(
+                      fontSize: 13,
+                      color: AppColors.onSurfaceVariant,
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
   }
 
   Future<void> _showNotRecognizedDialog() async {
@@ -451,6 +629,13 @@ class _AiScanScreenState extends State<AiScanScreen>
               fit: StackFit.expand,
               children: [
                 Image.file(_pickedImage!, fit: BoxFit.cover),
+                BackdropFilter(
+                  filter: ImageFilter.blur(sigmaX: 16, sigmaY: 16),
+                  child: Container(color: Colors.black.withOpacity(0.35)),
+                ),
+                Center(
+                  child: Image.file(_pickedImage!, fit: BoxFit.contain),
+                ),
                 // Corner brackets overlay
                 Positioned.fill(child: _buildCorners()),
                 if (_scanning)
@@ -559,7 +744,7 @@ class _AiScanScreenState extends State<AiScanScreen>
                   fontWeight: FontWeight.w600,
                   color: AppColors.primary)),
           const SizedBox(height: 4),
-          Text('Running on-device AI matching',
+          Text('Running AI matching',
               style: GoogleFonts.inter(
                   fontSize: 12, color: AppColors.onSurfaceVariant)),
         ],
@@ -824,6 +1009,15 @@ class _MatchCard extends StatelessWidget {
   final PetMatchResult result;
   const _MatchCard({required this.result});
 
+  void _openDetail(BuildContext context) {
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => LostPetDetailScreen(report: result.rawData),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final photoUrl = result.photoUrl;
@@ -847,16 +1041,7 @@ class _MatchCard extends StatelessWidget {
         borderRadius: BorderRadius.circular(18),
         child: InkWell(
           borderRadius: BorderRadius.circular(18),
-          onTap: () {
-            Navigator.pushNamed(
-              context,
-              AppRoutes.lostPetDetails,
-              arguments: {
-                'report_id': result.reportId,
-                'pet_id': result.petId,
-              },
-            );
-          },
+          onTap: () => _openDetail(context),
           child: Padding(
             padding: const EdgeInsets.all(14),
             child: Column(
@@ -951,12 +1136,15 @@ class _MatchCard extends StatelessWidget {
                           color: const Color(0xFFFFB74D).withOpacity(0.8),
                         ),
                       ),
-                      child: Text(
-                        '${result.percent}% Match',
-                        style: GoogleFonts.montserrat(
-                          fontSize: 12,
-                          fontWeight: FontWeight.w800,
-                          color: const Color(0xFFE65100),
+                      child: FittedBox(
+                        fit: BoxFit.scaleDown,
+                        child: Text(
+                          '${result.percent}% Match',
+                          style: GoogleFonts.montserrat(
+                            fontSize: 12,
+                            fontWeight: FontWeight.w800,
+                            color: const Color(0xFFE65100),
+                          ),
                         ),
                       ),
                     ),
@@ -967,16 +1155,7 @@ class _MatchCard extends StatelessWidget {
                   width: double.infinity,
                   height: 38,
                   child: OutlinedButton.icon(
-                    onPressed: () {
-                      Navigator.pushNamed(
-                        context,
-                        AppRoutes.lostPetDetails,
-                        arguments: {
-                          'report_id': result.reportId,
-                          'pet_id': result.petId,
-                        },
-                      );
-                    },
+                    onPressed: () => _openDetail(context),
                     icon: const Icon(Icons.description_outlined, size: 16),
                     label: Text(
                       'View Lost Report',

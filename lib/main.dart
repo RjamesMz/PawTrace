@@ -70,14 +70,25 @@ class PawTraceApp extends StatelessWidget {
       debugShowCheckedModeBanner: false,
       theme: AppTheme.light,
 
-      builder: (context, child) => ResponsiveBreakpoints.builder(
-        child: child!,
-        breakpoints: const [
-          Breakpoint(start: 0, end: 599, name: MOBILE),
-          Breakpoint(start: 600, end: 899, name: TABLET),
-          Breakpoint(start: 900, end: double.infinity, name: DESKTOP),
-        ],
-      ),
+      builder: (context, child) {
+        final mediaQuery = MediaQuery.of(context);
+        return MediaQuery(
+          data: mediaQuery.copyWith(
+            textScaler: mediaQuery.textScaler.clamp(
+              minScaleFactor: 0.85,
+              maxScaleFactor: 1.15,
+            ),
+          ),
+          child: ResponsiveBreakpoints.builder(
+            child: child!,
+            breakpoints: const [
+              Breakpoint(start: 0, end: 599, name: MOBILE),
+              Breakpoint(start: 600, end: 899, name: TABLET),
+              Breakpoint(start: 900, end: double.infinity, name: DESKTOP),
+            ],
+          ),
+        );
+      },
 
       // AuthWrapper drives the entry point — it reads Firebase auth state
       // and Firestore role, then shows Login, Dashboard, or Admin screen.
@@ -91,7 +102,7 @@ class PawTraceApp extends StatelessWidget {
 
         // ─── Main tabs (User & Admin via MainAppLayout) ──────────────────────
         AppRoutes.home: (_) => const MainAppLayout(initialIndex: 0),
-        AppRoutes.lostPetDetails: (_) => const MainAppLayout(initialIndex: 1),
+        AppRoutes.lostPetScreen: (_) => const MainAppLayout(initialIndex: 1),
         AppRoutes.aiScan: (_) => const MainAppLayout(initialIndex: 2),
         AppRoutes.profilePetRegistration: (_) => const MainAppLayout(initialIndex: 3),
         AppRoutes.settings: (_) => const MainAppLayout(initialIndex: 4),

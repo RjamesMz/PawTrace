@@ -10,6 +10,14 @@ import '../../core/app_routes.dart';
 import '../../core/app_toast.dart';
 import '../../services/pet_embedding_service.dart';
 
+/// Pet photo capture slot
+enum PetPhotoSlot {
+  face,
+  leftBody,
+  rightBody,
+  uniqueFeature,
+}
+
 /// Pet Registration screen – saves pet data and photo to Supabase.
 class ProfilePetRegistrationScreen extends StatefulWidget {
   const ProfilePetRegistrationScreen({super.key});
@@ -31,7 +39,12 @@ class _ProfilePetRegistrationScreenState
   String _selectedBarangay = 'Calatagan';
   DateTime? _selectedDOB;
   bool _isDOBUnknown = false;
-  File? _selectedImage;
+
+  // Multi-angle biometric photos
+  File? _faceImage;
+  File? _leftBodyImage;
+  File? _rightBodyImage;
+  File? _uniqueFeatureImage;
   bool _isSaving = false;
 
   final _supabase = Supabase.instance.client;
@@ -48,7 +61,7 @@ class _ProfilePetRegistrationScreenState
     super.dispose();
   }
 
-  Future<void> _pickImage() async {
+  Future<void> _pickImage(PetPhotoSlot slot) async {
     final picker = ImagePicker();
     final source = await showModalBottomSheet<ImageSource>(
       context: context,
@@ -96,19 +109,93 @@ class _ProfilePetRegistrationScreenState
     final picked = await picker.pickImage(source: source, imageQuality: 80);
     if (picked != null) {
       final imgFile = File(picked.path);
-      setState(() => _selectedImage = imgFile);
-      try {
-        final detected =
-            await PetEmbeddingService.instance.detectSpecies(imgFile);
-        if (detected['isDog'] == true && mounted) {
-          setState(() => _selectedSpecies = 'Dog');
-        } else if (detected['isCat'] == true && mounted) {
-          setState(() => _selectedSpecies = 'Cat');
+      setState(() {
+        switch (slot) {
+          case PetPhotoSlot.face:
+            _faceImage = imgFile;
+            break;
+          case PetPhotoSlot.leftBody:
+            _leftBodyImage = imgFile;
+            break;
+          case PetPhotoSlot.rightBody:
+            _rightBodyImage = imgFile;
+            break;
+          case PetPhotoSlot.uniqueFeature:
+            _uniqueFeatureImage = imgFile;
+            break;
         }
-      } catch (e) {
-        debugPrint('[PawTrace] Auto-detect on photo pick: $e');
+      });
+
+      // Auto-detect species if the face photo was chosen
+      if (slot == PetPhotoSlot.face) {
+        try {
+          final detected =
+              await PetEmbeddingService.instance.detectSpecies(imgFile);
+          if (detected['isDog'] == true && mounted) {
+            setState(() => _selectedSpecies = 'Dog');
+          } else if (detected['isCat'] == true && mounted) {
+            setState(() => _selectedSpecies = 'Cat');
+          }
+        } catch (e) {
+          debugPrint('[PawTrace] Auto-detect on photo pick: $e');
+        }
       }
     }
+  }
+
+  /// Fuses multiple DINOv2 embeddings across angles into a single normalized 768-dim vector.
+  List<double>? _fuseEmbeddings({
+    required List<double>? faceEmb,
+    required List<double>? leftEmb,
+    required List<double>? rightEmb,
+    List<double>? uniqueEmb,
+  }) {
+    final validList = <List<double>>[];
+    final weights = <double>[];
+
+    if (faceEmb != null && faceEmb.isNotEmpty) {
+      validList.add(faceEmb);
+      weights.add(1.3); // High priority on facial features
+    }
+    if (leftEmb != null && leftEmb.isNotEmpty) {
+      validList.add(leftEmb);
+      weights.add(1.0);
+    }
+    if (rightEmb != null && rightEmb.isNotEmpty) {
+      validList.add(rightEmb);
+      weights.add(1.0);
+    }
+    if (uniqueEmb != null && uniqueEmb.isNotEmpty) {
+      validList.add(uniqueEmb);
+      weights.add(1.2); // High priority on distinctive marks
+    }
+
+    if (validList.isEmpty) return null;
+
+    final dim = validList.first.length;
+    final fused = List<double>.filled(dim, 0.0);
+
+    for (int v = 0; v < validList.length; v++) {
+      final w = weights[v];
+      final emb = validList[v];
+      for (int i = 0; i < dim; i++) {
+        fused[i] += emb[i] * w;
+      }
+    }
+
+    // L2-normalize the fused vector
+    double normSq = 0.0;
+    for (int i = 0; i < dim; i++) {
+      normSq += fused[i] * fused[i];
+    }
+    final norm = sqrt(normSq);
+    if (norm > 0) {
+      for (int i = 0; i < dim; i++) {
+        fused[i] /= norm;
+      }
+    }
+
+    return fused;
   }
 
   Widget _buildSourceOption({
@@ -141,6 +228,174 @@ class _ProfilePetRegistrationScreenState
       ),
     );
   }
+
+  Widget _buildPhotoSlotCard({
+    required String title,
+    required String subtitle,
+    required String badgeText,
+    required bool isRequired,
+    required IconData icon,
+    required File? imageFile,
+    required VoidCallback onTap,
+    required VoidCallback onRemove,
+    bool isWide = false,
+  }) {
+    final hasImage = imageFile != null;
+    final cardHeight =
+        hasImage ? (isWide ? 140.0 : 130.0) : (isWide ? 88.0 : 120.0);
+
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        height: cardHeight,
+        decoration: BoxDecoration(
+          color: hasImage ? Colors.black : const Color(0xFFF7F8FA),
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(
+            color: hasImage
+                ? Colors.transparent
+                : AppColors.outlineVariant.withOpacity(0.45),
+            width: 1,
+          ),
+          image: hasImage
+              ? DecorationImage(
+                  image: FileImage(imageFile),
+                  fit: BoxFit.cover,
+                  colorFilter: ColorFilter.mode(
+                    Colors.black.withOpacity(0.08),
+                    BlendMode.darken,
+                  ),
+                )
+              : null,
+        ),
+        child: Stack(
+          children: [
+            // Empty state content
+            if (!hasImage)
+              Center(
+                child: isWide
+                    ? Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Icon(
+                            Icons.add_photo_alternate_outlined,
+                            size: 22,
+                            color: AppColors.onSurfaceVariant.withOpacity(0.45),
+                          ),
+                          const SizedBox(width: 10),
+                          Column(
+                            mainAxisSize: MainAxisSize.min,
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                title,
+                                style: GoogleFonts.inter(
+                                  fontSize: 13,
+                                  fontWeight: FontWeight.w600,
+                                  color: AppColors.onSurface.withOpacity(0.7),
+                                ),
+                              ),
+                              Text(
+                                isRequired ? 'Required' : 'Optional',
+                                style: GoogleFonts.inter(
+                                  fontSize: 11,
+                                  color: AppColors.onSurfaceVariant
+                                      .withOpacity(0.5),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ],
+                      )
+                    : Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Icon(
+                            Icons.add_photo_alternate_outlined,
+                            size: 24,
+                            color: AppColors.onSurfaceVariant.withOpacity(0.40),
+                          ),
+                          const SizedBox(height: 6),
+                          Text(
+                            title,
+                            style: GoogleFonts.inter(
+                              fontSize: 11.5,
+                              fontWeight: FontWeight.w600,
+                              color: AppColors.onSurface.withOpacity(0.65),
+                            ),
+                            textAlign: TextAlign.center,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                          const SizedBox(height: 2),
+                          Text(
+                            isRequired ? 'Required' : 'Optional',
+                            style: GoogleFonts.inter(
+                              fontSize: 10,
+                              color:
+                                  AppColors.onSurfaceVariant.withOpacity(0.45),
+                            ),
+                          ),
+                        ],
+                      ),
+              ),
+
+            // Filled state: small "✓ title" label bottom-left
+            if (hasImage)
+              Positioned(
+                bottom: 8,
+                left: 8,
+                child: Container(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                  decoration: BoxDecoration(
+                    color: Colors.black.withOpacity(0.50),
+                    borderRadius: BorderRadius.circular(6),
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      const Icon(Icons.check_rounded,
+                          size: 11, color: Colors.white),
+                      const SizedBox(width: 4),
+                      Text(
+                        title,
+                        style: GoogleFonts.inter(
+                          fontSize: 9.5,
+                          fontWeight: FontWeight.w600,
+                          color: Colors.white,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+
+            // Remove button top-right
+            if (hasImage)
+              Positioned(
+                top: 6,
+                right: 6,
+                child: GestureDetector(
+                  onTap: onRemove,
+                  child: Container(
+                    padding: const EdgeInsets.all(4),
+                    decoration: BoxDecoration(
+                      color: Colors.black.withOpacity(0.50),
+                      shape: BoxShape.circle,
+                    ),
+                    child: const Icon(Icons.close_rounded,
+                        color: Colors.white, size: 13),
+                  ),
+                ),
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+
+
 
   Future<void> _pickDOB() async {
     final now = DateTime.now();
@@ -175,8 +430,16 @@ class _ProfilePetRegistrationScreenState
       _showError('Please enter your pet\'s name.');
       return;
     }
-    if (_selectedImage == null) {
-      _showError('Please select a pet photo.');
+    if (_faceImage == null) {
+      _showError('Please upload a Face / Front photo of your pet.');
+      return;
+    }
+    if (_leftBodyImage == null) {
+      _showError('Please upload a Left Body photo of your pet.');
+      return;
+    }
+    if (_rightBodyImage == null) {
+      _showError('Please upload a Right Body photo of your pet.');
       return;
     }
     if (_selectedSpecies == null ||
@@ -189,7 +452,7 @@ class _ProfilePetRegistrationScreenState
 
     try {
       final detected =
-          await PetEmbeddingService.instance.detectSpecies(_selectedImage!);
+          await PetEmbeddingService.instance.detectSpecies(_faceImage!);
       if (detected['isAccepted'] != true) {
         _showError(_buildRegistrationRejectionMessage(detected));
         return;
@@ -227,25 +490,29 @@ class _ProfilePetRegistrationScreenState
         }
       }
 
-      // Step 2: Upload photo to Supabase Storage bucket 'pet-photos'
-      final fileExt = _selectedImage!.path.split('.').last;
+      // Step 2: Upload all photos to Supabase Storage bucket 'pet-photos'
       final timestamp = DateTime.now().millisecondsSinceEpoch;
       final randomSuffix = Random().nextInt(999999).toString().padLeft(6, '0');
-      final fileName = 'pets/${timestamp}_$randomSuffix.$fileExt';
 
-      await _supabase.storage
-          .from('pet-photos')
-          .upload(fileName, _selectedImage!);
+      Future<String> uploadPhoto(File file, String prefix) async {
+        final fileExt = file.path.split('.').last;
+        final fileName = 'pets/${timestamp}_${prefix}_$randomSuffix.$fileExt';
+        await _supabase.storage.from('pet-photos').upload(fileName, file);
+        return _supabase.storage.from('pet-photos').getPublicUrl(fileName);
+      }
 
-      // Step 3: Get public URL of uploaded photo
-      final photoUrl =
-          _supabase.storage.from('pet-photos').getPublicUrl(fileName);
+      final photoUrl = await uploadPhoto(_faceImage!, 'face');
+      await uploadPhoto(_leftBodyImage!, 'left');
+      await uploadPhoto(_rightBodyImage!, 'right');
+      if (_uniqueFeatureImage != null) {
+        await uploadPhoto(_uniqueFeatureImage!, 'unique');
+      }
 
       final breedText = _breedCtrl.text.trim();
       final colorText = _colorCtrl.text.trim();
       final weightText = _weightCtrl.text.trim();
 
-      // Step 4: Insert row into 'pets' table (allowing N/A / null for unknown values)
+      // Step 3: Insert row into 'pets' table (face photo is primary photo_url)
       final insertedRows = await _supabase
           .from('pets')
           .insert({
@@ -271,40 +538,54 @@ class _ProfilePetRegistrationScreenState
           .select('pet_id')
           .single();
 
-      // Step 5: Generate on-device AI embedding and save it
+      // Step 4: Extract multi-angle DINOv2 embeddings and fuse into a rich 768-dim vector
       final petId = insertedRows['pet_id']?.toString();
       debugPrint('[PawTrace] Pet inserted with ID: $petId');
 
       if (petId != null) {
         try {
-          debugPrint('[PawTrace] Starting embedding generation...');
-          final embedding = await PetEmbeddingService.instance
-              .extractEmbedding(_selectedImage!);
-          if (embedding != null) {
+          debugPrint('[PawTrace] Starting multi-angle embedding generation...');
+          final faceEmb =
+              await PetEmbeddingService.instance.extractEmbedding(_faceImage!);
+          final leftEmb = await PetEmbeddingService.instance
+              .extractEmbedding(_leftBodyImage!);
+          final rightEmb = await PetEmbeddingService.instance
+              .extractEmbedding(_rightBodyImage!);
+          List<double>? uniqueEmb;
+          if (_uniqueFeatureImage != null) {
+            uniqueEmb = await PetEmbeddingService.instance
+                .extractEmbedding(_uniqueFeatureImage!);
+          }
+
+          final fused = _fuseEmbeddings(
+            faceEmb: faceEmb,
+            leftEmb: leftEmb,
+            rightEmb: rightEmb,
+            uniqueEmb: uniqueEmb,
+          );
+
+          if (fused != null) {
             debugPrint(
-                '[PawTrace] Embedding generated (${embedding.length} dims), saving...');
+                '[PawTrace] Fused multi-angle embedding generated (${fused.length} dims), saving...');
             await _supabase
                 .from('pets')
-                .update({'embedding': embedding}).eq('pet_id', petId);
-            debugPrint('[PawTrace] Embedding saved successfully!');
+                .update({'embedding': fused}).eq('pet_id', petId);
+            debugPrint('[PawTrace] Multi-angle embedding saved successfully!');
           } else {
-            debugPrint('[PawTrace] WARNING: extractEmbedding returned null!');
+            debugPrint('[PawTrace] WARNING: Fused embedding returned null!');
           }
         } catch (embErr) {
-          debugPrint('[PawTrace] Embedding error: $embErr');
-          // Pet was still saved successfully — embedding can be retried
+          debugPrint('[PawTrace] Embedding extraction/saving error: $embErr');
         }
       }
 
       if (!mounted) return;
 
-      // Show success message
       AppToast.success(
         context,
-        '${_nameCtrl.text.trim()} registered successfully!',
+        '${_nameCtrl.text.trim()} registered successfully with multi-angle biometrics!',
       );
 
-      // Navigate to MyPetsScreen replacing current route
       Navigator.pushReplacementNamed(context, AppRoutes.myPets);
     } catch (e) {
       if (!mounted) return;
@@ -388,53 +669,102 @@ class _ProfilePetRegistrationScreenState
                   fontWeight: FontWeight.w600,
                   color: AppColors.onSurface)),
           const SizedBox(height: 20),
-          // Photo upload area
-          GestureDetector(
-            onTap: _pickImage,
-            child: Container(
-              height: 160,
-              width: double.infinity,
-              decoration: BoxDecoration(
-                color: AppColors.background,
-                borderRadius: BorderRadius.circular(16),
-                border: Border.all(color: AppColors.outlineVariant, width: 1.5),
-                image: _selectedImage != null
-                    ? DecorationImage(
-                        image: FileImage(_selectedImage!),
-                        fit: BoxFit.cover,
-                      )
-                    : null,
+          // Biometric Photos Section
+          Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(6),
+                decoration: BoxDecoration(
+                  color: AppColors.primaryContainer.withOpacity(0.4),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: const Icon(Icons.camera_enhance_rounded,
+                    color: AppColors.primary, size: 18),
               ),
-              child: _selectedImage == null
-                  ? Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                          const Icon(Icons.add_a_photo_outlined,
-                              size: 40, color: AppColors.outline),
-                          const SizedBox(height: 8),
-                          Text('Tap to Upload Pet Photo',
-                              style: GoogleFonts.inter(
-                                  fontSize: 13,
-                                  color: AppColors.onSurfaceVariant)),
-                        ])
-                  : Align(
-                      alignment: Alignment.topRight,
-                      child: Padding(
-                        padding: const EdgeInsets.all(8),
-                        child: Container(
-                          padding: const EdgeInsets.all(4),
-                          decoration: BoxDecoration(
-                            color: Colors.black.withOpacity(0.5),
-                            shape: BoxShape.circle,
-                          ),
-                          child: const Icon(Icons.edit,
-                              color: Colors.white, size: 18),
-                        ),
-                      ),
-                    ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  'Biometric Photos (Multi-Angle)',
+                  style: GoogleFonts.montserrat(
+                    fontSize: 15,
+                    fontWeight: FontWeight.w700,
+                    color: AppColors.onSurface,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 6),
+          Text(
+            'Upload multiple angles to train the AI to recognize your pet from any perspective. Face, Left Body, and Right Body are required.',
+            style: GoogleFonts.inter(
+              fontSize: 12,
+              color: AppColors.onSurfaceVariant,
+              height: 1.4,
             ),
           ),
           const SizedBox(height: 16),
+
+          // Slot 1: Face / Front View (Required - Primary)
+          _buildPhotoSlotCard(
+            title: 'Face / Front View',
+            subtitle: 'Clear, front-facing photo of face, eyes, and snout',
+            badgeText: 'REQUIRED • PRIMARY',
+            isRequired: true,
+            icon: Icons.face_retouching_natural_rounded,
+            imageFile: _faceImage,
+            isWide: true,
+            onTap: () => _pickImage(PetPhotoSlot.face),
+            onRemove: () => setState(() => _faceImage = null),
+          ),
+          const SizedBox(height: 12),
+
+          // Slots 2 & 3: Left Body and Right Body
+          Row(
+            children: [
+              Expanded(
+                child: _buildPhotoSlotCard(
+                  title: 'Left Body Profile',
+                  subtitle: 'Left side coat & pattern',
+                  badgeText: 'REQUIRED',
+                  isRequired: true,
+                  icon: Icons.pets_rounded,
+                  imageFile: _leftBodyImage,
+                  onTap: () => _pickImage(PetPhotoSlot.leftBody),
+                  onRemove: () => setState(() => _leftBodyImage = null),
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: _buildPhotoSlotCard(
+                  title: 'Right Body Profile',
+                  subtitle: 'Right side coat & pattern',
+                  badgeText: 'REQUIRED',
+                  isRequired: true,
+                  icon: Icons.pets_rounded,
+                  imageFile: _rightBodyImage,
+                  onTap: () => _pickImage(PetPhotoSlot.rightBody),
+                  onRemove: () => setState(() => _rightBodyImage = null),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+
+          // Slot 4: Unique Identification / Distinctive Mark (Optional)
+          _buildPhotoSlotCard(
+            title: 'Unique Mark / Distinctive Feature',
+            subtitle:
+                'Optional: Unique spot, chest patch, tail color, ear notch, or scar for AI boost',
+            badgeText: 'OPTIONAL • AI BOOST',
+            isRequired: false,
+            icon: Icons.stars_rounded,
+            imageFile: _uniqueFeatureImage,
+            isWide: true,
+            onTap: () => _pickImage(PetPhotoSlot.uniqueFeature),
+            onRemove: () => setState(() => _uniqueFeatureImage = null),
+          ),
+          const SizedBox(height: 20),
           // Name + species
           Row(children: [
             Expanded(child: _formField('Pet Name', _nameCtrl, 'e.g. Buster')),
@@ -453,11 +783,11 @@ class _ProfilePetRegistrationScreenState
                       items: const [
                         DropdownMenuItem(
                           value: 'Dog',
-                          child: Text('🐶 Dog'),
+                          child: Text(' Dog'),
                         ),
                         DropdownMenuItem(
                           value: 'Cat',
-                          child: Text('🐱 Cat'),
+                          child: Text(' Cat'),
                         ),
                       ],
                       onChanged: (v) => setState(() => _selectedSpecies = v),

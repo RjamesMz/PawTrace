@@ -46,7 +46,7 @@ class PetMatchService {
     List<double> queryEmbedding, {
     required bool isDog,
     int topN = 5,
-    double minSimilarity = 0.40, // lowered from 0.50 — classification-based
+    double minSimilarity = 0.70, // DINOv2: same pet ~0.85-0.99, diff pet ~0.40-0.65
     // cosine similarity for the same pet typically falls in the 0.4-0.7 range.
   }) async {
     final results = await _findMatchesFiltered(
@@ -84,7 +84,7 @@ class PetMatchService {
   }) async {
     final data = await Supabase.instance.client
         .from('lost_reports')
-        .select('report_id, pet_id, pets(*), owner_id(*)')
+        .select('*, pets(*), owner_id(*)')
         .eq('status', 'active');
 
     final List<Map<String, dynamic>> reports =

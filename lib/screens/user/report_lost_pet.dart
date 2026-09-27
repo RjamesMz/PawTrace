@@ -1,3 +1,4 @@
+import 'dart:ui' show ImageFilter;
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
@@ -225,13 +226,18 @@ class _ReportLostPetScreenState extends State<ReportLostPetScreen> {
               icon: const Icon(Icons.arrow_back),
               onPressed: () => handleSafeBack(context),
               color: AppColors.onSurfaceVariant),
-          const Spacer(),
-          Text('Report Lost Pet',
-              style: GoogleFonts.montserrat(
-                  fontSize: 18,
-                  fontWeight: FontWeight.w600,
-                  color: AppColors.onSurface)),
-          const Spacer(),
+          Expanded(
+            child: Center(
+              child: FittedBox(
+                fit: BoxFit.scaleDown,
+                child: Text('Report Lost Pet',
+                    style: GoogleFonts.montserrat(
+                        fontSize: 18,
+                        fontWeight: FontWeight.w600,
+                        color: AppColors.onSurface)),
+              ),
+            ),
+          ),
           const SizedBox(width: 48),
         ],
       ),
@@ -264,12 +270,30 @@ class _ReportLostPetScreenState extends State<ReportLostPetScreen> {
             ),
             clipBehavior: Clip.hardEdge,
             child: (petPhotoUrl.isNotEmpty || _photoUploaded)
-                ? Image.network(
-                    petPhotoUrl.isNotEmpty
-                        ? petPhotoUrl
-                        : 'https://images.unsplash.com/photo-1558788353-f76d92427f16?w=600',
-                    fit: BoxFit.cover,
-                    errorBuilder: (_, __, ___) => _photoPlaceholder(),
+                ? Stack(
+                    fit: StackFit.expand,
+                    children: [
+                      Image.network(
+                        petPhotoUrl.isNotEmpty
+                            ? petPhotoUrl
+                            : 'https://images.unsplash.com/photo-1558788353-f76d92427f16?w=600',
+                        fit: BoxFit.cover,
+                        errorBuilder: (_, __, ___) => const SizedBox(),
+                      ),
+                      BackdropFilter(
+                        filter: ImageFilter.blur(sigmaX: 16, sigmaY: 16),
+                        child: Container(color: Colors.black.withOpacity(0.3)),
+                      ),
+                      Center(
+                        child: Image.network(
+                          petPhotoUrl.isNotEmpty
+                              ? petPhotoUrl
+                              : 'https://images.unsplash.com/photo-1558788353-f76d92427f16?w=600',
+                          fit: BoxFit.contain,
+                          errorBuilder: (_, __, ___) => _photoPlaceholder(),
+                        ),
+                      ),
+                    ],
                   )
                 : _photoPlaceholder(),
           ),

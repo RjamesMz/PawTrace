@@ -5,7 +5,8 @@ class AppRoutes {
   static const String home = '/home';
   static const String adminHome = '/admin-home';
   static const String barangayAdminHome = '/barangay-admin-home';
-  static const String lostPetDetails = '/lost-pet-details';
+  static const String lostPetScreen = '/lost-pet-screen';
+  static const String lostPetDetails = lostPetScreen;
   static const String aiScan = '/ai-scan';
   static const String locateMyPet = '/locate-my-pet';
   static const String petProfileDetail = '/pet-profile-detail';
