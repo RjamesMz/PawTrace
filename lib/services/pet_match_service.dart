@@ -46,7 +46,8 @@ class PetMatchService {
     List<double> queryEmbedding, {
     required bool isDog,
     int topN = 5,
-    double minSimilarity = 0.70, // DINOv2: same pet ~0.85-0.99, diff pet ~0.40-0.65
+    double minSimilarity =
+        0.40, // DINOv2: same pet ~0.85-0.99, diff pet ~0.40-0.65
     // cosine similarity for the same pet typically falls in the 0.4-0.7 range.
   }) async {
     final results = await _findMatchesFiltered(

@@ -32,20 +32,20 @@ class _LocatePetScreenState extends State<LocatePetScreen> {
   bool isLoading = true;
   bool _isCardMinimized = false;
 
-  /// Returns true only if the collar is marked online AND has sent a GPS ping within the last 45 seconds.
-  /// (Since testing interval is 30 seconds, anything > 45 seconds means the collar is offline or powered off).
+  /// Returns true if the collar has sent a GPS ping within the last 3 minutes (180 seconds).
+  /// Online/Offline status is determined purely by last_seen staleness, not by a hardcoded boolean.
   bool get isGpsActive {
     final hasCollar = currentCollarId != null && currentCollarId!.isNotEmpty;
-    if (!hasCollar || !isOnline || lastUpdated.isEmpty || lat == null) return false;
+    if (!hasCollar || lastUpdated.isEmpty || lat == null) return false;
     try {
       DateTime dt = DateTime.parse(lastUpdated);
       if (!lastUpdated.endsWith('Z') && !lastUpdated.contains('+')) {
         dt = DateTime.parse('${lastUpdated}Z');
       }
       final diff = DateTime.now().difference(dt.toLocal());
-      return diff.inSeconds <= 45;
+      return !diff.isNegative && diff.inSeconds <= 180;
     } catch (_) {
-      return isOnline;
+      return false;
     }
   }
 
@@ -125,6 +125,8 @@ class _LocatePetScreenState extends State<LocatePetScreen> {
         .listen((data) {
           if (!mounted || data.isEmpty) return;
           final latest = data.first;
+          debugPrint('[GPS DEBUG] Raw Supabase data: $latest');
+          debugPrint('[GPS DEBUG] recorded_at raw = "${latest['recorded_at']}"');
           setState(() {
             lat = (latest['lat'] as num).toDouble();
             lon = (latest['lon'] as num).toDouble();
@@ -132,6 +134,7 @@ class _LocatePetScreenState extends State<LocatePetScreen> {
             battery = latest['battery_level'] ?? latest['battery'] ?? 0;
             lastUpdated = latest['recorded_at'] ?? '';
           });
+          debugPrint('[GPS DEBUG] lastUpdated = "$lastUpdated", isGpsActive = $isGpsActive');
 
           // Move map camera to new location (lat/lon are set above so they're non-null here)
           _mapController.move(ll.LatLng(lat!, lon!), 16.0);
@@ -193,8 +196,8 @@ class _LocatePetScreenState extends State<LocatePetScreen> {
         dt = DateTime.parse('${timestamp}Z');
       }
       final diff = DateTime.now().difference(dt.toLocal());
-      if (diff.isNegative || diff.inSeconds < 60)
-        return '${diff.inSeconds.abs()}s ago';
+      if (diff.isNegative) return 'just now';
+      if (diff.inSeconds < 60) return '${diff.inSeconds}s ago';
       if (diff.inMinutes < 60) return '${diff.inMinutes}m ago';
       if (diff.inHours < 24) return '${diff.inHours}h ago';
       return '${diff.inDays}d ago';

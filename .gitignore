@@ -84,3 +84,6 @@ scratch_inspect.dart
 env.js
 node_modules
 .env
+.env.*
+*.env
+.env.local
