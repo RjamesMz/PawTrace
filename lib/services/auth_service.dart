@@ -63,7 +63,7 @@ class AuthService {
     await _client.auth.signUp(
       email: email.trim(),
       password: password,
-      emailRedirectTo: 'https://rjamesmz.github.io/PawTrace/verified.html',
+      emailRedirectTo: 'https://rjamesmz.github.io/PawTrace/web/verified.html',
       data: {
         'first_name': firstName.trim(),
         'middle_name': middleName?.trim(),
