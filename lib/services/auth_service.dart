@@ -63,8 +63,7 @@ class AuthService {
     await _client.auth.signUp(
       email: email.trim(),
       password: password,
-      emailRedirectTo:
-          'https://lxkwugncakjbnffwphuq.supabase.co/storage/v1/object/public/public-assets/verified.html',
+      emailRedirectTo: 'https://rjamesmz.github.io/PawTrace/verified.html',
       data: {
         'first_name': firstName.trim(),
         'middle_name': middleName?.trim(),
