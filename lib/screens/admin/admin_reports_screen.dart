@@ -3,6 +3,8 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:responsive_framework/responsive_framework.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../core/app_colors.dart';
+import '../../core/app_toast.dart';
+import '../../services/alert_service.dart';
 import '../../services/auth_service.dart';
 import '../../widgets/admin_content_wrapper.dart';
 import '../../widgets/admin_layout.dart';
@@ -27,7 +29,7 @@ class _AdminReportsScreenState extends State<AdminReportsScreen> {
 
   List<Map<String, dynamic>> _reports = [];
 
-  static const List<String> _filterLabels = ['All', 'Recent', 'Urgent'];
+  static const List<String> _filterLabels = ['All', 'Recent', 'Dog', 'Cat'];
 
   @override
   void initState() {
@@ -80,10 +82,20 @@ class _AdminReportsScreenState extends State<AdminReportsScreen> {
           }
         }).toList();
         break;
-      case 2: // Urgent — status pending or active
+      case 2: // Dog
         list = list.where((r) {
-          final status = (r['status'] ?? '').toString().toLowerCase();
-          return status == 'pending' || status == 'active';
+          final pet = r['pets'];
+          final petSpecies = pet is Map ? (pet['species'] ?? '').toString().trim().toLowerCase() : '';
+          final rSpecies = (r['species'] ?? '').toString().trim().toLowerCase();
+          return petSpecies == 'dog' || rSpecies == 'dog';
+        }).toList();
+        break;
+      case 3: // Cat
+        list = list.where((r) {
+          final pet = r['pets'];
+          final petSpecies = pet is Map ? (pet['species'] ?? '').toString().trim().toLowerCase() : '';
+          final rSpecies = (r['species'] ?? '').toString().trim().toLowerCase();
+          return petSpecies == 'cat' || rSpecies == 'cat';
         }).toList();
         break;
     }
@@ -188,6 +200,7 @@ class _AdminReportsScreenState extends State<AdminReportsScreen> {
                 _filtered,
                 onContact: _showContactDialog,
                 onViewMap: _showLocationDialog,
+                onRepost: _repostReportToNews,
               ),
             ),
           ),
@@ -295,6 +308,93 @@ class _AdminReportsScreenState extends State<AdminReportsScreen> {
         ],
       ),
     );
+  }
+
+  Future<void> _repostReportToNews(Map<String, dynamic> report) async {
+    final pet = report['pets'];
+    final petName = pet is Map ? (pet['name']?.toString() ?? 'Pet') : 'Pet';
+    final barangay = report['barangay']?.toString() ?? 'Catanduanes';
+
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        title: Row(
+          children: [
+            const Icon(Icons.campaign_rounded, color: AppColors.error, size: 24),
+            const SizedBox(width: 10),
+            Text('Broadcast to News?',
+                style: GoogleFonts.montserrat(fontWeight: FontWeight.bold, fontSize: 17)),
+          ],
+        ),
+        content: Text(
+          'This will publish "$petName" directly as an urgent alert on the public News feed and notify all users across Catanduanes, regardless of their barangay.',
+          style: GoogleFonts.inter(fontSize: 13, height: 1.5),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: Text('Cancel', style: GoogleFonts.inter(color: AppColors.onSurfaceVariant)),
+          ),
+          ElevatedButton.icon(
+            onPressed: () => Navigator.pop(ctx, true),
+            icon: const Icon(Icons.send_rounded, size: 16),
+            label: const Text('Publish & Notify All'),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: AppColors.error,
+              foregroundColor: Colors.white,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+            ),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed != true) return;
+
+    try {
+      final photoUrl = pet is Map
+          ? (pet['photo_url']?.toString() ?? '')
+          : (report['photo_url']?.toString() ?? '');
+      final breed = pet is Map ? (pet['breed']?.toString() ?? '') : '';
+      final species = pet is Map ? (pet['species']?.toString() ?? 'Pet') : 'Pet';
+      final desc = report['description'] ?? report['notes'] ?? '';
+      final owner = report['owner_id'];
+      final ownerName = owner is Map
+          ? '${owner['first_name'] ?? ''} ${owner['surname'] ?? ''}'.trim()
+          : '';
+      final ownerPhone = owner is Map ? (owner['phone']?.toString() ?? '') : '';
+
+      final summary = [
+        '$species • $breed',
+        if (desc.toString().isNotEmpty) 'Details: $desc',
+        'Last seen location: $barangay',
+        if (ownerName.isNotEmpty) 'Owner: $ownerName',
+        if (ownerPhone.isNotEmpty) 'Contact: $ownerPhone',
+        'Please report sightings to the owner or barangay authorities immediately.',
+      ].join('\n');
+
+      await Supabase.instance.client.from('news').insert({
+        'category': 'Lost & Found',
+        'title': '🚨 MISSING PET: $petName',
+        'source': 'PawTrace Admin Alert',
+        'summary': summary,
+        'image_url': photoUrl,
+        'accent_color': '#BA1A1A',
+        'barangay': 'Catanduanes',
+      });
+
+      final count = await AlertService.instance.broadcastLostPetNewsAlert(
+        petName: petName,
+        barangay: barangay,
+      );
+
+      if (mounted) {
+        AppToast.success(context, '$petName posted to News! ($count users notified)');
+      }
+    } catch (e) {
+      if (mounted) AppToast.error(context, 'Error reposting to news: $e');
+    }
   }
 
   Widget _buildBody(BuildContext context) {
@@ -699,7 +799,7 @@ class _AdminReportsScreenState extends State<AdminReportsScreen> {
                 Row(children: [
                   Expanded(
                     child: OutlinedButton.icon(
-                      onPressed: () {},
+                      onPressed: () => _showContactDialog(report),
                       icon: const Icon(Icons.call, size: 18),
                       label: const Text('Contact Owner'),
                       style: OutlinedButton.styleFrom(
@@ -715,7 +815,7 @@ class _AdminReportsScreenState extends State<AdminReportsScreen> {
                   const SizedBox(width: 12),
                   Expanded(
                     child: ElevatedButton.icon(
-                      onPressed: () {},
+                      onPressed: () => _showLocationDialog(report),
                       icon: const Icon(Icons.map_outlined, size: 18),
                       label: const Text('View Map'),
                       style: ElevatedButton.styleFrom(
@@ -723,6 +823,22 @@ class _AdminReportsScreenState extends State<AdminReportsScreen> {
                     ),
                   ),
                 ]),
+                const SizedBox(height: 10),
+                SizedBox(
+                  width: double.infinity,
+                  child: ElevatedButton.icon(
+                    onPressed: () => _repostReportToNews(report),
+                    icon: const Icon(Icons.campaign_rounded, size: 18),
+                    label: const Text('Repost to News & Alert All Users'),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: const Color(0xFFBA1A1A),
+                      foregroundColor: Colors.white,
+                      padding: const EdgeInsets.symmetric(vertical: 12),
+                      shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(12)),
+                    ),
+                  ),
+                ),
               ],
             ),
           ),
@@ -750,11 +866,13 @@ class _ReportsDataTableSource extends DataTableSource {
   final List<Map<String, dynamic>> reports;
   final Function(Map<String, dynamic> report) onContact;
   final Function(Map<String, dynamic> report) onViewMap;
+  final Function(Map<String, dynamic> report) onRepost;
 
   _ReportsDataTableSource(
     this.reports, {
     required this.onContact,
     required this.onViewMap,
+    required this.onRepost,
   });
 
   @override
@@ -883,6 +1001,23 @@ class _ReportsDataTableSource extends DataTableSource {
                     Text('View Map', style: GoogleFonts.inter(fontSize: 11)),
                 style: ElevatedButton.styleFrom(
                   backgroundColor: AppColors.primary,
+                  foregroundColor: Colors.white,
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                  minimumSize: Size.zero,
+                  tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                  shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(8)),
+                ),
+              ),
+              const SizedBox(width: 6),
+              ElevatedButton.icon(
+                onPressed: () => onRepost(report),
+                icon: const Icon(Icons.campaign, size: 14),
+                label: Text('Repost to News',
+                    style: GoogleFonts.inter(fontSize: 11)),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: const Color(0xFFBA1A1A),
                   foregroundColor: Colors.white,
                   padding:
                       const EdgeInsets.symmetric(horizontal: 10, vertical: 6),

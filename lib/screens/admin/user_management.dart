@@ -583,8 +583,7 @@ class _UserManagementScreenState extends State<UserManagementScreen> {
                         border: OutlineInputBorder(
                             borderRadius: BorderRadius.circular(10)),
                       ),
-                      validator: (v) =>
-                          v == null || v.length < 6 ? 'Min 6 chars' : null,
+                      validator: AuthService.validatePassword,
                     ),
                     const SizedBox(height: 12),
                     DropdownButtonFormField<String>(

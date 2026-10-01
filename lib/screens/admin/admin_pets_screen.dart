@@ -32,7 +32,7 @@ class _AdminPetsScreenState extends State<AdminPetsScreen> {
   UserRole _currentUserRole = UserRole.admin;
   String _selectedBarangayFilter = 'All';
 
-  static const List<String> _chipLabels = ['All', 'Active', 'Lost', 'Dog', 'Cat'];
+  static const List<String> _chipLabels = ['All', 'Active', 'Lost', 'Dog', 'Cat', 'Archived'];
 
   List<String> get _availableBarangays {
     final set = <String>{'All'};
@@ -113,6 +113,9 @@ class _AdminPetsScreenState extends State<AdminPetsScreen> {
       case 4: // Cat
         result = result.where((p) => (p['species'] ?? '').toString().toLowerCase() == 'cat').toList();
         break;
+      case 5: // Archived
+        result = result.where((p) => (p['status'] ?? '').toString().toLowerCase() == 'archived').toList();
+        break;
     }
 
     // Apply search filter
@@ -143,6 +146,7 @@ class _AdminPetsScreenState extends State<AdminPetsScreen> {
   int get _totalCount => allPets.length;
   int get _activeCount => allPets.where((p) => (p['status'] ?? '').toString().toLowerCase() == 'active').length;
   int get _lostCount => allPets.where((p) => (p['status'] ?? '').toString().toLowerCase() == 'lost').length;
+  int get _archivedCount => allPets.where((p) => (p['status'] ?? '').toString().toLowerCase() == 'archived').length;
 
   int _sortColumnIndex = 1;
   bool _sortAscending = true;
@@ -588,14 +592,19 @@ class _AdminPetsScreenState extends State<AdminPetsScreen> {
   }
 
   Widget _buildSummaryRow() {
-    return Row(
-      children: [
-        _summaryPill('Total: $_totalCount', AppColors.primary),
-        const SizedBox(width: 8),
-        _summaryPill('Active: $_activeCount', const Color(0xFF22C55E)),
-        const SizedBox(width: 8),
-        _summaryPill('Lost: $_lostCount', AppColors.error),
-      ],
+    return SingleChildScrollView(
+      scrollDirection: Axis.horizontal,
+      child: Row(
+        children: [
+          _summaryPill('Total: $_totalCount', AppColors.primary),
+          const SizedBox(width: 8),
+          _summaryPill('Active: $_activeCount', const Color(0xFF22C55E)),
+          const SizedBox(width: 8),
+          _summaryPill('Lost: $_lostCount', AppColors.error),
+          const SizedBox(width: 8),
+          _summaryPill('Archived: $_archivedCount', const Color(0xFF64748B)),
+        ],
+      ),
     );
   }
 
@@ -666,7 +675,9 @@ class _AdminPetsScreenState extends State<AdminPetsScreen> {
   }
 
   Widget _buildPetCard(Map<String, dynamic> pet) {
-    final isLost = (pet['status'] ?? 'active').toString().toLowerCase() == 'lost';
+    final rawStatus = (pet['status'] ?? 'active').toString().toLowerCase();
+    final isLost = rawStatus == 'lost';
+    final isArchived = rawStatus == 'archived';
     final name = pet['name'] ?? 'Unknown';
     final breed = pet['breed'] ?? '';
     final species = pet['species'] ?? '';
@@ -723,15 +734,21 @@ class _AdminPetsScreenState extends State<AdminPetsScreen> {
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
               decoration: BoxDecoration(
-                color: isLost ? AppColors.errorContainer : const Color(0xFFD1FAE5),
+                color: isArchived
+                    ? const Color(0xFFF1F5F9)
+                    : (isLost ? AppColors.errorContainer : const Color(0xFFD1FAE5)),
                 borderRadius: BorderRadius.circular(6),
               ),
               child: Text(
-                isLost ? 'Lost' : 'Active',
+                isArchived
+                    ? 'Archived'
+                    : (isLost ? 'Lost' : 'Active'),
                 style: GoogleFonts.inter(
                   fontSize: 10,
                   fontWeight: FontWeight.w700,
-                  color: isLost ? AppColors.error : const Color(0xFF065F46),
+                  color: isArchived
+                      ? const Color(0xFF64748B)
+                      : (isLost ? AppColors.error : const Color(0xFF065F46)),
                 ),
               ),
             ),
@@ -857,7 +874,9 @@ class _PetsDataTableSource extends DataTableSource {
             decoration: BoxDecoration(
               color: status == 'active'
                   ? const Color(0xFF22C55E).withOpacity(0.15)
-                  : AppColors.error.withOpacity(0.15),
+                  : (status == 'archived'
+                      ? const Color(0xFF64748B).withOpacity(0.15)
+                      : AppColors.error.withOpacity(0.15)),
               borderRadius: BorderRadius.circular(12),
             ),
             child: Text(
@@ -867,7 +886,9 @@ class _PetsDataTableSource extends DataTableSource {
                 fontWeight: FontWeight.bold,
                 color: status == 'active'
                     ? const Color(0xFF22C55E)
-                    : AppColors.error,
+                    : (status == 'archived'
+                        ? const Color(0xFF64748B)
+                        : AppColors.error),
               ),
             ),
           ),

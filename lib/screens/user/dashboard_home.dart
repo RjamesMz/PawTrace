@@ -56,7 +56,7 @@ class _DashboardHomeScreenState extends State<DashboardHomeScreen> {
     try {
       var query = Supabase.instance.client.from('news').select();
       if (barangay != null && barangay.isNotEmpty) {
-        query = query.eq('barangay', barangay);
+        query = query.or('barangay.eq.$barangay,barangay.eq.Catanduanes,barangay.eq.All');
       }
       final data = await query.order('created_at', ascending: false).limit(5);
       if (mounted) {

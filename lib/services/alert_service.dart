@@ -126,7 +126,7 @@ class AlertService {
       final Set<String> addedUserIds = {};
 
       final message =
-          'URGENT: "$petName" was reported lost in Barangay $barangay. Keep a lookout!';
+          '🐾 Lost Pet Alert: "$petName" was reported missing in Brgy. $barangay. Keep an eye out!';
       final now = DateTime.now().toIso8601String();
 
       for (final r in recipients) {
@@ -153,6 +153,52 @@ class AlertService {
       }
     } catch (e) {
       debugPrint('[AlertService] Error creating lost pet alerts: $e');
+    }
+  }
+
+  /// Broadcasts a lost pet news alert to ALL registered users across all barangays.
+  Future<int> broadcastLostPetNewsAlert({
+    required String petName,
+    required String barangay,
+    String? details,
+  }) async {
+    try {
+      final currentUserId = _client.auth.currentUser?.id;
+
+      // Query ALL users regardless of barangay or role
+      final recipients = await _client.from('users').select('user_id');
+
+      final List<Map<String, dynamic>> alertRows = [];
+      final Set<String> addedUserIds = {};
+
+      final message =
+          '📢 Community Alert: "$petName" was reported missing in Brgy. $barangay. Tap to view News!';
+      final now = DateTime.now().toIso8601String();
+
+      for (final r in recipients) {
+        final userId = r['user_id']?.toString();
+        if (userId == null || userId.isEmpty) continue;
+        if (userId == currentUserId) continue;
+        if (addedUserIds.contains(userId)) continue;
+
+        addedUserIds.add(userId);
+        alertRows.add({
+          'sent_to': userId,
+          'message': message,
+          'is_read': false,
+          'sent_at': now,
+        });
+      }
+
+      if (alertRows.isNotEmpty) {
+        await _client.from('alerts').insert(alertRows);
+        debugPrint(
+            '[AlertService] Broadcasted lost pet alert to ${alertRows.length} users across all barangays.');
+      }
+      return alertRows.length;
+    } catch (e) {
+      debugPrint('[AlertService] Error broadcasting lost pet news alert: $e');
+      return 0;
     }
   }
 }

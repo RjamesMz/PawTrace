@@ -25,7 +25,7 @@ class _LostPetScreenState extends State<LostPetScreen> {
   // 0 = Recent (last 48h), 1 = This Week, 2 = This Month
   int _filterIndex = 0;
 
-  static const List<String> _filterLabels = ['Recent', 'This Week', 'This Month'];
+  static const List<String> _filterLabels = ['Recent', 'This Week', 'This Month', 'Dog', 'Cat'];
 
   List<Map<String, dynamic>> get _filtered {
     final now = DateTime.now();
@@ -37,6 +37,20 @@ class _LostPetScreenState extends State<LostPetScreen> {
       case 2: // This Month — last 30 days
         cutoff = now.subtract(const Duration(days: 30));
         break;
+      case 3: // Dog
+        return _lostPetsList.where((r) {
+          final pet = r['pets'];
+          final petSpecies = pet is Map ? (pet['species'] ?? '').toString().trim().toLowerCase() : '';
+          final rSpecies = (r['species'] ?? '').toString().trim().toLowerCase();
+          return petSpecies == 'dog' || rSpecies == 'dog';
+        }).toList();
+      case 4: // Cat
+        return _lostPetsList.where((r) {
+          final pet = r['pets'];
+          final petSpecies = pet is Map ? (pet['species'] ?? '').toString().trim().toLowerCase() : '';
+          final rSpecies = (r['species'] ?? '').toString().trim().toLowerCase();
+          return petSpecies == 'cat' || rSpecies == 'cat';
+        }).toList();
       default: // Recent — last 48 hours
         cutoff = now.subtract(const Duration(hours: 48));
     }

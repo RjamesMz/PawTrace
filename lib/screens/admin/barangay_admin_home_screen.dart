@@ -13,6 +13,7 @@ import '../../widgets/stat_card.dart';
 import '../shared/news_detail_screen.dart';
 import 'admin_pets_screen.dart';
 import 'admin_reports_screen.dart';
+import 'user_management.dart';
 import 'web/admin_web_layout.dart';
 
 /// Barangay Admin Home Screen — main dashboard visible when the admin taps Home.
@@ -38,8 +39,6 @@ class _BarangayAdminHomeScreenState extends State<BarangayAdminHomeScreen> {
   int _registeredPets = 0;
   int _lostReports = 0;
   int _registeredUsers = 0;
-  int _aiMatches = 0;
-  int _pendingCount = 0;
 
   // Data lists
   List<Map<String, dynamic>> _news = [];
@@ -80,24 +79,27 @@ class _BarangayAdminHomeScreenState extends State<BarangayAdminHomeScreen> {
   Future<void> _fetchStats() async {
     try {
       // Registered pets
-      final pets = await _supabase
-          .from('pets')
-          .select('pet_id')
-          .eq('barangay', _adminBarangay);
+      var petQuery = _supabase.from('pets').select('pet_id');
+      if (_adminBarangay.isNotEmpty) {
+        petQuery = petQuery.eq('barangay', _adminBarangay);
+      }
+      final pets = await petQuery;
       _registeredPets = pets.length;
 
       // Lost reports
-      final lost = await _supabase
-          .from('lost_reports')
-          .select('report_id')
-          .eq('barangay', _adminBarangay);
+      var lostQuery = _supabase.from('lost_reports').select('report_id');
+      if (_adminBarangay.isNotEmpty) {
+        lostQuery = lostQuery.eq('barangay', _adminBarangay);
+      }
+      final lost = await lostQuery;
       _lostReports = lost.length;
 
       // Registered Users count (scoped to barangay)
-      final users = await _supabase
-          .from('users')
-          .select('user_id')
-          .eq('barangay', _adminBarangay);
+      var userQuery = _supabase.from('users').select('user_id');
+      if (_adminBarangay.isNotEmpty) {
+        userQuery = userQuery.eq('barangay', _adminBarangay);
+      }
+      final users = await userQuery;
       _registeredUsers = users.length;
     } catch (e) {
       debugPrint('Error fetching stats: $e');
@@ -191,12 +193,6 @@ class _BarangayAdminHomeScreenState extends State<BarangayAdminHomeScreen> {
         final status = (r['status'] ?? '').toString().toLowerCase();
         return status == 'pending' || status == 'active';
       }).toList();
-      _pendingCount = _pendingReports.length;
-      // Simulated AI match count based on reports with pet photo
-      _aiMatches = reports.where((r) {
-        final pet = r['pets'];
-        return pet is Map && (pet['photo_url']?.toString().isNotEmpty ?? false);
-      }).length;
     } catch (e) {
       debugPrint('Error fetching pending reports: $e');
     }
@@ -317,7 +313,7 @@ class _BarangayAdminHomeScreenState extends State<BarangayAdminHomeScreen> {
         ),
         const SizedBox(height: 20),
 
-        // Row of 4 StatCard widgets height 110 spacing 16
+        // Row of 3 StatCard widgets height 110 spacing 16
         Row(
           children: [
             Expanded(
@@ -359,28 +355,15 @@ class _BarangayAdminHomeScreenState extends State<BarangayAdminHomeScreen> {
               child: SizedBox(
                 height: 110,
                 child: StatCard(
-                  label: 'AI Matches',
-                  count: _aiMatches,
-                  icon: Icons.auto_awesome_rounded,
-                  color: const Color(0xFF9333EA),
-                  isLoading: _isLoading,
-                ),
-              ),
-            ),
-            const SizedBox(width: 16),
-            Expanded(
-              child: SizedBox(
-                height: 110,
-                child: StatCard(
-                  label: 'Pending',
-                  count: _pendingCount,
-                  icon: Icons.pending_actions_rounded,
-                  color: const Color(0xFFF59E0B),
+                  label: 'Total Users',
+                  count: _registeredUsers,
+                  icon: Icons.people_alt_rounded,
+                  color: const Color(0xFF2563EB),
                   isLoading: _isLoading,
                   onTap: () => Navigator.push(
                     context,
                     MaterialPageRoute(
-                        builder: (_) => const AdminReportsScreen()),
+                        builder: (_) => const UserManagementScreen()),
                   ),
                 ),
               ),
@@ -888,11 +871,15 @@ class _BarangayAdminHomeScreenState extends State<BarangayAdminHomeScreen> {
             ),
           ),
           StatCard(
-            label: 'Registered Users',
+            label: 'Total Users',
             count: _registeredUsers,
-            icon: Icons.group_rounded,
-            color: const Color(0xFF9333EA),
+            icon: Icons.people_alt_rounded,
+            color: const Color(0xFF2563EB),
             isLoading: _isLoading,
+            onTap: () => Navigator.push(
+              context,
+              MaterialPageRoute(builder: (_) => const UserManagementScreen()),
+            ),
           ),
         ],
       ),

@@ -368,6 +368,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   style: GoogleFonts.inter(fontSize: 14),
                   decoration: InputDecoration(
                     labelText: 'New Password',
+                    helperText: 'At least 8 characters with letters & numbers',
                     prefixIcon:
                         const Icon(Icons.lock_outline_rounded, size: 20),
                     suffixIcon: IconButton(
@@ -471,9 +472,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   child: ElevatedButton(
                     onPressed: () {
                       final pw = newCtrl.text;
-                      if (pw.length < 6) {
-                        setDlg(() => errorText =
-                            'Password must be at least 6 characters.');
+                      final pwError = AuthService.validatePassword(pw);
+                      if (pwError != null) {
+                        setDlg(() => errorText = pwError);
                         return;
                       }
                       if (pw != confirmCtrl.text) {

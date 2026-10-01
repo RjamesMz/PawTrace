@@ -2,6 +2,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../../core/app_colors.dart';
+import '../../core/app_constants.dart';
 import '../../core/app_routes.dart';
 import '../../core/app_toast.dart';
 import '../../services/auth_service.dart';
@@ -35,6 +36,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
   final _regConfirmCtrl = TextEditingController();
   final _regPhoneCtrl = TextEditingController();
   String? _selectedSuffix;
+  String? _selectedBarangay;
   
   bool _obscureRegPwd = true;
   bool _obscureRegConfirm = true;
@@ -67,12 +69,18 @@ class _RegisterScreenState extends State<RegisterScreen> {
     final confirm = _regConfirmCtrl.text;
     final phone = _regPhoneCtrl.text.trim();
 
+    final pwError = AuthService.validatePassword(password);
+    if (pwError != null) {
+      _showError(pwError);
+      return;
+    }
     if (password != confirm) {
       _showError('Passwords do not match.');
       return;
     }
-    if (password.length < 6) {
-      _showError('Password must be at least 6 characters.');
+
+    if (_selectedBarangay == null || _selectedBarangay!.isEmpty) {
+      _showError('Please select your barangay.');
       return;
     }
 
@@ -86,6 +94,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
         email: email,
         password: password,
         phone: phone,
+        barangay: _selectedBarangay,
       );
       if (!mounted) return;
       Navigator.of(context).pushNamedAndRemoveUntil('/', (_) => false);
@@ -207,14 +216,11 @@ class _RegisterScreenState extends State<RegisterScreen> {
                     _passwordField(
                       controller: _regPasswordCtrl,
                       hint: 'Password',
+                      helperText: 'At least 8 characters with letters & numbers',
                       obscure: _obscureRegPwd,
                       onToggle: () =>
                           setState(() => _obscureRegPwd = !_obscureRegPwd),
-                      validator: (v) {
-                        if (v == null || v.isEmpty) return 'Password is required';
-                        if (v.length < 6) return 'At least 6 characters';
-                        return null;
-                      },
+                      validator: AuthService.validatePassword,
                     ),
                     const SizedBox(height: 12),
                     _passwordField(
@@ -240,6 +246,8 @@ class _RegisterScreenState extends State<RegisterScreen> {
                       icon: Icons.phone_outlined,
                       keyboardType: TextInputType.phone,
                     ),
+                    const SizedBox(height: 12),
+                    _buildBarangayDropdown(),
                     const SizedBox(height: 24),
 
                     // ── Create Account button ─────────────────────────────────
@@ -369,6 +377,42 @@ class _RegisterScreenState extends State<RegisterScreen> {
 
   // ── Suffix dropdown ────────────────────────────────────────────────────────
 
+  Widget _buildBarangayDropdown() {
+    return DropdownButtonFormField<String>(
+      isExpanded: true,
+      value: _selectedBarangay,
+      validator: (v) =>
+          (v == null || v.isEmpty) ? 'Please select your barangay' : null,
+      decoration: InputDecoration(
+        hintText: 'Select Barangay',
+        hintStyle: GoogleFonts.inter(
+          fontSize: 15,
+          color: AppColors.secondary.withOpacity(0.55),
+        ),
+        prefixIcon: const Icon(
+          Icons.location_on_outlined,
+          color: AppColors.secondary,
+          size: 20,
+        ),
+        focusedBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(16),
+          borderSide: const BorderSide(color: AppColors.primary, width: 2),
+        ),
+      ),
+      icon: const Icon(Icons.expand_more_rounded, color: AppColors.secondary),
+      style: GoogleFonts.inter(fontSize: 15, color: AppColors.onSurface),
+      dropdownColor: AppColors.surfaceContainerLowest,
+      borderRadius: BorderRadius.circular(16),
+      items: AppConstants.barangays
+          .map((b) => DropdownMenuItem(
+                value: b,
+                child: Text('Brgy. $b'),
+              ))
+          .toList(),
+      onChanged: (v) => setState(() => _selectedBarangay = v),
+    );
+  }
+
   Widget _buildSuffixDropdown() {
     return DropdownButtonFormField<String>(
       isExpanded: true,
@@ -441,6 +485,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
     required bool obscure,
     required VoidCallback onToggle,
     String? Function(String?)? validator,
+    String? helperText,
   }) {
     return TextFormField(
       controller: controller,
@@ -449,6 +494,11 @@ class _RegisterScreenState extends State<RegisterScreen> {
       style: GoogleFonts.inter(fontSize: 15, color: AppColors.onSurface),
       decoration: InputDecoration(
         hintText: hint,
+        helperText: helperText,
+        helperStyle: GoogleFonts.inter(
+          fontSize: 12,
+          color: AppColors.secondary.withOpacity(0.8),
+        ),
         hintStyle: GoogleFonts.inter(
           fontSize: 15,
           color: AppColors.secondary.withOpacity(0.55),

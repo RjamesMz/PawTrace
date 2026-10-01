@@ -91,6 +91,16 @@ class _NotificationsSheetState extends State<NotificationsSheet> {
     }
   }
 
+  String _cleanMessage(String raw) {
+    String cleaned = raw;
+    if (cleaned.startsWith('URGENT: ')) {
+      cleaned = cleaned.substring('URGENT: '.length);
+    } else if (cleaned.startsWith('🚨 MISSING PET ALERT: ')) {
+      cleaned = cleaned.substring('🚨 MISSING PET ALERT: '.length);
+    }
+    return cleaned.trim();
+  }
+
   String _formatSentAt(String? raw) {
     if (raw == null || raw.isEmpty) return 'Recent';
     try {
@@ -212,117 +222,284 @@ class _NotificationsSheetState extends State<NotificationsSheet> {
                         onRefresh: _loadAlerts,
                         color: AppColors.primary,
                         child: ListView.separated(
-                          padding: const EdgeInsets.symmetric(vertical: 8),
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 16, vertical: 12),
                           itemCount: _alerts.length,
-                          separatorBuilder: (_, __) => const Divider(
-                            height: 1,
-                            indent: 72,
-                            color: Color(0xFFF1F5F9),
-                          ),
+                          separatorBuilder: (_, __) =>
+                              const SizedBox(height: 10),
                           itemBuilder: (context, index) {
                             final alert = _alerts[index];
                             final isRead = alert['is_read'] == true;
-                            final message = alert['message']?.toString() ??
+                            final rawMessage = alert['message']?.toString() ??
                                 'Notification message';
+                            final message = _cleanMessage(rawMessage);
                             final timeStr =
                                 _formatSentAt(alert['sent_at']?.toString());
-                            final isUrgent = message.contains('URGENT') ||
-                                alert['lost_report_id'] != null;
+                            final isLostPet = alert['lost_report_id'] != null ||
+                                rawMessage.toLowerCase().contains('lost') ||
+                                rawMessage.toLowerCase().contains('missing');
+                            final isNews = !isLostPet &&
+                                (rawMessage.toLowerCase().contains('news') ||
+                                    rawMessage
+                                        .toLowerCase()
+                                        .contains('bulletin') ||
+                                    rawMessage
+                                        .toLowerCase()
+                                        .contains('community'));
 
-                            return InkWell(
-                              onTap: () => _onAlertTap(alert),
-                              child: Container(
+                            return Container(
+                              decoration: BoxDecoration(
                                 color: isRead
-                                    ? Colors.transparent
-                                    : AppColors.surfaceContainerLow
-                                        .withOpacity(0.5),
-                                padding: const EdgeInsets.symmetric(
-                                    horizontal: 20, vertical: 14),
-                                child: Row(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    // Alert Icon Avatar
-                                    Container(
-                                      width: 44,
-                                      height: 44,
-                                      decoration: BoxDecoration(
-                                        color: isUrgent
-                                            ? const Color(0xFFFEE2E2)
-                                            : AppColors.surfaceContainerHigh,
-                                        shape: BoxShape.circle,
-                                      ),
-                                      child: Icon(
-                                        isUrgent
-                                            ? Icons.warning_amber_rounded
-                                            : Icons.notifications_active_outlined,
-                                        color: isUrgent
-                                            ? AppColors.error
-                                            : AppColors.primary,
-                                        size: 22,
-                                      ),
-                                    ),
-                                    const SizedBox(width: 14),
-
-                                    // Message and timestamp
-                                    Expanded(
-                                      child: Column(
-                                        crossAxisAlignment:
-                                            CrossAxisAlignment.start,
-                                        children: [
-                                          Text(
-                                            message,
-                                            style: GoogleFonts.inter(
-                                              fontSize: 13,
-                                              fontWeight: isRead
-                                                  ? FontWeight.w500
-                                                  : FontWeight.w700,
-                                              color: AppColors.onSurface,
-                                              height: 1.35,
+                                    ? Colors.white
+                                    : const Color(0xFFFFFBF5),
+                                borderRadius: BorderRadius.circular(18),
+                                border: Border.all(
+                                  color: isRead
+                                      ? const Color(0xFFE2E8F0)
+                                      : const Color(0xFFFFD8B3),
+                                  width: isRead ? 1 : 1.2,
+                                ),
+                                boxShadow: [
+                                  BoxShadow(
+                                    color: isRead
+                                        ? Colors.black.withOpacity(0.02)
+                                        : const Color(0xFFFF6600)
+                                            .withOpacity(0.06),
+                                    blurRadius: 10,
+                                    offset: const Offset(0, 3),
+                                  ),
+                                ],
+                              ),
+                              child: Material(
+                                color: Colors.transparent,
+                                borderRadius: BorderRadius.circular(18),
+                                child: InkWell(
+                                  borderRadius: BorderRadius.circular(18),
+                                  onTap: () => _onAlertTap(alert),
+                                  child: Padding(
+                                    padding: const EdgeInsets.all(14),
+                                    child: Row(
+                                      crossAxisAlignment:
+                                          CrossAxisAlignment.start,
+                                      children: [
+                                        // Aesthetic Gradient Avatar
+                                        Container(
+                                          width: 44,
+                                          height: 44,
+                                          decoration: BoxDecoration(
+                                            gradient: LinearGradient(
+                                              colors: isLostPet
+                                                  ? const [
+                                                      Color(0xFFFF7A00),
+                                                      Color(0xFFFF9E44)
+                                                    ]
+                                                  : isNews
+                                                      ? const [
+                                                          Color(0xFF6366F1),
+                                                          Color(0xFF8B5CF6)
+                                                        ]
+                                                      : const [
+                                                          Color(0xFF0EA5E9),
+                                                          Color(0xFF38BDF8)
+                                                        ],
+                                              begin: Alignment.topLeft,
+                                              end: Alignment.bottomRight,
                                             ),
+                                            borderRadius:
+                                                BorderRadius.circular(14),
+                                            boxShadow: [
+                                              BoxShadow(
+                                                color: (isLostPet
+                                                        ? const Color(
+                                                            0xFFFF6600)
+                                                        : isNews
+                                                            ? const Color(
+                                                                0xFF6366F1)
+                                                            : const Color(
+                                                                0xFF0EA5E9))
+                                                    .withOpacity(0.28),
+                                                blurRadius: 8,
+                                                offset: const Offset(0, 3),
+                                              ),
+                                            ],
                                           ),
-                                          const SizedBox(height: 5),
-                                          Row(
+                                          child: Icon(
+                                            isLostPet
+                                                ? Icons.pets_rounded
+                                                : isNews
+                                                    ? Icons.campaign_rounded
+                                                    : Icons
+                                                        .notifications_active_rounded,
+                                            color: Colors.white,
+                                            size: 22,
+                                          ),
+                                        ),
+                                        const SizedBox(width: 14),
+
+                                        // Content
+                                        Expanded(
+                                          child: Column(
+                                            crossAxisAlignment:
+                                                CrossAxisAlignment.start,
                                             children: [
+                                              // Top Row: Category micro-pill + Timestamp + Unread dot
+                                              Row(
+                                                children: [
+                                                  Container(
+                                                    padding: const EdgeInsets
+                                                        .symmetric(
+                                                        horizontal: 8,
+                                                        vertical: 3),
+                                                    decoration: BoxDecoration(
+                                                      color: isLostPet
+                                                          ? const Color(
+                                                              0xFFFFF0E6)
+                                                          : isNews
+                                                              ? const Color(
+                                                                  0xFFEEF2FF)
+                                                              : const Color(
+                                                                  0xFFF1F5F9),
+                                                      borderRadius:
+                                                          BorderRadius.circular(
+                                                              6),
+                                                    ),
+                                                    child: Text(
+                                                      isLostPet
+                                                          ? 'LOST PET ALERT'
+                                                          : isNews
+                                                              ? 'COMMUNITY NEWS'
+                                                              : 'NOTIFICATION',
+                                                      style:
+                                                          GoogleFonts.inter(
+                                                        fontSize: 10,
+                                                        fontWeight:
+                                                            FontWeight.w700,
+                                                        letterSpacing: 0.5,
+                                                        color: isLostPet
+                                                            ? const Color(
+                                                                0xFFFF6600)
+                                                            : isNews
+                                                                ? const Color(
+                                                                    0xFF4F46E5)
+                                                                : const Color(
+                                                                    0xFF475569),
+                                                      ),
+                                                    ),
+                                                  ),
+                                                  const Spacer(),
+                                                  Row(
+                                                    mainAxisSize:
+                                                        MainAxisSize.min,
+                                                    children: [
+                                                      Icon(
+                                                        Icons
+                                                            .access_time_rounded,
+                                                        size: 12,
+                                                        color: Colors
+                                                            .grey.shade400,
+                                                      ),
+                                                      const SizedBox(width: 4),
+                                                      Text(
+                                                        timeStr,
+                                                        style:
+                                                            GoogleFonts.inter(
+                                                          fontSize: 11,
+                                                          fontWeight:
+                                                              FontWeight.w500,
+                                                          color: Colors
+                                                              .grey.shade500,
+                                                        ),
+                                                      ),
+                                                    ],
+                                                  ),
+                                                  if (!isRead) ...[
+                                                    const SizedBox(width: 6),
+                                                    Container(
+                                                      width: 8,
+                                                      height: 8,
+                                                      decoration:
+                                                          const BoxDecoration(
+                                                        color:
+                                                            Color(0xFFFF6600),
+                                                        shape:
+                                                            BoxShape.circle,
+                                                      ),
+                                                    ),
+                                                  ],
+                                                ],
+                                              ),
+                                              const SizedBox(height: 8),
+
+                                              // Message Body
                                               Text(
-                                                timeStr,
+                                                message,
                                                 style: GoogleFonts.inter(
-                                                  fontSize: 11,
-                                                  color: AppColors
-                                                      .onSurfaceVariant
-                                                      .withOpacity(0.7),
+                                                  fontSize: 13,
+                                                  fontWeight: isRead
+                                                      ? FontWeight.w400
+                                                      : FontWeight.w600,
+                                                  color:
+                                                      const Color(0xFF1E293B),
+                                                  height: 1.4,
                                                 ),
                                               ),
+
+                                              // Footer action for lost reports
                                               if (alert['lost_report_id'] !=
                                                   null) ...[
-                                                const SizedBox(width: 8),
-                                                Text(
-                                                  '• Tap to view report',
-                                                  style: GoogleFonts.inter(
-                                                    fontSize: 11,
-                                                    fontWeight: FontWeight.w600,
-                                                    color: AppColors.primary,
-                                                  ),
+                                                const SizedBox(height: 10),
+                                                Row(
+                                                  children: [
+                                                    Container(
+                                                      padding: const EdgeInsets
+                                                          .symmetric(
+                                                          horizontal: 10,
+                                                          vertical: 4),
+                                                      decoration: BoxDecoration(
+                                                        color: const Color(
+                                                                0xFFFF6600)
+                                                            .withOpacity(0.08),
+                                                        borderRadius:
+                                                            BorderRadius
+                                                                .circular(8),
+                                                      ),
+                                                      child: Row(
+                                                        mainAxisSize:
+                                                            MainAxisSize.min,
+                                                        children: [
+                                                          Text(
+                                                            'View Pet Report',
+                                                            style: GoogleFonts
+                                                                .inter(
+                                                              fontSize: 11,
+                                                              fontWeight:
+                                                                  FontWeight
+                                                                      .w700,
+                                                              color: const Color(
+                                                                  0xFFFF6600),
+                                                            ),
+                                                          ),
+                                                          const SizedBox(
+                                                              width: 4),
+                                                          const Icon(
+                                                            Icons
+                                                                .arrow_forward_rounded,
+                                                            size: 12,
+                                                            color: Color(
+                                                                0xFFFF6600),
+                                                          ),
+                                                        ],
+                                                      ),
+                                                    ),
+                                                  ],
                                                 ),
                                               ],
                                             ],
                                           ),
-                                        ],
-                                      ),
-                                    ),
-
-                                    // Unread indicator dot
-                                    if (!isRead)
-                                      Container(
-                                        margin: const EdgeInsets.only(
-                                            left: 8, top: 6),
-                                        width: 8,
-                                        height: 8,
-                                        decoration: const BoxDecoration(
-                                          color: AppColors.primary,
-                                          shape: BoxShape.circle,
                                         ),
-                                      ),
-                                  ],
+                                      ],
+                                    ),
+                                  ),
                                 ),
                               ),
                             );

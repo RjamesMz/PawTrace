@@ -2,6 +2,15 @@
 // on Flutter Web, so all methods return safe "not available" fallbacks.
 import 'package:flutter/foundation.dart';
 
+/// Thrown when the PawTrace AI server cannot be reached.
+class PawTraceServerException implements Exception {
+  final String message;
+  const PawTraceServerException([this.message = 'AI server is unreachable.']);
+
+  @override
+  String toString() => 'PawTraceServerException: $message';
+}
+
 /// Stub result used on web where TFLite is unavailable.
 class PetClassificationResult {
   final bool isDogOrCat;
@@ -25,6 +34,8 @@ class PetClassificationResult {
 class PetEmbeddingService {
   PetEmbeddingService._();
   static final PetEmbeddingService instance = PetEmbeddingService._();
+
+  void clearUrlCache() {}
 
   Future<void> loadModels() async {
     debugPrint('[PawTrace] TFLite not available on web — skipping model load.');

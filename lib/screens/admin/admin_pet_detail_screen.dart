@@ -2,9 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../core/app_colors.dart';
-import '../../core/app_routes.dart';
 import '../../core/app_toast.dart';
 import '../../core/navigation_helpers.dart';
+import '../../services/alert_service.dart';
 import '../../widgets/admin_content_wrapper.dart';
 
 /// Admin Pet Detail screen – displays full pet details with admin actions
@@ -29,41 +29,40 @@ class _AdminPetDetailScreenState extends State<AdminPetDetailScreen> {
     pet = Map<String, dynamic>.from(widget.pet);
   }
 
-  Future<void> _markAsLost() async {
-    setState(() => _isUpdating = true);
-    try {
-      final petId = pet['pet_id'] ?? pet['id'];
-      await _supabase.from('pets').update({'status': 'lost'}).eq('pet_id', petId);
-      if (!mounted) return;
-      setState(() => pet['status'] = 'lost');
-      AppToast.show(context, '${pet['name']} marked as lost', icon: Icons.warning_amber_rounded);
-    } catch (e) {
-      if (!mounted) return;
-      AppToast.error(context, 'Error: $e');
-    } finally {
-      if (mounted) setState(() => _isUpdating = false);
-    }
-  }
+  Future<void> _repostLostPetToNews() async {
+    final petName = pet['name'] ?? 'Pet';
+    final barangay = pet['barangay'] ?? pet['users']?['barangay'] ?? 'Catanduanes';
 
-  Future<void> _removePet() async {
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        title: Text('Archive Pet', style: GoogleFonts.montserrat(fontWeight: FontWeight.w600)),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        title: Row(
+          children: [
+            const Icon(Icons.campaign_rounded, color: AppColors.error, size: 24),
+            const SizedBox(width: 10),
+            Text('Broadcast to News?',
+                style: GoogleFonts.montserrat(fontWeight: FontWeight.bold, fontSize: 17)),
+          ],
+        ),
         content: Text(
-          'Are you sure you want to archive ${pet['name']}? The profile will be safely archived and unlinked from active records.',
-          style: GoogleFonts.inter(fontSize: 14, color: AppColors.onSurfaceVariant),
+          'This will publish "$petName" directly as an urgent alert on the public News feed and notify all users across Catanduanes, regardless of their barangay.',
+          style: GoogleFonts.inter(fontSize: 13, height: 1.5),
         ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx, false),
-            child: Text('Cancel', style: GoogleFonts.inter(fontWeight: FontWeight.w600, color: AppColors.onSurfaceVariant)),
+            child: Text('Cancel', style: GoogleFonts.inter(color: AppColors.onSurfaceVariant)),
           ),
-          ElevatedButton(
+          ElevatedButton.icon(
             onPressed: () => Navigator.pop(ctx, true),
-            style: ElevatedButton.styleFrom(backgroundColor: AppColors.error, foregroundColor: Colors.white),
-            child: Text('Archive', style: GoogleFonts.inter(fontWeight: FontWeight.w700)),
+            icon: const Icon(Icons.send_rounded, size: 16),
+            label: const Text('Publish & Notify All'),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: AppColors.error,
+              foregroundColor: Colors.white,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+            ),
           ),
         ],
       ),
@@ -74,17 +73,56 @@ class _AdminPetDetailScreenState extends State<AdminPetDetailScreen> {
     setState(() => _isUpdating = true);
     try {
       final petId = pet['pet_id'] ?? pet['id'];
-      await _supabase.from('pets').update({'status': 'archived', 'collar_id': null}).eq('pet_id', petId);
+      final photoUrl = pet['photo_url'] ?? '';
+      final species = pet['species'] ?? 'Pet';
+      final breed = pet['breed'] ?? '';
+      final color = pet['color'] ?? '';
+      final u = pet['users'];
+      final ownerName = u != null
+          ? [u['first_name'], u['surname']].where((s) => s != null && s.toString().isNotEmpty).join(' ')
+          : '';
+      final ownerPhone = u?['phone'] ?? '';
+
+      final summary = [
+        '$species • $breed',
+        if (color.toString().isNotEmpty) 'Color: $color',
+        if (barangay.toString().isNotEmpty) 'Registered Barangay: Brgy. $barangay',
+        if (ownerName.isNotEmpty) 'Owner: $ownerName',
+        if (ownerPhone.toString().isNotEmpty) 'Contact: $ownerPhone',
+        'Please report any sightings or details to the owner or barangay authorities immediately.',
+      ].join('\n');
+
+      // 1. Mark pet as lost in pets table
+      await _supabase.from('pets').update({'status': 'lost'}).eq('pet_id', petId);
+
+      // 2. Publish to news feed so it appears on home/news tab
+      await _supabase.from('news').insert({
+        'category': 'Lost & Found',
+        'title': '🚨 MISSING PET: $petName',
+        'source': 'PawTrace Admin Alert',
+        'summary': summary,
+        'image_url': photoUrl,
+        'accent_color': '#BA1A1A',
+        'barangay': 'Catanduanes',
+      });
+
+      // 3. Dispatch notifications to ALL users across all barangays
+      final alertedCount = await AlertService.instance.broadcastLostPetNewsAlert(
+        petName: petName.toString(),
+        barangay: barangay.toString(),
+      );
+
       if (!mounted) return;
-      AppToast.success(context, '${pet['name']} archived successfully');
-      Navigator.pushReplacementNamed(context, AppRoutes.adminPets);
+      setState(() => pet['status'] = 'lost');
+      AppToast.success(context, '$petName posted to News! ($alertedCount users notified)');
     } catch (e) {
       if (!mounted) return;
-      AppToast.error(context, 'Error: $e');
+      AppToast.error(context, 'Error broadcasting pet: $e');
     } finally {
       if (mounted) setState(() => _isUpdating = false);
     }
   }
+
 
   @override
   Widget build(BuildContext context) {
@@ -467,32 +505,16 @@ class _AdminPetDetailScreenState extends State<AdminPetDetailScreen> {
           width: double.infinity,
           height: 52,
           child: ElevatedButton.icon(
-            onPressed: isLost ? null : _markAsLost,
-            icon: const Icon(Icons.warning_amber_rounded, size: 20),
-            label: Text(isLost ? 'Already Marked as Lost' : 'Mark as Lost'),
-            style: ElevatedButton.styleFrom(
-              backgroundColor: AppColors.primary,
-              foregroundColor: Colors.white,
-              disabledBackgroundColor: AppColors.surfaceContainerHigh,
-              disabledForegroundColor: AppColors.onSurfaceVariant,
-              shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(16)),
-              textStyle:
-                  GoogleFonts.inter(fontSize: 15, fontWeight: FontWeight.w700),
+            onPressed: _repostLostPetToNews,
+            icon: const Icon(Icons.campaign_rounded, size: 22),
+            label: Text(
+              isLost
+                  ? 'Repost to News & Notify All Users'
+                  : 'Broadcast to News & Notify All Users',
             ),
-          ),
-        ),
-        const SizedBox(height: 12),
-        SizedBox(
-          width: double.infinity,
-          height: 52,
-          child: OutlinedButton.icon(
-            onPressed: _removePet,
-            icon: const Icon(Icons.archive_outlined, size: 20),
-            label: const Text('Archive Pet'),
-            style: OutlinedButton.styleFrom(
-              side: const BorderSide(color: AppColors.error, width: 2),
-              foregroundColor: AppColors.error,
+            style: ElevatedButton.styleFrom(
+              backgroundColor: const Color(0xFFBA1A1A),
+              foregroundColor: Colors.white,
               shape: RoundedRectangleBorder(
                   borderRadius: BorderRadius.circular(16)),
               textStyle:

@@ -1695,10 +1695,7 @@ class _SuperAdminScreenState extends State<SuperAdminScreen> {
                       border: OutlineInputBorder(
                           borderRadius: BorderRadius.circular(14)),
                     ),
-                    validator: (v) =>
-                        v == null || v.trim().length < 6
-                            ? 'Min 6 characters'
-                            : null,
+                    validator: AuthService.validatePassword,
                   ),
                   const SizedBox(height: 12),
                   DropdownButtonFormField<String>(
