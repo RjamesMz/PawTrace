@@ -6,6 +6,7 @@ import 'package:image_picker/image_picker.dart';
 import 'package:responsive_framework/responsive_framework.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../core/app_colors.dart';
+import '../../core/app_constants.dart';
 import '../../core/app_toast.dart';
 import '../../services/auth_service.dart';
 import '../../widgets/admin_content_wrapper.dart';
@@ -26,14 +27,15 @@ class _PostNewsScreenState extends State<PostNewsScreen> {
   final _formKey = GlobalKey<FormState>();
 
   final _titleCtrl = TextEditingController();
-  final _sourceCtrl = TextEditingController(text: 'PawTrace Updates');
+  final _sourceCtrl =
+      TextEditingController(text: '${AppConstants.appName} Updates');
   final _summaryCtrl = TextEditingController();
 
   XFile? _pickedFile;
   Uint8List? _imageBytes;
 
   String _selectedCategory = 'Community Alert';
-  String _selectedColorHex = '#FF6600';
+  static const String _defaultAccentColor = '#FF6600';
   bool _isLoading = false;
   bool _isLoadingPosts = true;
 
@@ -47,14 +49,6 @@ class _PostNewsScreenState extends State<PostNewsScreen> {
     'Safety Tips',
     'General Update'
   ];
-
-  final Map<String, String> _accentColors = {
-    'Orange': '#FF6600',
-    'Green': '#00796B',
-    'Blue': '#4E7AC7',
-    'Red': '#BA1A1A',
-    'Purple': '#8E24AA'
-  };
 
   @override
   void initState() {
@@ -72,8 +66,10 @@ class _PostNewsScreenState extends State<PostNewsScreen> {
     setState(() => _isLoadingPosts = true);
     try {
       var query = Supabase.instance.client.from('news').select();
-      if (_currentUserRole != UserRole.superAdmin && _adminBarangay.isNotEmpty) {
-        query = query.eq('barangay', _adminBarangay);
+      if (_currentUserRole != UserRole.superAdmin &&
+          _adminBarangay.isNotEmpty) {
+        query = query.or(
+            'barangay.eq.$_adminBarangay,barangay.eq.Catanduanes,barangay.eq.All');
       }
       final data = await query.order('created_at', ascending: false);
       if (mounted) {
@@ -138,7 +134,7 @@ class _PostNewsScreenState extends State<PostNewsScreen> {
         'source': _sourceCtrl.text.trim(),
         'summary': _summaryCtrl.text.trim(),
         'image_url': photoUrl,
-        'accent_color': _selectedColorHex,
+        'accent_color': _defaultAccentColor,
         'barangay': _adminBarangay.isNotEmpty ? _adminBarangay : 'Catanduanes',
       });
 
@@ -277,9 +273,7 @@ class _PostNewsScreenState extends State<PostNewsScreen> {
                   child: LayoutBuilder(
                     builder: (context, constraints) {
                       final isWide = constraints.maxWidth >= 900;
-                      return isWide
-                          ? _buildWideLayout()
-                          : _buildNarrowLayout();
+                      return isWide ? _buildWideLayout() : _buildNarrowLayout();
                     },
                   ),
                 ),
@@ -339,8 +333,8 @@ class _PostNewsScreenState extends State<PostNewsScreen> {
             decoration: BoxDecoration(
               color: Colors.white,
               borderRadius: BorderRadius.circular(20),
-              border: Border.all(
-                  color: AppColors.outlineVariant.withOpacity(0.25)),
+              border:
+                  Border.all(color: AppColors.outlineVariant.withOpacity(0.25)),
               boxShadow: [
                 BoxShadow(
                   color: Colors.black.withOpacity(0.04),
@@ -417,7 +411,8 @@ class _PostNewsScreenState extends State<PostNewsScreen> {
         ),
         const Spacer(),
         IconButton(
-          icon: const Icon(Icons.refresh_rounded, size: 20, color: AppColors.primary),
+          icon: const Icon(Icons.refresh_rounded,
+              size: 20, color: AppColors.primary),
           tooltip: 'Refresh',
           onPressed: _fetchNewsPosts,
         ),
@@ -444,8 +439,8 @@ class _PostNewsScreenState extends State<PostNewsScreen> {
     if (_isLoadingPosts) {
       return const Padding(
         padding: EdgeInsets.symmetric(vertical: 32),
-        child: Center(
-            child: CircularProgressIndicator(color: AppColors.primary)),
+        child:
+            Center(child: CircularProgressIndicator(color: AppColors.primary)),
       );
     }
     if (_newsPosts.isEmpty) {
@@ -455,8 +450,7 @@ class _PostNewsScreenState extends State<PostNewsScreen> {
         decoration: BoxDecoration(
           color: AppColors.surfaceContainerLow,
           borderRadius: BorderRadius.circular(16),
-          border:
-              Border.all(color: AppColors.outlineVariant.withOpacity(0.2)),
+          border: Border.all(color: AppColors.outlineVariant.withOpacity(0.2)),
         ),
         child: Column(
           children: [
@@ -525,8 +519,8 @@ class _PostNewsScreenState extends State<PostNewsScreen> {
                   width: 76,
                   height: 76,
                   color: accentColor.withOpacity(0.15),
-                  child: Icon(Icons.article_rounded,
-                      color: accentColor, size: 28),
+                  child:
+                      Icon(Icons.article_rounded, color: accentColor, size: 28),
                 ),
               ),
             )
@@ -540,8 +534,7 @@ class _PostNewsScreenState extends State<PostNewsScreen> {
                     topLeft: Radius.circular(14),
                     bottomLeft: Radius.circular(14)),
               ),
-              child:
-                  Icon(Icons.article_rounded, color: accentColor, size: 28),
+              child: Icon(Icons.article_rounded, color: accentColor, size: 28),
             ),
           const SizedBox(width: 12),
           Expanded(
@@ -587,8 +580,7 @@ class _PostNewsScreenState extends State<PostNewsScreen> {
                   if (summary.isNotEmpty)
                     Text(summary,
                         style: GoogleFonts.inter(
-                            fontSize: 11,
-                            color: AppColors.onSurfaceVariant),
+                            fontSize: 11, color: AppColors.onSurfaceVariant),
                         maxLines: 2,
                         overflow: TextOverflow.ellipsis),
                 ],
@@ -661,28 +653,32 @@ class _PostNewsScreenState extends State<PostNewsScreen> {
           // Title Field
           TextFormField(
             controller: _titleCtrl,
-            style:
-                GoogleFonts.inter(fontSize: 14, color: AppColors.onSurface),
+            style: GoogleFonts.inter(fontSize: 14, color: AppColors.onSurface),
             decoration:
                 _inputDecoration(hint: 'Title', icon: Icons.title_rounded),
             textCapitalization: TextCapitalization.sentences,
-            validator: (v) => (v == null || v.trim().isEmpty)
-                ? 'Title is required'
-                : null,
+            validator: (v) => AuthService.validateText(
+              v,
+              fieldName: 'Title',
+              minLength: 5,
+              maxLength: 120,
+            ),
           ),
           const SizedBox(height: 14),
 
           // Source Field
           TextFormField(
             controller: _sourceCtrl,
-            style:
-                GoogleFonts.inter(fontSize: 14, color: AppColors.onSurface),
+            style: GoogleFonts.inter(fontSize: 14, color: AppColors.onSurface),
             decoration: _inputDecoration(
                 hint: 'Source / Author', icon: Icons.edit_note_rounded),
             textCapitalization: TextCapitalization.words,
-            validator: (v) => (v == null || v.trim().isEmpty)
-                ? 'Source is required'
-                : null,
+            validator: (v) => AuthService.validateText(
+              v,
+              fieldName: 'Source / Author',
+              minLength: 2,
+              maxLength: 60,
+            ),
           ),
           const SizedBox(height: 14),
 
@@ -738,52 +734,21 @@ class _PostNewsScreenState extends State<PostNewsScreen> {
           ),
           const SizedBox(height: 14),
 
-          // Accent Color Dropdown
-          DropdownButtonFormField<String>(
-            isExpanded: true,
-            value: _selectedColorHex,
-            decoration: _inputDecoration(
-              hint: 'Accent Theme Color',
-              icon: Icons.palette_outlined,
-            ),
-            items: _accentColors.entries.map((entry) {
-              final name = entry.key;
-              final hex = entry.value;
-              final color = Color(
-                  int.parse('FF${hex.replaceAll('#', '')}', radix: 16));
-              return DropdownMenuItem(
-                value: hex,
-                child: Row(
-                  children: [
-                    Container(
-                      width: 14,
-                      height: 14,
-                      decoration:
-                          BoxDecoration(color: color, shape: BoxShape.circle),
-                    ),
-                    const SizedBox(width: 10),
-                    Text(name),
-                  ],
-                ),
-              );
-            }).toList(),
-            onChanged: (v) => setState(() => _selectedColorHex = v!),
-          ),
-          const SizedBox(height: 14),
-
           // Summary/Content Field
           TextFormField(
             controller: _summaryCtrl,
-            style:
-                GoogleFonts.inter(fontSize: 14, color: AppColors.onSurface),
+            style: GoogleFonts.inter(fontSize: 14, color: AppColors.onSurface),
             decoration: _inputDecoration(
                 hint: 'Summary or news message details...',
                 icon: Icons.description_outlined),
             maxLines: 4,
             textCapitalization: TextCapitalization.sentences,
-            validator: (v) => (v == null || v.trim().isEmpty)
-                ? 'Summary content is required'
-                : null,
+            validator: (v) => AuthService.validateText(
+              v,
+              fieldName: 'Summary content',
+              minLength: 10,
+              maxLength: 1000,
+            ),
           ),
           const SizedBox(height: 24),
 
@@ -820,8 +785,7 @@ class _PostNewsScreenState extends State<PostNewsScreen> {
       prefixIcon: Icon(icon, color: AppColors.secondary, size: 18),
       filled: true,
       fillColor: AppColors.surfaceContainerLowest,
-      contentPadding:
-          const EdgeInsets.symmetric(vertical: 14, horizontal: 14),
+      contentPadding: const EdgeInsets.symmetric(vertical: 14, horizontal: 14),
       enabledBorder: OutlineInputBorder(
         borderRadius: BorderRadius.circular(14),
         borderSide:

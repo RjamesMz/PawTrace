@@ -4,6 +4,7 @@ import 'package:flutter/services.dart';
 import 'package:responsive_framework/responsive_framework.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
+import 'core/app_constants.dart';
 import 'core/app_routes.dart';
 import 'widgets/main_app_layout.dart';
 import 'core/app_theme.dart';
@@ -27,6 +28,7 @@ import 'screens/admin/barangay_admin_home_screen.dart';
 import 'screens/admin/admin_reports_screen.dart';
 import 'screens/admin/super_admin_screen.dart';
 import 'screens/admin/post_news_screen.dart';
+import 'screens/admin/admin_settings_screen.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -66,7 +68,7 @@ class PawTraceApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: 'PawTrace',
+      title: AppConstants.appName,
       debugShowCheckedModeBanner: false,
       theme: AppTheme.light,
 
@@ -124,6 +126,7 @@ class PawTraceApp extends StatelessWidget {
         // ─── Admin ────────────────────────────────────────────────────────────
         AppRoutes.myPets: (_) => const MyPetsScreen(),
         AppRoutes.postNews: (_) => const PostNewsScreen(),
+        AppRoutes.adminSettings: (_) => const AdminSettingsScreen(),
       },
 
       // Fallback for unknown routes

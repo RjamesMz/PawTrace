@@ -8,6 +8,7 @@ import '../../core/app_constants.dart';
 import '../../core/app_routes.dart';
 import '../../core/app_toast.dart';
 import '../../widgets/bottom_nav_bar.dart';
+import '../../widgets/change_password_dialog.dart';
 import '../../services/auth_service.dart';
 
 class SettingsScreen extends StatefulWidget {
@@ -29,11 +30,11 @@ class _SettingsScreenState extends State<SettingsScreen> {
   String _surname = '';
   String _suffix = '';
   String _email = '';
-  String _roleText = 'PET OWNER';
+  String _roleText = 'USER';
   String? _photoUrl;
   String? _address;
   String? _barangay;
-  String _userRole = 'owner';
+  String _userRole = 'user';
 
   @override
   void initState() {
@@ -58,12 +59,15 @@ class _SettingsScreenState extends State<SettingsScreen> {
           _address = (profile['address'] as String?)?.trim();
           _barangay = (profile['barangay'] as String?)?.trim() ??
               (profile['baragay'] as String?)?.trim();
-          final String role = profile['role'] ?? 'owner';
+          final String role =
+              (profile['role'] ?? 'user').toString().toLowerCase();
           _userRole = role;
-          if (role == 'admin') {
+          if (role == 'super_admin') {
+            _roleText = 'SUPER ADMIN';
+          } else if (role == 'admin') {
             _roleText = 'ADMIN';
           } else {
-            _roleText = 'PET OWNER';
+            _roleText = 'USER';
           }
           _isLoading = false;
         });
@@ -147,20 +151,45 @@ class _SettingsScreenState extends State<SettingsScreen> {
       final ext = picked.path.split('.').last.toLowerCase();
       final storagePath = 'avatars/$uid.$ext';
 
-      // Upload to Supabase Storage (upsert so re-uploads work)
-      await Supabase.instance.client.storage
-          .from('user-photos')
-          .upload(storagePath, file,
-              fileOptions:
-                  const FileOptions(upsert: true, contentType: 'image/jpeg'));
+      String? uploadedPublicUrl;
+      dynamic lastError;
 
-      final publicUrl = Supabase.instance.client.storage
-          .from('user-photos')
-          .getPublicUrl(storagePath);
+      const candidateBuckets = [
+        'avatars',
+        'user-photos',
+        'avatar',
+        'pet-photos'
+      ];
+      for (final bucket in candidateBuckets) {
+        try {
+          await Supabase.instance.client.storage.from(bucket).upload(
+                storagePath,
+                file,
+                fileOptions:
+                    const FileOptions(upsert: true, contentType: 'image/jpeg'),
+              );
+          uploadedPublicUrl = Supabase.instance.client.storage
+              .from(bucket)
+              .getPublicUrl(storagePath);
+          break;
+        } catch (err) {
+          lastError = err;
+          if (err.toString().toLowerCase().contains('bucket not found')) {
+            continue;
+          }
+          rethrow;
+        }
+      }
+
+      if (uploadedPublicUrl == null) {
+        throw lastError ??
+            Exception('No storage bucket found for profile photos.');
+      }
+
+      final publicUrl = uploadedPublicUrl;
 
       // Cache-bust the URL so the widget re-fetches the new image
-      final bustUrl =
-          '$publicUrl?t=${DateTime.now().millisecondsSinceEpoch}';
+      final bustUrl = '$publicUrl?t=${DateTime.now().millisecondsSinceEpoch}';
 
       await Supabase.instance.client
           .from('users')
@@ -171,7 +200,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
       AppToast.success(context, 'Profile photo updated!');
     } catch (e) {
       if (!mounted) return;
-      AppToast.error(context, 'Failed to upload photo: $e');
+      AppToast.error(
+          context, AppErrors.format(e, fallback: 'Failed to upload photo.'));
     } finally {
       if (mounted) setState(() => _isUploadingPhoto = false);
     }
@@ -257,19 +287,32 @@ class _SettingsScreenState extends State<SettingsScreen> {
                           borderRadius: BorderRadius.circular(14)),
                     ),
                     child: Text('Cancel',
-                        style: GoogleFonts.inter(
-                            fontWeight: FontWeight.w600)),
+                        style: GoogleFonts.inter(fontWeight: FontWeight.w600)),
                   ),
                 ),
                 const SizedBox(width: 12),
                 Expanded(
                   child: ElevatedButton(
                     onPressed: () {
-                      if (firstCtrl.text.trim().isEmpty ||
-                          surnameCtrl.text.trim().isEmpty) {
-                        setDlg(() => errorText =
-                            'First name and surname are required.');
+                      final fnErr = AuthService.validateName(firstCtrl.text,
+                          fieldName: 'First name');
+                      if (fnErr != null) {
+                        setDlg(() => errorText = fnErr);
                         return;
+                      }
+                      final snErr = AuthService.validateName(surnameCtrl.text,
+                          fieldName: 'Surname');
+                      if (snErr != null) {
+                        setDlg(() => errorText = snErr);
+                        return;
+                      }
+                      if (middleCtrl.text.trim().isNotEmpty) {
+                        final mnErr = AuthService.validateName(middleCtrl.text,
+                            fieldName: 'Middle name', isRequired: false);
+                        if (mnErr != null) {
+                          setDlg(() => errorText = mnErr);
+                          return;
+                        }
                       }
                       Navigator.pop(ctx, true);
                     },
@@ -282,8 +325,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                           borderRadius: BorderRadius.circular(14)),
                     ),
                     child: Text('Save',
-                        style: GoogleFonts.inter(
-                            fontWeight: FontWeight.w700)),
+                        style: GoogleFonts.inter(fontWeight: FontWeight.w700)),
                   ),
                 ),
               ],
@@ -317,203 +359,26 @@ class _SettingsScreenState extends State<SettingsScreen> {
         _middleName = mn;
         _surname = sn;
         _suffix = sfx;
-        _displayName =
-            [fn, mn, sn, sfx].where((s) => s.isNotEmpty).join(' ');
+        _displayName = [fn, mn, sn, sfx].where((s) => s.isNotEmpty).join(' ');
       });
       AppToast.success(context, 'Profile updated successfully!');
     } catch (e) {
       if (!mounted) return;
-      AppToast.error(context, 'Failed to update profile: $e');
+      AppToast.error(
+          context, AppErrors.format(e, fallback: 'Failed to update profile.'));
     }
   }
 
   // ── Change Password ──────────────────────────────────────────────────────
   Future<void> _showChangePasswordDialog() async {
-    final newCtrl = TextEditingController();
-    final confirmCtrl = TextEditingController();
-    bool obscureNew = true;
-    bool obscureConfirm = true;
-    String? errorText;
-
-    final saved = await showDialog<bool>(
-      context: context,
-      builder: (ctx) => StatefulBuilder(
-        builder: (ctx, setDlg) => AlertDialog(
-          shape:
-              RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
-          title: Row(
-            children: [
-              Container(
-                padding: const EdgeInsets.all(10),
-                decoration: BoxDecoration(
-                  color: AppColors.primary.withOpacity(0.12),
-                  shape: BoxShape.circle,
-                ),
-                child: const Icon(Icons.lock_rounded,
-                    color: AppColors.primary, size: 22),
-              ),
-              const SizedBox(width: 14),
-              Text('Change Password',
-                  style: GoogleFonts.montserrat(
-                      fontWeight: FontWeight.w800, fontSize: 18)),
-            ],
-          ),
-          content: SingleChildScrollView(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                TextField(
-                  controller: newCtrl,
-                  obscureText: obscureNew,
-                  style: GoogleFonts.inter(fontSize: 14),
-                  decoration: InputDecoration(
-                    labelText: 'New Password',
-                    helperText: 'At least 8 characters with letters & numbers',
-                    prefixIcon:
-                        const Icon(Icons.lock_outline_rounded, size: 20),
-                    suffixIcon: IconButton(
-                      icon: Icon(obscureNew
-                          ? Icons.visibility_off_outlined
-                          : Icons.visibility_outlined,
-                          size: 20),
-                      onPressed: () => setDlg(() => obscureNew = !obscureNew),
-                    ),
-                    filled: true,
-                    fillColor: AppColors.surfaceContainerLow,
-                    border: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(14),
-                        borderSide: BorderSide.none),
-                    enabledBorder: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(14),
-                        borderSide: BorderSide(
-                            color:
-                                AppColors.outlineVariant.withOpacity(0.3))),
-                    focusedBorder: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(14),
-                        borderSide: const BorderSide(
-                            color: AppColors.primary, width: 1.5)),
-                  ),
-                  onChanged: (_) {
-                    if (errorText != null) setDlg(() => errorText = null);
-                  },
-                ),
-                const SizedBox(height: 12),
-                TextField(
-                  controller: confirmCtrl,
-                  obscureText: obscureConfirm,
-                  style: GoogleFonts.inter(fontSize: 14),
-                  decoration: InputDecoration(
-                    labelText: 'Confirm New Password',
-                    prefixIcon:
-                        const Icon(Icons.lock_outline_rounded, size: 20),
-                    suffixIcon: IconButton(
-                      icon: Icon(obscureConfirm
-                          ? Icons.visibility_off_outlined
-                          : Icons.visibility_outlined,
-                          size: 20),
-                      onPressed: () =>
-                          setDlg(() => obscureConfirm = !obscureConfirm),
-                    ),
-                    filled: true,
-                    fillColor: AppColors.surfaceContainerLow,
-                    border: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(14),
-                        borderSide: BorderSide.none),
-                    enabledBorder: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(14),
-                        borderSide: BorderSide(
-                            color:
-                                AppColors.outlineVariant.withOpacity(0.3))),
-                    focusedBorder: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(14),
-                        borderSide: const BorderSide(
-                            color: AppColors.primary, width: 1.5)),
-                  ),
-                  onChanged: (_) {
-                    if (errorText != null) setDlg(() => errorText = null);
-                  },
-                ),
-                if (errorText != null) ...[
-                  const SizedBox(height: 10),
-                  Row(
-                    children: [
-                      const Icon(Icons.error_outline,
-                          size: 15, color: AppColors.error),
-                      const SizedBox(width: 6),
-                      Expanded(
-                          child: Text(errorText!,
-                              style: GoogleFonts.inter(
-                                  fontSize: 12, color: AppColors.error))),
-                    ],
-                  ),
-                ],
-              ],
-            ),
-          ),
-          actionsPadding: const EdgeInsets.fromLTRB(20, 0, 20, 20),
-          actions: [
-            Row(
-              children: [
-                Expanded(
-                  child: OutlinedButton(
-                    onPressed: () => Navigator.pop(ctx, false),
-                    style: OutlinedButton.styleFrom(
-                      padding: const EdgeInsets.symmetric(vertical: 14),
-                      shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(14)),
-                    ),
-                    child: Text('Cancel',
-                        style: GoogleFonts.inter(
-                            fontWeight: FontWeight.w600)),
-                  ),
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: ElevatedButton(
-                    onPressed: () {
-                      final pw = newCtrl.text;
-                      final pwError = AuthService.validatePassword(pw);
-                      if (pwError != null) {
-                        setDlg(() => errorText = pwError);
-                        return;
-                      }
-                      if (pw != confirmCtrl.text) {
-                        setDlg(() => errorText = 'Passwords do not match.');
-                        return;
-                      }
-                      Navigator.pop(ctx, true);
-                    },
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: AppColors.primary,
-                      foregroundColor: Colors.white,
-                      elevation: 0,
-                      padding: const EdgeInsets.symmetric(vertical: 14),
-                      shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(14)),
-                    ),
-                    child: Text('Update',
-                        style: GoogleFonts.inter(
-                            fontWeight: FontWeight.w700)),
-                  ),
-                ),
-              ],
-            ),
-          ],
-        ),
-      ),
-    );
-
-    if (saved != true || !mounted) return;
-
-    try {
-      await Supabase.instance.client.auth
-          .updateUser(UserAttributes(password: newCtrl.text));
-      if (!mounted) return;
-      AppToast.success(context, 'Password changed successfully!');
-    } catch (e) {
-      if (!mounted) return;
-      AppToast.error(context, 'Failed to change password: $e');
+    final email = _email.trim().isNotEmpty
+        ? _email.trim()
+        : (Supabase.instance.client.auth.currentUser?.email ?? '');
+    if (email.isEmpty) {
+      AppToast.error(context, 'Unable to identify email for password reset.');
+      return;
     }
+    await ChangePasswordDialog.show(context, email: email);
   }
 
   // ── Shared dialog text field helper ─────────────────────────────────────
@@ -537,12 +402,11 @@ class _SettingsScreenState extends State<SettingsScreen> {
             borderSide: BorderSide.none),
         enabledBorder: OutlineInputBorder(
             borderRadius: BorderRadius.circular(14),
-            borderSide: BorderSide(
-                color: AppColors.outlineVariant.withOpacity(0.3))),
+            borderSide:
+                BorderSide(color: AppColors.outlineVariant.withOpacity(0.3))),
         focusedBorder: OutlineInputBorder(
             borderRadius: BorderRadius.circular(14),
-            borderSide:
-                const BorderSide(color: AppColors.primary, width: 1.5)),
+            borderSide: const BorderSide(color: AppColors.primary, width: 1.5)),
       ),
       onChanged: onChanged,
     );
@@ -559,7 +423,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
               fontWeight: FontWeight.bold, color: AppColors.onSurface),
         ),
         content: Text(
-          'Are you sure you want to sign out of PawTrace?',
+          'Are you sure you want to sign out of PetTrace?',
           style: GoogleFonts.inter(color: AppColors.onSurfaceVariant),
         ),
         actions: [
@@ -617,8 +481,12 @@ class _SettingsScreenState extends State<SettingsScreen> {
       builder: (ctx) {
         return StatefulBuilder(
           builder: (ctx, setDialogState) => AlertDialog(
-            shape:
-                RoundedRectangleBorder(borderRadius: BorderRadius.circular(28)),
+            backgroundColor: Colors.white,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(20),
+            ),
+            titlePadding: const EdgeInsets.fromLTRB(20, 20, 20, 12),
+            contentPadding: const EdgeInsets.symmetric(horizontal: 20),
             title: Row(
               children: [
                 Container(
@@ -628,29 +496,17 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     shape: BoxShape.circle,
                   ),
                   child: const Icon(Icons.location_on_rounded,
-                      color: AppColors.primary, size: 24),
+                      color: AppColors.primary, size: 22),
                 ),
-                const SizedBox(width: 14),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        'Update Address',
-                        style: GoogleFonts.montserrat(
-                            fontWeight: FontWeight.w800,
-                            fontSize: 18,
-                            color: AppColors.onSurface),
-                      ),
-                      const SizedBox(height: 2),
-                      Text(
-                        'Calatagan Prototype',
-                        style: GoogleFonts.inter(
-                            fontSize: 11,
-                            fontWeight: FontWeight.w600,
-                            color: AppColors.onSurfaceVariant.withOpacity(0.7)),
-                      ),
-                    ],
+                const SizedBox(width: 12),
+                Text(
+                  (_address == null || _address!.trim().isEmpty)
+                      ? 'Add Address'
+                      : 'Update Address',
+                  style: GoogleFonts.montserrat(
+                    fontWeight: FontWeight.w700,
+                    fontSize: 18,
+                    color: AppColors.onSurface,
                   ),
                 ),
               ],
@@ -660,38 +516,34 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 mainAxisSize: MainAxisSize.min,
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(
-                    'Ensure your address and barangay details are correct to receive notifications about lost pets nearby.',
-                    style: GoogleFonts.inter(
-                        fontSize: 13,
-                        color: AppColors.onSurfaceVariant,
-                        height: 1.4),
-                  ),
-                  const SizedBox(height: 18),
+                  const SizedBox(height: 6),
                   TextField(
                     controller: addressCtrl,
+                    maxLength: 120,
                     textCapitalization: TextCapitalization.words,
                     style: GoogleFonts.inter(fontSize: 14),
                     decoration: InputDecoration(
-                      labelText: 'House Number / Street',
+                      labelText: 'House No. / Street',
                       hintText: 'e.g. 123 Rizal St.',
                       prefixIcon: const Icon(Icons.home_outlined, size: 20),
                       filled: true,
                       fillColor: AppColors.surfaceContainerLow,
                       border: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(16),
-                        borderSide: BorderSide(
-                            color: AppColors.outlineVariant.withOpacity(0.3)),
+                        borderRadius: BorderRadius.circular(14),
+                        borderSide: BorderSide.none,
                       ),
                       enabledBorder: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(16),
+                        borderRadius: BorderRadius.circular(14),
                         borderSide: BorderSide(
-                            color: AppColors.outlineVariant.withOpacity(0.3)),
+                          color: AppColors.outlineVariant.withOpacity(0.3),
+                        ),
                       ),
                       focusedBorder: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(16),
+                        borderRadius: BorderRadius.circular(14),
                         borderSide: const BorderSide(
-                            color: AppColors.primary, width: 1.5),
+                          color: AppColors.primary,
+                          width: 1.5,
+                        ),
                       ),
                     ),
                     onChanged: (_) {
@@ -700,81 +552,87 @@ class _SettingsScreenState extends State<SettingsScreen> {
                       }
                     },
                   ),
-                  const SizedBox(height: 14),
-                   DropdownButtonFormField<String>(
+                  const SizedBox(height: 12),
+                  DropdownButtonFormField<String>(
                     isExpanded: true,
                     value: selectedBarangay,
                     style: GoogleFonts.inter(
-                        fontSize: 14, color: AppColors.onSurface),
+                      fontSize: 14,
+                      color: AppColors.onSurface,
+                    ),
                     items: AppConstants.barangays
                         .map((b) => DropdownMenuItem(
-                            value: b,
-                            child: Text(b,
+                              value: b,
+                              child: Text(
+                                b,
                                 style: GoogleFonts.inter(fontSize: 14),
-                                overflow: TextOverflow.ellipsis)))
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            ))
                         .toList(),
                     onChanged: _userRole == 'admin'
                         ? null
                         : (v) {
-                            setDialogState(() {
-                              selectedBarangay = v!;
-                              if (errorText != null) errorText = null;
-                            });
+                            if (v != null) {
+                              setDialogState(() {
+                                selectedBarangay = v;
+                                if (errorText != null) errorText = null;
+                              });
+                            }
                           },
                     decoration: InputDecoration(
                       labelText: 'Barangay',
                       helperText: _userRole == 'admin'
-                          ? 'Assigned official barangay (read-only)'
-                          : null,
-                      helperStyle: _userRole == 'admin'
-                          ? GoogleFonts.inter(
-                              color: AppColors.primary,
-                              fontWeight: FontWeight.w600)
+                          ? 'Assigned official barangay'
                           : null,
                       prefixIcon:
                           const Icon(Icons.location_city_outlined, size: 20),
                       filled: true,
                       fillColor: AppColors.surfaceContainerLow,
                       border: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(16),
-                        borderSide: BorderSide(
-                            color: AppColors.outlineVariant.withOpacity(0.3)),
+                        borderRadius: BorderRadius.circular(14),
+                        borderSide: BorderSide.none,
                       ),
                       enabledBorder: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(16),
+                        borderRadius: BorderRadius.circular(14),
                         borderSide: BorderSide(
-                            color: AppColors.outlineVariant.withOpacity(0.3)),
+                          color: AppColors.outlineVariant.withOpacity(0.3),
+                        ),
                       ),
                       focusedBorder: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(16),
+                        borderRadius: BorderRadius.circular(14),
                         borderSide: const BorderSide(
-                            color: AppColors.primary, width: 1.5),
+                          color: AppColors.primary,
+                          width: 1.5,
+                        ),
                       ),
                     ),
                   ),
                   if (errorText != null) ...[
-                    const SizedBox(height: 12),
+                    const SizedBox(height: 10),
                     Row(
                       children: [
                         const Icon(Icons.error_outline_rounded,
-                            size: 16, color: AppColors.error),
+                            size: 15, color: AppColors.error),
                         const SizedBox(width: 6),
                         Expanded(
                           child: Text(
                             errorText!,
                             style: GoogleFonts.inter(
-                                fontSize: 12,
-                                color: AppColors.error,
-                                fontWeight: FontWeight.w600),
+                              fontSize: 12,
+                              color: AppColors.error,
+                              fontWeight: FontWeight.w500,
+                            ),
                           ),
                         ),
                       ],
                     ),
                   ],
+                  const SizedBox(height: 6),
                 ],
               ),
             ),
-            actionsPadding: const EdgeInsets.fromLTRB(24, 0, 24, 24),
+            actionsPadding: const EdgeInsets.fromLTRB(20, 12, 20, 20),
             actions: [
               Row(
                 children: [
@@ -782,16 +640,19 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     child: OutlinedButton(
                       onPressed: () => Navigator.pop(ctx, false),
                       style: OutlinedButton.styleFrom(
-                        padding: const EdgeInsets.symmetric(vertical: 14),
+                        padding: const EdgeInsets.symmetric(vertical: 13),
                         shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(16)),
+                          borderRadius: BorderRadius.circular(14),
+                        ),
                         side: BorderSide(
-                            color: AppColors.outlineVariant.withOpacity(0.5)),
+                          color: AppColors.outlineVariant.withOpacity(0.5),
+                        ),
                         foregroundColor: AppColors.onSurfaceVariant,
                       ),
-                      child: Text('Cancel',
-                          style:
-                              GoogleFonts.inter(fontWeight: FontWeight.w600)),
+                      child: Text(
+                        'Cancel',
+                        style: GoogleFonts.inter(fontWeight: FontWeight.w600),
+                      ),
                     ),
                   ),
                   const SizedBox(width: 12),
@@ -799,9 +660,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     child: ElevatedButton(
                       onPressed: () {
                         final addr = addressCtrl.text.trim();
-                        if (addr.isEmpty) {
-                          setDialogState(() => errorText =
-                              'Please provide street/house details.');
+                        final validationErr =
+                            AuthService.validateAddress(addr);
+                        if (validationErr != null) {
+                          setDialogState(() => errorText = validationErr);
                           return;
                         }
                         Navigator.pop(ctx, true);
@@ -809,14 +671,16 @@ class _SettingsScreenState extends State<SettingsScreen> {
                       style: ElevatedButton.styleFrom(
                         backgroundColor: AppColors.primary,
                         foregroundColor: Colors.white,
-                        elevation: 2,
-                        padding: const EdgeInsets.symmetric(vertical: 14),
+                        elevation: 0,
+                        padding: const EdgeInsets.symmetric(vertical: 13),
                         shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(16)),
+                          borderRadius: BorderRadius.circular(14),
+                        ),
                       ),
-                      child: Text('Save',
-                          style:
-                              GoogleFonts.inter(fontWeight: FontWeight.w700)),
+                      child: Text(
+                        'Save',
+                        style: GoogleFonts.inter(fontWeight: FontWeight.w700),
+                      ),
                     ),
                   ),
                 ],
@@ -832,7 +696,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
     final uid = Supabase.instance.client.auth.currentUser?.id;
     if (uid == null) {
       if (!mounted) return;
-      AppToast.error(context, 'Unable to update address. Please sign in again.');
+      AppToast.error(
+          context, 'Unable to update address. Please sign in again.');
       return;
     }
 
@@ -857,7 +722,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
       AppToast.success(context, 'Address updated successfully.');
     } catch (e) {
       if (!mounted) return;
-      AppToast.error(context, 'Failed to update address: $e');
+      AppToast.error(
+          context, AppErrors.format(e, fallback: 'Failed to update address.'));
     } finally {
       if (mounted) setState(() => _isSavingAddress = false);
     }
@@ -898,7 +764,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
           ],
         ),
       ),
-      bottomNavigationBar: widget.showBottomNav ? const BottomNavBar(currentIndex: 4) : null,
+      bottomNavigationBar:
+          widget.showBottomNav ? const BottomNavBar(currentIndex: 4) : null,
     );
   }
 
@@ -933,7 +800,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
               ),
             ],
           ),
-
         ],
       ),
     );
@@ -1062,7 +928,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
     );
   }
 
-
   Widget _buildSettingsCard() {
     return Container(
       decoration: BoxDecoration(
@@ -1107,11 +972,15 @@ class _SettingsScreenState extends State<SettingsScreen> {
           _buildDivider(),
           _buildSettingsTile(
             icon: Icons.location_on_outlined,
-            title: _isSavingAddress ? 'Saving address...' : 'Add Address',
+            title: _isSavingAddress
+                ? 'Saving address...'
+                : ((_address == null || _address!.trim().isEmpty)
+                    ? 'Add Address'
+                    : 'Address'),
             subtitle: _addressSummary(),
             onTap: _isSavingAddress ? () {} : _showAddAddressDialog,
           ),
-          if (_roleText == 'PET OWNER') ...[
+          if (_roleText == 'USER' || _userRole != 'admin') ...[
             _buildDivider(),
             _buildSettingsTile(
               icon: Icons.pets_outlined,
@@ -1302,7 +1171,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
   Widget _buildVersionLabel() {
     return Center(
       child: Text(
-        'PawTrace v2.4.0 (Build 892)',
+        'PetTrace v2.4.0 (Build 892)',
         style: GoogleFonts.inter(
           fontSize: 13,
           fontStyle: FontStyle.italic,

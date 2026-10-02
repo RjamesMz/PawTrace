@@ -9,6 +9,7 @@ import '../../core/app_colors.dart';
 import '../../core/app_toast.dart';
 import '../../core/navigation_helpers.dart';
 import '../../services/alert_service.dart';
+import '../../services/auth_service.dart';
 
 /// Report Lost Pet screen – form for reporting a pet as missing.
 class ReportLostPetScreen extends StatefulWidget {
@@ -119,8 +120,20 @@ class _ReportLostPetScreenState extends State<ReportLostPetScreen> {
     final pet = _pet;
     if (pet == null) return;
 
-    if (_descCtrl.text.trim().isEmpty) {
-      AppToast.error(context, 'Please enter a last seen description.');
+    final descErr = AuthService.validateText(
+      _descCtrl.text,
+      fieldName: 'Last seen description',
+      minLength: 5,
+      maxLength: 500,
+    );
+    if (descErr != null) {
+      AppToast.error(context, descErr);
+      return;
+    }
+
+    final colorVal = _colorCtrl.text.trim();
+    if (colorVal.isNotEmpty && colorVal.length > 50) {
+      AppToast.error(context, 'Color description cannot exceed 50 characters.');
       return;
     }
 

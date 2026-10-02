@@ -124,11 +124,12 @@ class _SuperAdminScreenState extends State<SuperAdminScreen> {
             .from('pets')
             .select('pet_id')
             .count(CountOption.exact),
-        // Total Users (owners + finders)
+        // Total Users
         _supabase
             .from('users')
             .select('user_id')
-            .inFilter('role', ['owner', 'finder'])
+            .neq('role', 'admin')
+            .neq('role', 'super_admin')
             .count(CountOption.exact),
         // Active Lost Reports
         _supabase
@@ -271,15 +272,21 @@ class _SuperAdminScreenState extends State<SuperAdminScreen> {
     }
   }
 
-  Future<void> _deleteAdmin(String userId, String email) async {
+  Future<void> _toggleAdminStatus(
+      String userId, String email, bool isDeactivated) async {
+    final actionTitle = isDeactivated ? 'Reactivate Admin' : 'Deactivate Admin';
+    final targetStatus = isDeactivated ? 'active' : 'deactivated';
+
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-        title: Text('Delete Admin?',
+        title: Text('$actionTitle?',
             style: GoogleFonts.montserrat(fontWeight: FontWeight.bold)),
         content: Text(
-            'Are you sure you want to remove the admin account for $email? This action is permanent.',
+            isDeactivated
+                ? 'Are you sure you want to reactivate the admin account for $email?'
+                : 'Are you sure you want to deactivate the admin account for $email? The account will be marked as deactivated, but no data will be deleted.',
             style: GoogleFonts.inter(fontSize: 14)),
         actions: [
           TextButton(
@@ -290,12 +297,13 @@ class _SuperAdminScreenState extends State<SuperAdminScreen> {
           ElevatedButton(
             onPressed: () => Navigator.pop(ctx, true),
             style: ElevatedButton.styleFrom(
-              backgroundColor: AppColors.error,
+              backgroundColor:
+                  isDeactivated ? const Color(0xFF16A34A) : AppColors.error,
               foregroundColor: Colors.white,
               shape: RoundedRectangleBorder(
                   borderRadius: BorderRadius.circular(12)),
             ),
-            child: Text('Delete',
+            child: Text(actionTitle,
                 style: GoogleFonts.inter(fontWeight: FontWeight.bold)),
           ),
         ],
@@ -305,14 +313,18 @@ class _SuperAdminScreenState extends State<SuperAdminScreen> {
     if (confirmed != true) return;
 
     try {
-      await _supabase.from('users').delete().eq('user_id', userId);
+      await _supabase
+          .from('users')
+          .update({'status': targetStatus})
+          .eq('user_id', userId);
       if (mounted) {
-        AppToast.success(context, 'Admin account removed successfully.');
+        AppToast.success(
+            context, 'Admin account has been $targetStatus successfully.');
         _loadDashboard();
       }
     } catch (e) {
       if (mounted) {
-        AppToast.error(context, 'Failed to delete admin: $e');
+        AppToast.error(context, 'Failed to update admin status: $e');
       }
     }
   }
@@ -789,9 +801,11 @@ class _SuperAdminScreenState extends State<SuperAdminScreen> {
             DataColumn(label: Text('Email')),
             DataColumn(label: Text('Phone')),
             DataColumn(label: Text('Assigned Barangay')),
+            DataColumn(label: Text('Status')),
             DataColumn(label: Text('Actions')),
           ],
-          source: _AdminsDataTableSource(_admins, onDelete: _deleteAdmin),
+          source: _AdminsDataTableSource(_admins,
+              onToggleStatus: _toggleAdminStatus),
         ),
       ),
     );
@@ -1186,6 +1200,7 @@ class _SuperAdminScreenState extends State<SuperAdminScreen> {
             DataColumn(label: Text('Email')),
             DataColumn(label: Text('Phone')),
             DataColumn(label: Text('Barangay')),
+            DataColumn(label: Text('Status')),
             DataColumn(label: Text('Actions')),
           ],
           rows: _admins.map((admin) {
@@ -1196,6 +1211,10 @@ class _SuperAdminScreenState extends State<SuperAdminScreen> {
             final barangay = admin['barangay'] as String? ?? '';
             final userId = admin['user_id'] as String? ?? '';
             final initial = fName.isNotEmpty ? fName[0].toUpperCase() : 'A';
+            final rawStatus =
+                (admin['status'] ?? 'active').toString().toLowerCase();
+            final isDeactivated =
+                rawStatus == 'deactivated' || rawStatus == 'de_activated';
 
             return DataRow(
               cells: [
@@ -1246,11 +1265,42 @@ class _SuperAdminScreenState extends State<SuperAdminScreen> {
                       : const Text('-'),
                 ),
                 DataCell(
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 8, vertical: 3),
+                    decoration: BoxDecoration(
+                      color: isDeactivated
+                          ? const Color(0xFFEF4444).withOpacity(0.15)
+                          : const Color(0xFF22C55E).withOpacity(0.15),
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: Text(
+                      isDeactivated ? 'DEACTIVATED' : 'ACTIVE',
+                      style: GoogleFonts.inter(
+                        fontSize: 10,
+                        fontWeight: FontWeight.bold,
+                        color: isDeactivated
+                            ? const Color(0xFFDC2626)
+                            : const Color(0xFF16A34A),
+                      ),
+                    ),
+                  ),
+                ),
+                DataCell(
                   IconButton(
-                    tooltip: 'Remove Admin',
-                    icon: const Icon(Icons.delete_outline,
-                        color: AppColors.error, size: 20),
-                    onPressed: () => _deleteAdmin(userId, email),
+                    tooltip:
+                        isDeactivated ? 'Reactivate Admin' : 'Deactivate Admin',
+                    icon: Icon(
+                      isDeactivated
+                          ? Icons.check_circle_outline_rounded
+                          : Icons.block_rounded,
+                      color: isDeactivated
+                          ? const Color(0xFF16A34A)
+                          : const Color(0xFFDC2626),
+                      size: 20,
+                    ),
+                    onPressed: () =>
+                        _toggleAdminStatus(userId, email, isDeactivated),
                   ),
                 ),
               ],
@@ -1269,6 +1319,10 @@ class _SuperAdminScreenState extends State<SuperAdminScreen> {
     final barangay = admin['barangay'] as String? ?? '';
     final userId = admin['user_id'] as String? ?? '';
     final initial = fName.isNotEmpty ? fName[0].toUpperCase() : 'A';
+    final rawStatus =
+        (admin['status'] ?? 'active').toString().toLowerCase();
+    final isDeactivated =
+        rawStatus == 'deactivated' || rawStatus == 'de_activated';
 
     return Container(
       margin: const EdgeInsets.only(bottom: 8),
@@ -1355,10 +1409,17 @@ class _SuperAdminScreenState extends State<SuperAdminScreen> {
               ),
             ),
           IconButton(
-            tooltip: 'Remove Admin',
-            icon: const Icon(Icons.delete_outline,
-                color: AppColors.error, size: 20),
-            onPressed: () => _deleteAdmin(userId, email),
+            tooltip: isDeactivated ? 'Reactivate Admin' : 'Deactivate Admin',
+            icon: Icon(
+              isDeactivated
+                  ? Icons.check_circle_outline_rounded
+                  : Icons.block_rounded,
+              color: isDeactivated
+                  ? const Color(0xFF16A34A)
+                  : const Color(0xFFDC2626),
+              size: 20,
+            ),
+            onPressed: () => _toggleAdminStatus(userId, email, isDeactivated),
           ),
         ],
       ),
@@ -1646,7 +1707,7 @@ class _SuperAdminScreenState extends State<SuperAdminScreen> {
                           borderRadius: BorderRadius.circular(14)),
                     ),
                     validator: (v) =>
-                        v == null || v.trim().isEmpty ? 'Required' : null,
+                        AuthService.validateName(v, fieldName: 'First Name'),
                   ),
                   const SizedBox(height: 12),
                   TextFormField(
@@ -1659,7 +1720,7 @@ class _SuperAdminScreenState extends State<SuperAdminScreen> {
                           borderRadius: BorderRadius.circular(14)),
                     ),
                     validator: (v) =>
-                        v == null || v.trim().isEmpty ? 'Required' : null,
+                        AuthService.validateName(v, fieldName: 'Surname'),
                   ),
                   const SizedBox(height: 12),
                   TextFormField(
@@ -1671,8 +1732,7 @@ class _SuperAdminScreenState extends State<SuperAdminScreen> {
                       border: OutlineInputBorder(
                           borderRadius: BorderRadius.circular(14)),
                     ),
-                    validator: (v) =>
-                        v == null || v.trim().isEmpty ? 'Required' : null,
+                    validator: AuthService.validateEmail,
                   ),
                   const SizedBox(height: 12),
                   TextFormField(
@@ -1684,6 +1744,9 @@ class _SuperAdminScreenState extends State<SuperAdminScreen> {
                       border: OutlineInputBorder(
                           borderRadius: BorderRadius.circular(14)),
                     ),
+                    validator: (v) => v != null && v.trim().isNotEmpty
+                        ? AuthService.validatePhone(v, isRequired: false)
+                        : null,
                   ),
                   const SizedBox(height: 12),
                   TextFormField(
@@ -1848,9 +1911,9 @@ class _RecentReportsDataTableSource extends DataTableSource {
 /// DataTableSource for Barangay Admins in SuperAdmin web dashboard.
 class _AdminsDataTableSource extends DataTableSource {
   final List<Map<String, dynamic>> admins;
-  final Function(String userId, String email) onDelete;
+  final Function(String userId, String email, bool isDeactivated) onToggleStatus;
 
-  _AdminsDataTableSource(this.admins, {required this.onDelete});
+  _AdminsDataTableSource(this.admins, {required this.onToggleStatus});
 
   @override
   DataRow? getRow(int index) {
@@ -1864,6 +1927,9 @@ class _AdminsDataTableSource extends DataTableSource {
     final barangay = admin['barangay'] as String? ?? '';
     final userId = admin['user_id'] as String? ?? '';
     final initial = fName.isNotEmpty ? fName[0].toUpperCase() : 'A';
+    final rawStatus = (admin['status'] ?? 'active').toString().toLowerCase();
+    final isDeactivated =
+        rawStatus == 'deactivated' || rawStatus == 'de_activated';
 
     return DataRow.byIndex(
       index: index,
@@ -1905,12 +1971,42 @@ class _AdminsDataTableSource extends DataTableSource {
             ),
           ),
         ),
+        // Status Column
+        DataCell(
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+            decoration: BoxDecoration(
+              color: isDeactivated
+                  ? const Color(0xFFEF4444).withOpacity(0.15)
+                  : const Color(0xFF22C55E).withOpacity(0.15),
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: Text(
+              isDeactivated ? 'DEACTIVATED' : 'ACTIVE',
+              style: GoogleFonts.inter(
+                fontSize: 10,
+                fontWeight: FontWeight.bold,
+                color: isDeactivated
+                    ? const Color(0xFFDC2626)
+                    : const Color(0xFF16A34A),
+              ),
+            ),
+          ),
+        ),
+        // Actions Column
         DataCell(
           IconButton(
-            tooltip: 'Remove Admin',
-            icon: const Icon(Icons.delete_outline,
-                color: AppColors.error, size: 20),
-            onPressed: () => onDelete(userId, email),
+            tooltip: isDeactivated ? 'Reactivate Admin' : 'Deactivate Admin',
+            icon: Icon(
+              isDeactivated
+                  ? Icons.check_circle_outline_rounded
+                  : Icons.block_rounded,
+              color: isDeactivated
+                  ? const Color(0xFF16A34A)
+                  : const Color(0xFFDC2626),
+              size: 20,
+            ),
+            onPressed: () => onToggleStatus(userId, email, isDeactivated),
           ),
         ),
       ],

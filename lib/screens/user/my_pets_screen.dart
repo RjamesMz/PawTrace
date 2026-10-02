@@ -145,7 +145,7 @@ class _MyPetsScreenState extends State<MyPetsScreen> {
                                 fontWeight: FontWeight.w700,
                                 color: Colors.white)),
                         const SizedBox(height: 2),
-                        Text('Register your pet to PawTrace',
+                        Text('Register your pet to PetTrace',
                             style: GoogleFonts.inter(
                                 fontSize: 12,
                                 color: Colors.white.withOpacity(0.85))),

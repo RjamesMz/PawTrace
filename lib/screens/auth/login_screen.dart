@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../core/app_colors.dart';
+import '../../core/app_constants.dart';
 import '../../core/app_routes.dart';
 import '../../core/app_toast.dart';
 import '../../services/auth_service.dart';
@@ -285,21 +286,16 @@ class _LoginScreenState extends State<LoginScreen> {
   Widget _buildBrandHeader() {
     return Column(
       children: [
-        Container(
-          width: 64,
-          height: 64,
-          decoration: const BoxDecoration(
-            color: AppColors.primary,
-            shape: BoxShape.circle,
-          ),
-          child: const Icon(Icons.pets, color: Colors.white, size: 34),
+        AppConstants.buildLogoBadge(
+          size: 64,
+          iconSize: 34,
         ),
         const SizedBox(height: 10),
         Row(
           mainAxisSize: MainAxisSize.min,
           children: [
             Text(
-              'PawTrace',
+              AppConstants.appName,
               style: GoogleFonts.montserrat(
                 fontSize: 24,
                 fontWeight: FontWeight.w800,
@@ -407,7 +403,7 @@ class _LoginScreenState extends State<LoginScreen> {
         ),
         const SizedBox(height: 14),
         Text(
-          '© 2024 PawTrace Inc. Community-driven pet protection.',
+          '© 2024 PetTrace Inc. Community-driven pet protection.',
           style: GoogleFonts.inter(
             fontSize: 11,
             color: AppColors.secondary.withOpacity(0.5),

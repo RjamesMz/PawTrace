@@ -67,9 +67,9 @@ class _BottomNavBarState extends State<BottomNavBar> {
         label: 'Users',
         route: AppRoutes.userManagement),
     _NavItem(
-        icon: Icons.person_rounded,
-        label: 'Account',
-        route: AppRoutes.settings),
+        icon: Icons.settings_rounded,
+        label: 'Settings',
+        route: AppRoutes.adminSettings),
   ];
 
   @override

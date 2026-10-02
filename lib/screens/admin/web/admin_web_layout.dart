@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../../core/app_colors.dart';
+import '../../../core/app_constants.dart';
 import '../../../core/app_routes.dart';
 import '../../../services/auth_service.dart';
 import '../../../widgets/notification_bell_button.dart';
@@ -63,8 +64,18 @@ class _AdminWebLayoutState extends State<AdminWebLayout> {
   String _formattedDate() {
     final now = DateTime.now();
     const months = [
-      'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
-      'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'
+      'Jan',
+      'Feb',
+      'Mar',
+      'Apr',
+      'May',
+      'Jun',
+      'Jul',
+      'Aug',
+      'Sep',
+      'Oct',
+      'Nov',
+      'Dec'
     ];
     const weekdays = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
     final wd = weekdays[now.weekday - 1];
@@ -80,7 +91,7 @@ class _AdminWebLayoutState extends State<AdminWebLayout> {
       case 0:
         return _role == UserRole.superAdmin
             ? 'Super Admin Dashboard'
-            : 'Barangay Dashboard';
+            : 'Barangay ';
       case 1:
         return 'All Pets';
       case 2:
@@ -90,7 +101,7 @@ class _AdminWebLayoutState extends State<AdminWebLayout> {
       case 4:
         return 'News & Announcements';
       case 5:
-        return 'Barangay Admins';
+        return 'Admin Settings';
       default:
         return 'Admin Portal';
     }
@@ -128,7 +139,7 @@ class _AdminWebLayoutState extends State<AdminWebLayout> {
         Navigator.pushReplacementNamed(context, AppRoutes.postNews);
         break;
       case 5:
-        Navigator.pushReplacementNamed(context, AppRoutes.userManagement);
+        Navigator.pushReplacementNamed(context, AppRoutes.adminSettings);
         break;
     }
   }
@@ -154,22 +165,15 @@ class _AdminWebLayoutState extends State<AdminWebLayout> {
                   alignment: Alignment.centerLeft,
                   child: Row(
                     children: [
-                      Container(
-                        width: 38,
-                        height: 38,
-                        decoration: const BoxDecoration(
-                          color: Colors.white,
-                          shape: BoxShape.circle,
-                        ),
-                        child: const Icon(
-                          Icons.pets_rounded,
-                          color: AppColors.primary,
-                          size: 22,
-                        ),
+                      AppConstants.buildLogoBadge(
+                        size: 38,
+                        iconSize: 22,
+                        backgroundColor: Colors.white,
+                        iconColor: AppColors.primary,
                       ),
                       const SizedBox(width: 12),
                       Text(
-                        'PawTrace',
+                        AppConstants.appName,
                         style: GoogleFonts.montserrat(
                           fontSize: 20,
                           fontWeight: FontWeight.bold,
@@ -273,6 +277,12 @@ class _AdminWebLayoutState extends State<AdminWebLayout> {
                         label: 'News Posts',
                         isSelected: widget.currentIndex == 4,
                         onTap: () => _onNavSelected(4),
+                      ),
+                      _NavigationItem(
+                        icon: Icons.settings_rounded,
+                        label: 'Settings',
+                        isSelected: widget.currentIndex == 5,
+                        onTap: () => _onNavSelected(5),
                       ),
                     ],
                   ),

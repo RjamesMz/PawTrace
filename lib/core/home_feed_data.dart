@@ -44,7 +44,7 @@ const List<NewsStory> homeNews = [
   NewsStory(
     category: 'Community Alert',
     title: 'Neighborhood volunteers helped return 4 pets this morning',
-    source: 'PawTrace Updates',
+    source: 'PetTrace Updates',
     timeAgo: '12 min ago',
     summary: 'A quick sweep around the central park and barangay roads led to multiple reunions before noon.',
     imageUrl: 'https://images.unsplash.com/photo-1517841905240-472988babdf9?w=900',

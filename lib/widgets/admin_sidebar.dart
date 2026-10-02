@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../core/app_colors.dart';
+import '../core/app_constants.dart';
 import '../core/app_routes.dart';
 import '../services/auth_service.dart';
 
@@ -74,6 +75,11 @@ class _AdminSidebarState extends State<AdminSidebar> {
         label: 'News',
         route: AppRoutes.postNews,
       ),
+      const _SidebarItem(
+        icon: Icons.settings_rounded,
+        label: 'Settings',
+        route: AppRoutes.adminSettings,
+      ),
     ];
     return items;
   }
@@ -104,18 +110,13 @@ class _AdminSidebarState extends State<AdminSidebar> {
             padding: const EdgeInsets.fromLTRB(20, 28, 20, 0),
             child: Row(
               children: [
-                Container(
-                  width: 38,
-                  height: 38,
-                  decoration: const BoxDecoration(
-                    color: AppColors.primary,
-                    shape: BoxShape.circle,
-                  ),
-                  child: const Icon(Icons.pets, color: Colors.white, size: 22),
+                AppConstants.buildLogoBadge(
+                  size: 38,
+                  iconSize: 22,
                 ),
                 const SizedBox(width: 10),
                 Text(
-                  'PawTrace',
+                  AppConstants.appName,
                   style: GoogleFonts.montserrat(
                     fontSize: 20,
                     fontWeight: FontWeight.w800,

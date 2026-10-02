@@ -35,7 +35,7 @@ class _UserManagementScreenState extends State<UserManagementScreen> {
   String _adminBarangay = '';
   UserRole _currentUserRole = UserRole.user;
 
-  final List<String> _filters = ['All Users', 'Unverified'];
+  final List<String> _filters = ['All Users', 'Active', 'Unverified', 'Deactivated'];
 
   @override
   void initState() {
@@ -106,8 +106,27 @@ class _UserManagementScreenState extends State<UserManagementScreen> {
   List<Map<String, dynamic>> get _filteredCitizens {
     List<Map<String, dynamic>> list = List.from(_citizenUsers);
     if (_filterIndex == 1) {
-      // Filter for unverified users (empty phone)
-      list = list.where((u) => (u['phone'] ?? '').toString().isEmpty).toList();
+      // Active
+      list = list.where((u) {
+        final st = (u['status'] ?? 'active').toString().toLowerCase();
+        return st != 'deactivated' && st != 'de_activated';
+      }).toList();
+    } else if (_filterIndex == 2) {
+      // Unverified (empty phone or explicitly unverified, and not deactivated)
+      list = list.where((u) {
+        final st = (u['status'] ?? 'active').toString().toLowerCase();
+        final phone = (u['phone'] ?? '').toString().trim();
+        final isExplicitUnverified = st == 'unverified' || st == 'pending';
+        return (phone.isEmpty || isExplicitUnverified) &&
+            st != 'deactivated' &&
+            st != 'de_activated';
+      }).toList();
+    } else if (_filterIndex == 3) {
+      // Deactivated
+      list = list.where((u) {
+        final st = (u['status'] ?? 'active').toString().toLowerCase();
+        return st == 'deactivated' || st == 'de_activated';
+      }).toList();
     }
     final q = _searchCtrl.text.toLowerCase().trim();
     if (q.isNotEmpty) {
@@ -127,6 +146,29 @@ class _UserManagementScreenState extends State<UserManagementScreen> {
 
   List<Map<String, dynamic>> get _filteredAdmins {
     List<Map<String, dynamic>> list = List.from(_barangayAdmins);
+    if (_filterIndex == 1) {
+      // Active
+      list = list.where((u) {
+        final st = (u['status'] ?? 'active').toString().toLowerCase();
+        return st != 'deactivated' && st != 'de_activated';
+      }).toList();
+    } else if (_filterIndex == 2) {
+      // Unverified
+      list = list.where((u) {
+        final st = (u['status'] ?? 'active').toString().toLowerCase();
+        final phone = (u['phone'] ?? '').toString().trim();
+        final isExplicitUnverified = st == 'unverified' || st == 'pending';
+        return (phone.isEmpty || isExplicitUnverified) &&
+            st != 'deactivated' &&
+            st != 'de_activated';
+      }).toList();
+    } else if (_filterIndex == 3) {
+      // Deactivated
+      list = list.where((u) {
+        final st = (u['status'] ?? 'active').toString().toLowerCase();
+        return st == 'deactivated' || st == 'de_activated';
+      }).toList();
+    }
     final q = _searchCtrl.text.toLowerCase().trim();
     if (q.isNotEmpty) {
       list = list.where((u) {
@@ -410,7 +452,7 @@ class _UserManagementScreenState extends State<UserManagementScreen> {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(
-              'Select citizen account type to register:',
+              'Select account type to register:',
               style: GoogleFonts.inter(
                 fontSize: 13,
                 color: AppColors.onSurfaceVariant,
@@ -431,10 +473,10 @@ class _UserManagementScreenState extends State<UserManagementScreen> {
                 child: const Icon(Icons.person,
                     color: AppColors.primary, size: 22),
               ),
-              title: Text('Pet Owner',
+              title: Text('Standard User',
                   style: GoogleFonts.inter(
                       fontSize: 14, fontWeight: FontWeight.w600)),
-              subtitle: Text('Can register, track, and manage pets',
+              subtitle: Text('Citizen user account',
                   style: GoogleFonts.inter(
                       fontSize: 12, color: AppColors.onSurfaceVariant)),
               onTap: () {
@@ -442,32 +484,34 @@ class _UserManagementScreenState extends State<UserManagementScreen> {
                 Navigator.pushNamed(context, AppRoutes.register);
               },
             ),
-            const SizedBox(height: 10),
-            ListTile(
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(12),
-                side: BorderSide(color: Colors.grey.shade200),
-              ),
-              leading: Container(
-                padding: const EdgeInsets.all(8),
-                decoration: BoxDecoration(
-                  color: const Color(0xFF9333EA).withOpacity(0.1),
-                  borderRadius: BorderRadius.circular(10),
+            if (_currentUserRole == UserRole.superAdmin) ...[
+              const SizedBox(height: 10),
+              ListTile(
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12),
+                  side: BorderSide(color: Colors.grey.shade200),
                 ),
-                child: const Icon(Icons.search,
-                    color: Color(0xFF9333EA), size: 22),
+                leading: Container(
+                  padding: const EdgeInsets.all(8),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFF00796B).withOpacity(0.15),
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  child: const Icon(Icons.admin_panel_settings,
+                      color: Color(0xFF00796B), size: 22),
+                ),
+                title: Text('Barangay Admin',
+                    style: GoogleFonts.inter(
+                        fontSize: 14, fontWeight: FontWeight.w600)),
+                subtitle: Text('Barangay administrator account',
+                    style: GoogleFonts.inter(
+                        fontSize: 12, color: AppColors.onSurfaceVariant)),
+                onTap: () {
+                  Navigator.pop(ctx);
+                  _showAddAdminModal();
+                },
               ),
-              title: Text('Finder',
-                  style: GoogleFonts.inter(
-                      fontSize: 14, fontWeight: FontWeight.w600)),
-              subtitle: Text('Can report and scan found pets',
-                  style: GoogleFonts.inter(
-                      fontSize: 12, color: AppColors.onSurfaceVariant)),
-              onTap: () {
-                Navigator.pop(ctx);
-                Navigator.pushNamed(context, AppRoutes.register);
-              },
-            ),
+            ],
           ],
         ),
         actions: [
@@ -533,7 +577,7 @@ class _UserManagementScreenState extends State<UserManagementScreen> {
                             borderRadius: BorderRadius.circular(10)),
                       ),
                       validator: (v) =>
-                          v == null || v.trim().isEmpty ? 'Required' : null,
+                          AuthService.validateName(v, fieldName: 'First Name'),
                     ),
                     const SizedBox(height: 12),
                     TextFormField(
@@ -546,7 +590,7 @@ class _UserManagementScreenState extends State<UserManagementScreen> {
                             borderRadius: BorderRadius.circular(10)),
                       ),
                       validator: (v) =>
-                          v == null || v.trim().isEmpty ? 'Required' : null,
+                          AuthService.validateName(v, fieldName: 'Surname'),
                     ),
                     const SizedBox(height: 12),
                     TextFormField(
@@ -558,9 +602,7 @@ class _UserManagementScreenState extends State<UserManagementScreen> {
                         border: OutlineInputBorder(
                             borderRadius: BorderRadius.circular(10)),
                       ),
-                      validator: (v) => v == null || !v.contains('@')
-                          ? 'Valid email required'
-                          : null,
+                      validator: AuthService.validateEmail,
                     ),
                     const SizedBox(height: 12),
                     TextFormField(
@@ -572,6 +614,9 @@ class _UserManagementScreenState extends State<UserManagementScreen> {
                         border: OutlineInputBorder(
                             borderRadius: BorderRadius.circular(10)),
                       ),
+                      validator: (v) => v != null && v.trim().isNotEmpty
+                          ? AuthService.validatePhone(v, isRequired: false)
+                          : null,
                     ),
                     const SizedBox(height: 12),
                     TextFormField(
@@ -669,6 +714,12 @@ class _UserManagementScreenState extends State<UserManagementScreen> {
     final fullName = '$fName $sName'.trim();
     final phone = user['phone']?.toString() ?? '';
     final email = user['email']?.toString() ?? '';
+    final rawUserStatus = (user['status'] ?? 'active').toString().toLowerCase();
+    final isUserDeactivated =
+        rawUserStatus == 'deactivated' || rawUserStatus == 'de_activated';
+    final isUserVerified = phone.isNotEmpty &&
+        rawUserStatus != 'unverified' &&
+        rawUserStatus != 'pending';
 
     if (action == 'view') {
       showDialog(
@@ -697,8 +748,35 @@ class _UserManagementScreenState extends State<UserManagementScreen> {
               Text('Barangay: ${user['barangay'] ?? 'N/A'}',
                   style: GoogleFonts.inter()),
               const SizedBox(height: 6),
-              Text('Role: ${user['role'] ?? 'user'}',
-                  style: GoogleFonts.inter()),
+              Text(
+                'Role: ${(() {
+                  final r = (user['role'] ?? 'user').toString().toLowerCase();
+                  if (r == 'super_admin') return 'Super Admin';
+                  if (r == 'admin') return 'Admin';
+                  return 'User';
+                })()}',
+                style: GoogleFonts.inter(),
+              ),
+              const SizedBox(height: 6),
+              Text(
+                'Status: ${isUserDeactivated ? 'Deactivated' : 'Active'}',
+                style: GoogleFonts.inter(
+                  fontWeight: FontWeight.w600,
+                  color: isUserDeactivated
+                      ? const Color(0xFFDC2626)
+                      : const Color(0xFF16A34A),
+                ),
+              ),
+              const SizedBox(height: 6),
+              Text(
+                'Verification: ${isUserVerified ? 'Verified' : 'Unverified'}',
+                style: GoogleFonts.inter(
+                  fontWeight: FontWeight.w600,
+                  color: isUserVerified
+                      ? const Color(0xFF16A34A)
+                      : const Color(0xFFD97706),
+                ),
+              ),
             ],
           ),
           actions: [
@@ -715,12 +793,17 @@ class _UserManagementScreenState extends State<UserManagementScreen> {
         phone.isNotEmpty ? 'Contacting $phone...' : 'No phone number for $fullName',
         icon: Icons.phone_rounded,
       );
-    } else if (action == 'delete') {
+    } else if (action == 'delete' || action == 'deactivate' || action == 'toggle_status') {
       final isSelf = user['user_id'] == Supabase.instance.client.auth.currentUser?.id;
       if (isSelf) {
-        AppToast.error(context, 'You cannot delete your own account.');
+        AppToast.error(context, 'You cannot deactivate your own account.');
         return;
       }
+
+      final rawStatus = (user['status'] ?? 'active').toString().toLowerCase();
+      final isDeactivated = rawStatus == 'deactivated' || rawStatus == 'de_activated';
+      final actionTitle = isDeactivated ? 'Reactivate Account' : 'Deactivate Account';
+      final targetStatus = isDeactivated ? 'active' : 'deactivated';
 
       final confirmed = await showDialog<bool>(
         context: context,
@@ -731,20 +814,28 @@ class _UserManagementScreenState extends State<UserManagementScreen> {
               Container(
                 padding: const EdgeInsets.all(6),
                 decoration: BoxDecoration(
-                  color: AppColors.error.withOpacity(0.12),
+                  color: isDeactivated
+                      ? const Color(0xFF22C55E).withOpacity(0.12)
+                      : AppColors.error.withOpacity(0.12),
                   borderRadius: BorderRadius.circular(8),
                 ),
-                child: const Icon(Icons.delete_outline, color: AppColors.error, size: 20),
+                child: Icon(
+                  isDeactivated ? Icons.check_circle_outline : Icons.block_rounded,
+                  color: isDeactivated ? const Color(0xFF16A34A) : AppColors.error,
+                  size: 20,
+                ),
               ),
               const SizedBox(width: 10),
               Text(
-                'Delete Account?',
+                '$actionTitle?',
                 style: GoogleFonts.montserrat(fontWeight: FontWeight.bold, fontSize: 17),
               ),
             ],
           ),
           content: Text(
-            'Are you sure you want to delete the account for "${fullName.isNotEmpty ? fullName : email}"?\n\nThis will remove their profile and access.',
+            isDeactivated
+                ? 'Are you sure you want to reactivate the account for "${fullName.isNotEmpty ? fullName : email}"? They will regain access to their account.'
+                : 'Are you sure you want to deactivate the account for "${fullName.isNotEmpty ? fullName : email}"?\n\nThe account will be marked as deactivated, but no user or pet data will be deleted.',
             style: GoogleFonts.inter(fontSize: 13, height: 1.5),
           ),
           actions: [
@@ -755,10 +846,10 @@ class _UserManagementScreenState extends State<UserManagementScreen> {
             ElevatedButton(
               onPressed: () => Navigator.pop(ctx, true),
               style: ElevatedButton.styleFrom(
-                backgroundColor: AppColors.error,
+                backgroundColor: isDeactivated ? const Color(0xFF16A34A) : AppColors.error,
                 foregroundColor: Colors.white,
               ),
-              child: const Text('Delete Account'),
+              child: Text(actionTitle),
             ),
           ],
         ),
@@ -770,18 +861,25 @@ class _UserManagementScreenState extends State<UserManagementScreen> {
         final userId = user['user_id'] ?? user['id'];
         if (userId != null) {
           try {
-            await Supabase.instance.client.from('users').delete().eq('user_id', userId);
+            await Supabase.instance.client
+                .from('users')
+                .update({'status': targetStatus})
+                .eq('user_id', userId);
           } catch (_) {
-            await Supabase.instance.client.from('users').delete().eq('id', userId);
+            await Supabase.instance.client
+                .from('users')
+                .update({'status': targetStatus})
+                .eq('id', userId);
           }
         }
         await _fetchUsers();
         if (mounted) {
-          AppToast.success(context, 'Account for "${fullName.isNotEmpty ? fullName : email}" deleted.');
+          AppToast.success(context,
+              'Account for "${fullName.isNotEmpty ? fullName : email}" is now $targetStatus.');
         }
       } catch (e) {
         if (mounted) {
-          AppToast.error(context, 'Failed to delete account: $e');
+          AppToast.error(context, 'Failed to update account status: $e');
         }
       }
     }
@@ -1156,11 +1254,13 @@ class _UserManagementScreenState extends State<UserManagementScreen> {
         [fName, mName, sName, suffix].where((s) => s.isNotEmpty).join(' ');
 
     final email = user['email'] as String? ?? '';
-    final role = user['role'] as String? ?? 'owner';
+    final role = user['role'] as String? ?? 'user';
     final barangay = user['barangay'] as String? ?? '';
     final photoUrl = user['photo_url'] as String? ?? '';
     final phone = user['phone'] as String? ?? '';
     final verified = phone.isNotEmpty;
+    final rawStatus = (user['status'] ?? 'active').toString().toLowerCase();
+    final isDeactivated = rawStatus == 'deactivated' || rawStatus == 'de_activated';
 
     if (isCompact) {
       return Container(
@@ -1257,21 +1357,27 @@ class _UserManagementScreenState extends State<UserManagementScreen> {
                   width: 8,
                   height: 8,
                   decoration: BoxDecoration(
-                    color: verified
-                        ? const Color(0xFF22C55E)
-                        : const Color(0xFFFBBF24),
+                    color: isDeactivated
+                        ? const Color(0xFFEF4444)
+                        : (verified
+                            ? const Color(0xFF22C55E)
+                            : const Color(0xFFFBBF24)),
                     shape: BoxShape.circle,
                   ),
                 ),
                 const SizedBox(width: 5),
                 Text(
-                  verified ? 'Verified' : 'Pending',
+                  isDeactivated
+                      ? 'Deactivated'
+                      : (verified ? 'Verified' : 'Unverified'),
                   style: GoogleFonts.inter(
                     fontSize: 11,
                     fontWeight: FontWeight.w600,
-                    color: verified
-                        ? const Color(0xFF15803D)
-                        : const Color(0xFFD97706),
+                    color: isDeactivated
+                        ? const Color(0xFFDC2626)
+                        : (verified
+                            ? const Color(0xFF15803D)
+                            : const Color(0xFFD97706)),
                   ),
                 ),
               ],
@@ -1353,22 +1459,28 @@ class _UserManagementScreenState extends State<UserManagementScreen> {
                           width: 8,
                           height: 8,
                           decoration: BoxDecoration(
-                            color: verified
-                                ? const Color(0xFF22C55E)
-                                : const Color(0xFFFBBF24),
+                            color: isDeactivated
+                                ? const Color(0xFFEF4444)
+                                : (verified
+                                    ? const Color(0xFF22C55E)
+                                    : const Color(0xFFFBBF24)),
                             shape: BoxShape.circle,
                           ),
                         ),
                         const SizedBox(width: 5),
                         Text(
-                          verified ? 'Verified' : 'Pending Verification',
+                          isDeactivated
+                              ? 'Deactivated'
+                              : (verified ? 'Verified' : 'Unverified'),
                           style: GoogleFonts.inter(
                             fontSize: 10,
                             fontWeight: FontWeight.w600,
                             letterSpacing: 0.4,
-                            color: verified
-                                ? const Color(0xFF15803D)
-                                : const Color(0xFFD97706),
+                            color: isDeactivated
+                                ? const Color(0xFFDC2626)
+                                : (verified
+                                    ? const Color(0xFF15803D)
+                                    : const Color(0xFFD97706)),
                           ),
                         ),
                       ],
@@ -1416,8 +1528,8 @@ class _UserManagementScreenState extends State<UserManagementScreen> {
     final isSuperAdmin = role.toLowerCase() == 'super_admin';
     final isAdmin = role.toLowerCase() == 'admin';
 
-    Color bg = AppColors.secondaryContainer;
-    Color fg = AppColors.onSecondaryContainer;
+    Color bg = AppColors.primaryContainer.withOpacity(0.2);
+    Color fg = AppColors.primary;
     String label = 'USER';
 
     if (isSuperAdmin) {
@@ -1449,6 +1561,9 @@ class _UserManagementScreenState extends State<UserManagementScreen> {
   }
 
   void _showUserMenu(String name, Map<String, dynamic> user) {
+    final rawStatus = (user['status'] ?? 'active').toString().toLowerCase();
+    final isDeactivated = rawStatus == 'deactivated' || rawStatus == 'de_activated';
+
     showModalBottomSheet(
       context: context,
       shape: const RoundedRectangleBorder(
@@ -1471,21 +1586,34 @@ class _UserManagementScreenState extends State<UserManagementScreen> {
                   const Icon(Icons.person_outline, color: AppColors.primary),
               title:
                   Text('View Profile', style: GoogleFonts.inter(fontSize: 14)),
-              onTap: () => Navigator.pop(context),
+              onTap: () {
+                Navigator.pop(context);
+                _handleUserAction('view', user);
+              },
             ),
             ListTile(
-              leading:
-                  const Icon(Icons.verified_user, color: Color(0xFF22C55E)),
-              title:
-                  Text('Verify User', style: GoogleFonts.inter(fontSize: 14)),
-              onTap: () => Navigator.pop(context),
-            ),
-            ListTile(
-              leading: const Icon(Icons.delete_outline, color: AppColors.error),
-              title: Text('Remove User',
-                  style:
-                      GoogleFonts.inter(fontSize: 14, color: AppColors.error)),
-              onTap: () => Navigator.pop(context),
+              leading: Icon(
+                isDeactivated
+                    ? Icons.check_circle_outline_rounded
+                    : Icons.block_rounded,
+                color: isDeactivated
+                    ? const Color(0xFF16A34A)
+                    : const Color(0xFFDC2626),
+              ),
+              title: Text(
+                isDeactivated ? 'Reactivate Account' : 'Deactivate Account',
+                style: GoogleFonts.inter(
+                  fontSize: 14,
+                  fontWeight: FontWeight.w600,
+                  color: isDeactivated
+                      ? const Color(0xFF16A34A)
+                      : const Color(0xFFDC2626),
+                ),
+              ),
+              onTap: () {
+                Navigator.pop(context);
+                _handleUserAction('toggle_status', user);
+              },
             ),
           ],
         ),
@@ -1571,30 +1699,16 @@ class _UserManagementScreenState extends State<UserManagementScreen> {
                       child: const Icon(Icons.person,
                           color: AppColors.primary, size: 20),
                     ),
-                    title: Text('Pet Owner',
+                    title: Text('Standard User',
                         style: GoogleFonts.inter(
                             fontSize: 14, fontWeight: FontWeight.w600)),
-                    subtitle: Text('Can register and manage pets',
+                    subtitle: Text('Citizen user account',
                         style: GoogleFonts.inter(
                             fontSize: 12, color: AppColors.onSurfaceVariant)),
-                    onTap: () => Navigator.pop(context),
-                  ),
-                  ListTile(
-                    leading: Container(
-                      padding: const EdgeInsets.all(8),
-                      decoration: BoxDecoration(
-                          color: const Color(0xFF9333EA).withOpacity(0.1),
-                          borderRadius: BorderRadius.circular(10)),
-                      child: const Icon(Icons.search,
-                          color: Color(0xFF9333EA), size: 20),
-                    ),
-                    title: Text('Finder',
-                        style: GoogleFonts.inter(
-                            fontSize: 14, fontWeight: FontWeight.w600)),
-                    subtitle: Text('Can report and scan found pets',
-                        style: GoogleFonts.inter(
-                            fontSize: 12, color: AppColors.onSurfaceVariant)),
-                    onTap: () => Navigator.pop(context),
+                    onTap: () {
+                      Navigator.pop(context);
+                      Navigator.pushNamed(context, AppRoutes.register);
+                    },
                   ),
                   if (_currentUserRole == UserRole.superAdmin) ...[
                     ListTile(
@@ -1612,7 +1726,10 @@ class _UserManagementScreenState extends State<UserManagementScreen> {
                       subtitle: Text('Can manage a barangay\'s news and pets',
                           style: GoogleFonts.inter(
                               fontSize: 12, color: AppColors.onSurfaceVariant)),
-                      onTap: () => Navigator.pop(context),
+                      onTap: () {
+                        Navigator.pop(context);
+                        _showAddAdminModal();
+                      },
                     ),
                   ],
                 ],
@@ -1655,7 +1772,6 @@ class _UsersDataTableSource extends DataTableSource {
         ? fullName[0].toUpperCase()
         : (email.isNotEmpty ? email[0].toUpperCase() : 'U');
 
-    final isVerified = phone.isNotEmpty;
     final isEven = index % 2 == 0;
 
     return DataRow.byIndex(
@@ -1730,11 +1846,7 @@ class _UsersDataTableSource extends DataTableSource {
                   ? 'ADMIN'
                   : (role == 'super_admin'
                       ? 'SUPER ADMIN'
-                      : (role == 'owner'
-                          ? 'PET OWNER'
-                          : (role == 'finder'
-                              ? 'FINDER'
-                              : role.toUpperCase()))),
+                      : 'USER'),
               style: GoogleFonts.inter(
                 fontSize: 10,
                 fontWeight: FontWeight.bold,
@@ -1747,76 +1859,128 @@ class _UsersDataTableSource extends DataTableSource {
             ),
           ),
         ),
-        // Verified status chip
+        // Status chip (DEACTIVATED / VERIFIED / UNVERIFIED)
         DataCell(
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-            decoration: BoxDecoration(
-              color: isVerified
-                  ? const Color(0xFF22C55E).withOpacity(0.15)
-                  : const Color(0xFFF59E0B).withOpacity(0.15),
-              borderRadius: BorderRadius.circular(12),
-            ),
-            child: Text(
-              isVerified ? 'VERIFIED' : 'UNVERIFIED',
-              style: GoogleFonts.inter(
-                fontSize: 10,
-                fontWeight: FontWeight.bold,
-                color: isVerified
-                    ? const Color(0xFF16A34A)
-                    : const Color(0xFFD97706),
+          Builder(builder: (context) {
+            final rawStatus =
+                (user['status'] ?? 'active').toString().toLowerCase();
+            final isDeactivated =
+                rawStatus == 'deactivated' || rawStatus == 'de_activated';
+            final isExplicitUnverified =
+                rawStatus == 'unverified' || rawStatus == 'pending';
+            final isVerified = !isExplicitUnverified &&
+                (user['phone'] as String? ?? '').trim().isNotEmpty;
+
+            final String label;
+            final Color bg;
+            final Color fg;
+
+            if (isDeactivated) {
+              label = 'DEACTIVATED';
+              bg = const Color(0xFFEF4444).withOpacity(0.15);
+              fg = const Color(0xFFDC2626);
+            } else if (isVerified) {
+              label = 'VERIFIED';
+              bg = const Color(0xFF22C55E).withOpacity(0.15);
+              fg = const Color(0xFF16A34A);
+            } else {
+              label = 'UNVERIFIED';
+              bg = const Color(0xFFF59E0B).withOpacity(0.15);
+              fg = const Color(0xFFD97706);
+            }
+
+            return Container(
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+              decoration: BoxDecoration(
+                color: bg,
+                borderRadius: BorderRadius.circular(12),
               ),
-            ),
-          ),
+              child: Text(
+                label,
+                style: GoogleFonts.inter(
+                  fontSize: 10,
+                  fontWeight: FontWeight.bold,
+                  color: fg,
+                ),
+              ),
+            );
+          }),
         ),
-        // Actions: Trash can button + three dot PopupMenuButton
+        // Actions: Deactivate/Reactivate button + three dot PopupMenuButton
         DataCell(
-          Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              IconButton(
-                icon: const Icon(Icons.delete_outline, size: 19, color: AppColors.error),
-                tooltip: 'Delete Account',
-                onPressed: () => onAction('delete', user),
-              ),
-              PopupMenuButton<String>(
-                icon: const Icon(Icons.more_vert, size: 20),
-                onSelected: (action) => onAction(action, user),
-                itemBuilder: (context) => [
-                  const PopupMenuItem(
-                    value: 'view',
-                    child: Row(
-                      children: [
-                        Icon(Icons.visibility_outlined, size: 16),
-                        SizedBox(width: 8),
-                        Text('View Profile'),
-                      ],
-                    ),
+          Builder(builder: (context) {
+            final rawStatus = (user['status'] ?? 'active').toString().toLowerCase();
+            final isDeactivated = rawStatus == 'deactivated' || rawStatus == 'de_activated';
+            return Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                IconButton(
+                  icon: Icon(
+                    isDeactivated
+                        ? Icons.check_circle_outline_rounded
+                        : Icons.block_rounded,
+                    size: 19,
+                    color: isDeactivated
+                        ? const Color(0xFF16A34A)
+                        : const Color(0xFFDC2626),
                   ),
-                  const PopupMenuItem(
-                    value: 'contact',
-                    child: Row(
-                      children: [
-                        Icon(Icons.call_outlined, size: 16),
-                        SizedBox(width: 8),
-                        Text('Contact User'),
-                      ],
+                  tooltip: isDeactivated ? 'Reactivate Account' : 'Deactivate Account',
+                  onPressed: () => onAction('toggle_status', user),
+                ),
+                PopupMenuButton<String>(
+                  icon: const Icon(Icons.more_vert, size: 20),
+                  onSelected: (action) => onAction(action, user),
+                  itemBuilder: (context) => [
+                    const PopupMenuItem(
+                      value: 'view',
+                      child: Row(
+                        children: [
+                          Icon(Icons.visibility_outlined, size: 16),
+                          SizedBox(width: 8),
+                          Text('View Profile'),
+                        ],
+                      ),
                     ),
-                  ),
-                  const PopupMenuItem(
-                    value: 'delete',
-                    child: Row(
-                      children: [
-                        Icon(Icons.delete_outline, size: 16, color: AppColors.error),
-                        SizedBox(width: 8),
-                        Text('Delete Account', style: TextStyle(color: AppColors.error)),
-                      ],
+                    const PopupMenuItem(
+                      value: 'contact',
+                      child: Row(
+                        children: [
+                          Icon(Icons.call_outlined, size: 16),
+                          SizedBox(width: 8),
+                          Text('Contact User'),
+                        ],
+                      ),
                     ),
-                  ),
-                ],
-              ),
-            ],
-          ),
+                    PopupMenuItem(
+                      value: 'toggle_status',
+                      child: Row(
+                        children: [
+                          Icon(
+                            isDeactivated
+                                ? Icons.check_circle_outline_rounded
+                                : Icons.block_rounded,
+                            size: 16,
+                            color: isDeactivated
+                                ? const Color(0xFF16A34A)
+                                : const Color(0xFFDC2626),
+                          ),
+                          const SizedBox(width: 8),
+                          Text(
+                            isDeactivated ? 'Reactivate Account' : 'Deactivate Account',
+                            style: TextStyle(
+                              color: isDeactivated
+                                  ? const Color(0xFF16A34A)
+                                  : const Color(0xFFDC2626),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            );
+          }),
         ),
       ],
     );

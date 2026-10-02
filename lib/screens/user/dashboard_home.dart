@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../../core/app_colors.dart';
+import '../../core/app_constants.dart';
 import '../../core/app_routes.dart';
 import '../../services/auth_service.dart';
 import '../../widgets/notification_bell_button.dart';
@@ -100,20 +102,27 @@ class _DashboardHomeScreenState extends State<DashboardHomeScreen> {
     // Get first name for greeting
     final firstName = _userName.split(' ').first;
 
-    return Scaffold(
-      backgroundColor: AppColors.background,
-      body: CustomScrollView(
-        slivers: [
-          SliverToBoxAdapter(
-            child: _TopBar(
+    return AnnotatedRegion<SystemUiOverlayStyle>(
+      value: const SystemUiOverlayStyle(
+        statusBarColor: Colors.white,
+        statusBarIconBrightness: Brightness.dark,
+        statusBarBrightness: Brightness.light,
+      ),
+      child: Scaffold(
+        backgroundColor: AppColors.background,
+        body: Column(
+          children: [
+            _TopBar(
               photoUrl: _photoUrl,
               onSettings: () =>
                   Navigator.pushNamed(context, AppRoutes.settings),
             ),
-          ),
-          SliverToBoxAdapter(
-            child: Padding(
-              padding: const EdgeInsets.fromLTRB(20, 18, 20, 0),
+            Expanded(
+              child: CustomScrollView(
+                slivers: [
+                  SliverToBoxAdapter(
+                    child: Padding(
+                      padding: const EdgeInsets.fromLTRB(20, 18, 20, 0),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
@@ -208,7 +217,11 @@ class _DashboardHomeScreenState extends State<DashboardHomeScreen> {
                         childCount: _lostPetsList.length,
                       ),
                     ),
-        ],
+                ],
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -227,7 +240,7 @@ class _TopBar extends StatelessWidget {
       padding: EdgeInsets.fromLTRB(
           20, MediaQuery.of(context).padding.top + 8, 12, 8),
       decoration: BoxDecoration(
-        color: AppColors.surface,
+        color: Colors.white,
         boxShadow: [
           BoxShadow(
               color: Colors.black.withOpacity(0.04),
@@ -241,11 +254,14 @@ class _TopBar extends StatelessWidget {
             child: Row(
               mainAxisSize: MainAxisSize.min,
               children: [
-                const Icon(Icons.pets, color: AppColors.primary, size: 22),
+                AppConstants.buildLogoGraphic(
+                  size: 22,
+                  color: AppColors.primary,
+                ),
                 const SizedBox(width: 6),
                 Flexible(
                   child: Text(
-                    'PawTrace',
+                    AppConstants.appName,
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                     style: GoogleFonts.montserrat(
@@ -402,7 +418,7 @@ class _NewsCard extends StatelessWidget {
     final category = item['category'] as String? ?? 'Announcement';
     final title = item['title'] as String? ?? '';
     final imageUrl = item['image_url'] as String? ?? '';
-    final source = item['source'] as String? ?? 'PawTrace';
+    final source = item['source'] as String? ?? 'PetTrace';
     final summary = item['summary'] as String? ?? '';
     final timeAgo = _formatTimeAgo(item['created_at']);
     final accentColor = _parseHexColor(item['accent_color']);

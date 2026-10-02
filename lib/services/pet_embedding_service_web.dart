@@ -2,14 +2,17 @@
 // on Flutter Web, so all methods return safe "not available" fallbacks.
 import 'package:flutter/foundation.dart';
 
-/// Thrown when the PawTrace AI server cannot be reached.
-class PawTraceServerException implements Exception {
+/// Thrown when the PetTrace AI server cannot be reached.
+class PetTraceServerException implements Exception {
   final String message;
-  const PawTraceServerException([this.message = 'AI server is unreachable.']);
+  const PetTraceServerException([this.message = 'AI server is unreachable.']);
 
   @override
-  String toString() => 'PawTraceServerException: $message';
+  String toString() => 'PetTraceServerException: $message';
 }
+
+/// Backward compatibility alias
+typedef PawTraceServerException = PetTraceServerException;
 
 /// Stub result used on web where TFLite is unavailable.
 class PetClassificationResult {
@@ -38,7 +41,7 @@ class PetEmbeddingService {
   void clearUrlCache() {}
 
   Future<void> loadModels() async {
-    debugPrint('[PawTrace] TFLite not available on web — skipping model load.');
+    debugPrint('[PetTrace] TFLite not available on web — skipping model load.');
   }
 
   Future<Map<String, dynamic>> detectSpecies(dynamic imageFile) async {
@@ -70,7 +73,7 @@ class PetEmbeddingService {
   Future<int> reEmbedAllPets({
     void Function(int done, int total)? onProgress,
   }) async {
-    debugPrint('[PawTrace] reEmbedAllPets: not available on web.');
+    debugPrint('[PetTrace] reEmbedAllPets: not available on web.');
     return 0;
   }
 

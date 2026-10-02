@@ -1,6 +1,6 @@
 {
-    "name": "pawtrace_app",
-    "short_name": "pawtrace_app",
+    "name": "PetTrace",
+    "short_name": "PetTrace",
     "start_url": ".",
     "display": "standalone",
     "background_color": "#0175C2",

@@ -5,6 +5,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../core/app_colors.dart';
 import '../../core/app_routes.dart';
 import '../../core/app_toast.dart';
+import '../../services/alert_service.dart';
 import '../../services/auth_service.dart';
 import '../../widgets/admin_content_wrapper.dart';
 import '../../widgets/admin_layout.dart';
@@ -141,6 +142,235 @@ class _AdminPetsScreenState extends State<AdminPetsScreen> {
     }
 
     filteredPets = result;
+  }
+
+  void _showContactDialog(Map<String, dynamic> pet) {
+    final owner = pet['users'];
+    final ownerName = owner is Map
+        ? [owner['first_name'], owner['middle_name'], owner['surname'], owner['suffix']]
+            .where((s) => s != null && s.toString().isNotEmpty)
+            .join(' ')
+        : 'Unknown Owner';
+    final phone = owner is Map ? (owner['phone']?.toString() ?? '') : '';
+    final email = owner is Map ? (owner['email']?.toString() ?? '') : '';
+
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        title: Row(
+          children: [
+            const Icon(Icons.contact_phone_rounded, color: AppColors.primary),
+            const SizedBox(width: 10),
+            Text('Owner Contact',
+                style: GoogleFonts.montserrat(fontWeight: FontWeight.bold)),
+          ],
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text('Name: ${ownerName.isNotEmpty ? ownerName : 'Not provided'}',
+                style: GoogleFonts.inter(fontWeight: FontWeight.w600)),
+            const SizedBox(height: 8),
+            Text('Phone: ${phone.isNotEmpty ? phone : 'Not provided'}',
+                style: GoogleFonts.inter()),
+            const SizedBox(height: 4),
+            Text('Email: ${email.isNotEmpty ? email : 'Not provided'}',
+                style: GoogleFonts.inter()),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('Close'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _showLocationDialog(Map<String, dynamic> pet) async {
+    final petName = pet['name']?.toString() ?? 'Pet';
+    String location = pet['barangay']?.toString() ??
+        pet['users']?['barangay']?.toString() ??
+        'Catanduanes';
+    String note = '';
+
+    try {
+      final petId = pet['pet_id'] ?? pet['id'];
+      if (petId != null) {
+        final reports = await _supabase
+            .from('lost_reports')
+            .select('*')
+            .eq('pet_id', petId)
+            .order('reported_at', ascending: false)
+            .limit(1);
+        if (reports.isNotEmpty) {
+          final r = reports.first;
+          if (r['last_seen_address'] != null &&
+              r['last_seen_address'].toString().isNotEmpty) {
+            location = r['last_seen_address'].toString();
+          } else if (r['barangay'] != null &&
+              r['barangay'].toString().isNotEmpty) {
+            location = r['barangay'].toString();
+          }
+          note = (r['description'] ?? r['notes'] ?? '').toString();
+        }
+      }
+    } catch (_) {}
+
+    if (!mounted) return;
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        title: Row(
+          children: [
+            const Icon(Icons.map_rounded, color: AppColors.primary),
+            const SizedBox(width: 10),
+            Text('Last Known Location',
+                style: GoogleFonts.montserrat(fontWeight: FontWeight.bold)),
+          ],
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text('Pet: $petName',
+                style: GoogleFonts.inter(fontWeight: FontWeight.w600)),
+            const SizedBox(height: 8),
+            Row(
+              children: [
+                const Icon(Icons.location_on,
+                    size: 16, color: AppColors.primary),
+                const SizedBox(width: 4),
+                Expanded(
+                  child: Text(location, style: GoogleFonts.inter()),
+                ),
+              ],
+            ),
+            if (note.isNotEmpty) ...[
+              const SizedBox(height: 10),
+              Text('Notes: $note',
+                  style: GoogleFonts.inter(
+                      fontSize: 12, color: AppColors.onSurfaceVariant)),
+            ],
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('Close'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _repostPetToNews(Map<String, dynamic> pet) async {
+    final petName = pet['name']?.toString() ?? 'Pet';
+    final barangay = pet['barangay']?.toString() ??
+        pet['users']?['barangay']?.toString() ??
+        'Catanduanes';
+
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        title: Row(
+          children: [
+            const Icon(Icons.campaign_rounded, color: AppColors.error, size: 24),
+            const SizedBox(width: 10),
+            Text('Broadcast to News?',
+                style: GoogleFonts.montserrat(
+                    fontWeight: FontWeight.bold, fontSize: 17)),
+          ],
+        ),
+        content: Text(
+          'This will publish "$petName" directly as an urgent alert on the public News feed and notify all users across Catanduanes, regardless of their barangay.',
+          style: GoogleFonts.inter(fontSize: 13, height: 1.5),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: Text('Cancel',
+                style: GoogleFonts.inter(color: AppColors.onSurfaceVariant)),
+          ),
+          ElevatedButton.icon(
+            onPressed: () => Navigator.pop(ctx, true),
+            icon: const Icon(Icons.send_rounded, size: 16),
+            label: const Text('Publish & Notify All'),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: AppColors.error,
+              foregroundColor: Colors.white,
+              shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12)),
+            ),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed != true) return;
+
+    try {
+      final petId = pet['pet_id'] ?? pet['id'];
+      final photoUrl = pet['photo_url']?.toString() ?? '';
+      final species = pet['species']?.toString() ?? 'Pet';
+      final breed = pet['breed']?.toString() ?? '';
+      final color = pet['color']?.toString() ?? '';
+      final u = pet['users'];
+      final ownerName = u is Map
+          ? [u['first_name'], u['surname']]
+              .where((s) => s != null && s.toString().isNotEmpty)
+              .join(' ')
+          : '';
+      final ownerPhone = u is Map ? (u['phone']?.toString() ?? '') : '';
+
+      final summary = [
+        '$species • $breed',
+        if (color.isNotEmpty) 'Color: $color',
+        if (barangay.isNotEmpty) 'Location: Brgy. $barangay',
+        if (ownerName.isNotEmpty) 'Owner: $ownerName',
+        if (ownerPhone.isNotEmpty) 'Contact: $ownerPhone',
+        'Please report sightings to the owner or barangay authorities immediately.',
+      ].join('\n');
+
+      if ((pet['status'] ?? '').toString().toLowerCase() != 'lost') {
+        await _supabase
+            .from('pets')
+            .update({'status': 'lost'})
+            .eq('pet_id', petId);
+      }
+
+      final postBarangay = (barangay.isNotEmpty && barangay != 'Catanduanes')
+          ? barangay
+          : (_adminBarangay.isNotEmpty ? _adminBarangay : 'Catanduanes');
+
+      await _supabase.from('news').insert({
+        'category': 'Lost & Found',
+        'title': '🚨 MISSING PET: $petName',
+        'source': 'PetTrace Admin Alert',
+        'summary': summary,
+        'image_url': photoUrl,
+        'accent_color': '#BA1A1A',
+        'barangay': postBarangay,
+      });
+
+      final count = await AlertService.instance.broadcastLostPetNewsAlert(
+        petName: petName,
+        barangay: barangay,
+      );
+
+      if (mounted) {
+        AppToast.success(
+            context, '$petName posted to News! ($count users notified)');
+        fetchAllPets();
+      }
+    } catch (e) {
+      if (mounted) AppToast.error(context, 'Error reposting to news: $e');
+    }
   }
 
   int get _totalCount => allPets.length;
@@ -412,7 +642,13 @@ class _AdminPetsScreenState extends State<AdminPetsScreen> {
                 ),
                 const DataColumn(label: Text('Actions')),
               ],
-              source: _PetsDataTableSource(filteredPets, context),
+              source: _PetsDataTableSource(
+                filteredPets,
+                context,
+                onContact: _showContactDialog,
+                onViewMap: _showLocationDialog,
+                onRepost: _repostPetToNews,
+              ),
             ),
           ),
         ),
@@ -704,7 +940,10 @@ class _AdminPetsScreenState extends State<AdminPetsScreen> {
           borderRadius: BorderRadius.circular(14),
           boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 20, offset: const Offset(0, 4))],
         ),
-        child: Row(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
           children: [
             ClipRRect(
               borderRadius: BorderRadius.circular(10),
@@ -752,6 +991,72 @@ class _AdminPetsScreenState extends State<AdminPetsScreen> {
                 ),
               ),
             ),
+              ],
+            ),
+            const SizedBox(height: 10),
+        // Action row of pet (pill-type buttons)
+        SingleChildScrollView(
+          scrollDirection: Axis.horizontal,
+          child: Row(
+            children: [
+              OutlinedButton.icon(
+                onPressed: () => _showContactDialog(pet),
+                icon: const Icon(Icons.call, size: 13),
+                label: Text('Contact',
+                    style: GoogleFonts.inter(
+                        fontSize: 11, fontWeight: FontWeight.w600)),
+                style: OutlinedButton.styleFrom(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                  minimumSize: Size.zero,
+                  tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                  side: BorderSide(
+                      color: AppColors.primary.withOpacity(0.5)),
+                  foregroundColor: AppColors.primary,
+                  shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(999)),
+                ),
+              ),
+              const SizedBox(width: 6),
+              ElevatedButton.icon(
+                onPressed: () => _showLocationDialog(pet),
+                icon: const Icon(Icons.map_outlined, size: 13),
+                label: Text('View Map',
+                    style: GoogleFonts.inter(
+                        fontSize: 11, fontWeight: FontWeight.w600)),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: AppColors.primaryContainer,
+                  foregroundColor: AppColors.onPrimaryContainer,
+                  elevation: 0,
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                  minimumSize: Size.zero,
+                  tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                  shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(999)),
+                ),
+              ),
+              const SizedBox(width: 6),
+              ElevatedButton.icon(
+                onPressed: () => _repostPetToNews(pet),
+                icon: const Icon(Icons.campaign, size: 13),
+                label: Text('Repost to News',
+                    style: GoogleFonts.inter(
+                        fontSize: 11, fontWeight: FontWeight.w600)),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: const Color(0xFFBA1A1A),
+                  foregroundColor: Colors.white,
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                  minimumSize: Size.zero,
+                  tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                  shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(999)),
+                ),
+              ),
+            ],
+          ),
+        ),
           ],
         ),
       ),
@@ -770,8 +1075,17 @@ class _AdminPetsScreenState extends State<AdminPetsScreen> {
 class _PetsDataTableSource extends DataTableSource {
   final List<Map<String, dynamic>> pets;
   final BuildContext context;
+  final Function(Map<String, dynamic> pet) onContact;
+  final Function(Map<String, dynamic> pet) onViewMap;
+  final Function(Map<String, dynamic> pet) onRepost;
 
-  _PetsDataTableSource(this.pets, this.context);
+  _PetsDataTableSource(
+    this.pets,
+    this.context, {
+    required this.onContact,
+    required this.onViewMap,
+    required this.onRepost,
+  });
 
   @override
   DataRow? getRow(int index) {
@@ -893,30 +1207,99 @@ class _PetsDataTableSource extends DataTableSource {
             ),
           ),
         ),
-        // View button
+        // Action row of pet: View + Contact + View Map + Repost to News (all pill type)
         DataCell(
-          ElevatedButton(
-            onPressed: () {
-              Navigator.push(
-                context,
-                MaterialPageRoute(
-                  builder: (_) => AdminPetDetailScreen(pet: p),
+          SingleChildScrollView(
+            scrollDirection: Axis.horizontal,
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+            children: [
+              ElevatedButton(
+                onPressed: () {
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (_) => AdminPetDetailScreen(pet: p),
+                    ),
+                  );
+                },
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: AppColors.primary,
+                  foregroundColor: Colors.white,
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                  minimumSize: Size.zero,
+                  tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(999),
+                  ),
                 ),
-              );
-            },
-            style: ElevatedButton.styleFrom(
-              backgroundColor: AppColors.primary,
-              foregroundColor: Colors.white,
-              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
-              minimumSize: Size.zero,
-              tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(8),
+                child: Text(
+                  'View',
+                  style: GoogleFonts.inter(
+                      fontSize: 11, fontWeight: FontWeight.w600),
+                ),
               ),
-            ),
-            child: Text(
-              'View',
-              style: GoogleFonts.inter(fontSize: 12, fontWeight: FontWeight.w600),
+              const SizedBox(width: 6),
+              OutlinedButton.icon(
+                onPressed: () => onContact(p),
+                icon: const Icon(Icons.call, size: 13),
+                label: Text('Contact',
+                    style: GoogleFonts.inter(
+                        fontSize: 11, fontWeight: FontWeight.w600)),
+                style: OutlinedButton.styleFrom(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                  minimumSize: Size.zero,
+                  tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                  side: BorderSide(
+                      color: AppColors.primary.withOpacity(0.5)),
+                  foregroundColor: AppColors.primary,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(999),
+                  ),
+                ),
+              ),
+              const SizedBox(width: 6),
+              ElevatedButton.icon(
+                onPressed: () => onViewMap(p),
+                icon: const Icon(Icons.map_outlined, size: 13),
+                label: Text('View Map',
+                    style: GoogleFonts.inter(
+                        fontSize: 11, fontWeight: FontWeight.w600)),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: AppColors.primaryContainer,
+                  foregroundColor: AppColors.onPrimaryContainer,
+                  elevation: 0,
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                  minimumSize: Size.zero,
+                  tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(999),
+                  ),
+                ),
+              ),
+              const SizedBox(width: 6),
+              ElevatedButton.icon(
+                onPressed: () => onRepost(p),
+                icon: const Icon(Icons.campaign, size: 13),
+                label: Text('Repost to News',
+                    style: GoogleFonts.inter(
+                        fontSize: 11, fontWeight: FontWeight.w600)),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: const Color(0xFFBA1A1A),
+                  foregroundColor: Colors.white,
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                  minimumSize: Size.zero,
+                  tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(999),
+                  ),
+                ),
+              ),
+            ],
             ),
           ),
         ),

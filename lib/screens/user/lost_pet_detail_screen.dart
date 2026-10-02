@@ -42,7 +42,7 @@ class _LostPetDetailScreenState extends State<LostPetDetailScreen> {
       final data = await Supabase.instance.client.from('users').select().eq('id', ownerId).maybeSingle();
       if (mounted) setState(() => _ownerData = data);
     } catch (e) {
-      debugPrint('[PawTrace] owner fetch: $e');
+      debugPrint('[PetTrace] owner fetch: $e');
     } finally {
       if (mounted) setState(() => _loadingOwner = false);
     }
@@ -50,16 +50,36 @@ class _LostPetDetailScreenState extends State<LostPetDetailScreen> {
 
   Future<void> _markAsFound() async {
     final reportId = widget.report['report_id']?.toString();
+    final petId = widget.report['pet_id']?.toString() ??
+        (widget.report['pets'] is Map
+            ? widget.report['pets']['pet_id']?.toString()
+            : null);
     if (reportId == null) return;
     setState(() => _markingFound = true);
     try {
-      await Supabase.instance.client.from('lost_reports').update({'status': 'resolved'}).eq('report_id', reportId);
+      await Supabase.instance.client.from('lost_reports').update({
+        'status': 'archived',
+        'updated_at': DateTime.now().toIso8601String(),
+      }).eq('report_id', reportId);
+
+      if (petId != null && petId.isNotEmpty) {
+        await Supabase.instance.client
+            .from('pets')
+            .update({'status': 'active'})
+            .eq('pet_id', petId);
+      }
+
       if (mounted) {
-        AppToast.show(context, 'Marked as found!', icon: Icons.check_circle_outline, backgroundColor: const Color(0xFF22C55E));
+        AppToast.show(context, 'Marked as found and archived!',
+            icon: Icons.check_circle_outline,
+            backgroundColor: const Color(0xFF22C55E));
         Navigator.pop(context);
       }
     } catch (e) {
-      if (mounted) AppToast.show(context, 'Failed: $e', icon: Icons.error_outline, backgroundColor: AppColors.error);
+      if (mounted) {
+        AppToast.show(context, 'Failed: $e',
+            icon: Icons.error_outline, backgroundColor: AppColors.error);
+      }
     } finally {
       if (mounted) setState(() => _markingFound = false);
     }

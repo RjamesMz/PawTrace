@@ -2,10 +2,10 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:responsive_framework/responsive_framework.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:excel/excel.dart' hide Border;
 import '../../core/app_colors.dart';
-import '../../core/app_toast.dart';
-import '../../services/alert_service.dart';
 import '../../services/auth_service.dart';
+import '../../services/file_export_service.dart';
 import '../../widgets/admin_content_wrapper.dart';
 import '../../widgets/admin_layout.dart';
 import 'web/admin_web_layout.dart';
@@ -21,6 +21,7 @@ class AdminReportsScreen extends StatefulWidget {
 
 class _AdminReportsScreenState extends State<AdminReportsScreen> {
   final _supabase = Supabase.instance.client;
+  final _searchCtrl = TextEditingController();
 
   String _adminBarangay = '';
   UserRole _currentUserRole = UserRole.admin;
@@ -29,12 +30,25 @@ class _AdminReportsScreenState extends State<AdminReportsScreen> {
 
   List<Map<String, dynamic>> _reports = [];
 
-  static const List<String> _filterLabels = ['All', 'Recent', 'Dog', 'Cat'];
+  static const List<String> _filterLabels = [
+    'All',
+    'Active',
+    'Archived',
+    'Recent',
+    'Dog',
+    'Cat'
+  ];
 
   @override
   void initState() {
     super.initState();
     _init();
+  }
+
+  @override
+  void dispose() {
+    _searchCtrl.dispose();
+    super.dispose();
   }
 
   Future<void> _init() async {
@@ -70,7 +84,19 @@ class _AdminReportsScreenState extends State<AdminReportsScreen> {
   List<Map<String, dynamic>> get _filtered {
     List<Map<String, dynamic>> list = List.from(_reports);
     switch (_filterIndex) {
-      case 1: // Recent — last 7 days
+      case 1: // Active
+        list = list.where((r) {
+          final status = (r['status'] ?? 'active').toString().toLowerCase();
+          return status == 'active';
+        }).toList();
+        break;
+      case 2: // Archived / Resolved
+        list = list.where((r) {
+          final status = (r['status'] ?? '').toString().toLowerCase();
+          return status == 'archived' || status == 'resolved';
+        }).toList();
+        break;
+      case 3: // Recent — last 7 days
         final weekAgo = DateTime.now().subtract(const Duration(days: 7));
         list = list.where((r) {
           final ts = r['reported_at']?.toString() ?? '';
@@ -82,7 +108,7 @@ class _AdminReportsScreenState extends State<AdminReportsScreen> {
           }
         }).toList();
         break;
-      case 2: // Dog
+      case 4: // Dog
         list = list.where((r) {
           final pet = r['pets'];
           final petSpecies = pet is Map ? (pet['species'] ?? '').toString().trim().toLowerCase() : '';
@@ -90,7 +116,7 @@ class _AdminReportsScreenState extends State<AdminReportsScreen> {
           return petSpecies == 'dog' || rSpecies == 'dog';
         }).toList();
         break;
-      case 3: // Cat
+      case 5: // Cat
         list = list.where((r) {
           final pet = r['pets'];
           final petSpecies = pet is Map ? (pet['species'] ?? '').toString().trim().toLowerCase() : '';
@@ -99,6 +125,31 @@ class _AdminReportsScreenState extends State<AdminReportsScreen> {
         }).toList();
         break;
     }
+
+    // Apply search filter
+    final q = _searchCtrl.text.trim().toLowerCase();
+    if (q.isNotEmpty) {
+      list = list.where((r) {
+        final pet = r['pets'];
+        final petName = pet is Map ? (pet['name'] ?? '').toString().toLowerCase() : '';
+        final breed = pet is Map ? (pet['breed'] ?? '').toString().toLowerCase() : '';
+        final species = pet is Map ? (pet['species'] ?? '').toString().toLowerCase() : '';
+        final location = (r['last_seen_address'] ?? r['barangay'] ?? '').toString().toLowerCase();
+        final owner = r['owner_id'];
+        final ownerName = owner is Map
+            ? [owner['first_name'], owner['middle_name'], owner['surname'], owner['suffix']]
+                .where((s) => s != null && s.toString().isNotEmpty)
+                .join(' ')
+                .toLowerCase()
+            : '';
+        return petName.contains(q) ||
+            ownerName.contains(q) ||
+            breed.contains(q) ||
+            species.contains(q) ||
+            location.contains(q);
+      }).toList();
+    }
+
     return list;
   }
 
@@ -148,8 +199,34 @@ class _AdminReportsScreenState extends State<AdminReportsScreen> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        // Filter chips Row
-        _buildFilterChips(),
+        // Search bar
+        _buildSearchBar(),
+        const SizedBox(height: 16),
+
+        // Filter chips + Export button row
+        Row(
+          children: [
+            Expanded(child: _buildFilterChips()),
+            const SizedBox(width: 12),
+            ElevatedButton.icon(
+              onPressed: _filtered.isEmpty ? null : _exportToExcel,
+              icon: const Icon(Icons.table_chart_outlined, size: 18),
+              label: Text('Export to Excel',
+                  style: GoogleFonts.inter(
+                      fontSize: 13, fontWeight: FontWeight.w600)),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: const Color(0xFF1D6F42),
+                foregroundColor: Colors.white,
+                disabledBackgroundColor: Colors.grey.shade300,
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(10)),
+                elevation: 0,
+              ),
+            ),
+          ],
+        ),
         const SizedBox(height: 20),
 
         // PaginatedDataTable inside Card
@@ -193,208 +270,15 @@ class _AdminReportsScreenState extends State<AdminReportsScreen> {
                 DataColumn(label: Text('Owner')),
                 DataColumn(label: Text('Location')),
                 DataColumn(label: Text('Date Reported')),
+                DataColumn(label: Text('Time Reported')),
                 DataColumn(label: Text('Status')),
-                DataColumn(label: Text('Actions')),
               ],
-              source: _ReportsDataTableSource(
-                _filtered,
-                onContact: _showContactDialog,
-                onViewMap: _showLocationDialog,
-                onRepost: _repostReportToNews,
-              ),
+              source: _ReportsDataTableSource(_filtered),
             ),
           ),
         ),
       ],
     );
-  }
-
-  void _showContactDialog(Map<String, dynamic> report) {
-    final owner = report['owner_id'];
-    final ownerName = owner is Map
-        ? '${owner['first_name'] ?? ''} ${owner['surname'] ?? ''}'.trim()
-        : 'Unknown Owner';
-    final phone = owner is Map ? (owner['phone']?.toString() ?? '') : '';
-    final email = owner is Map ? (owner['email']?.toString() ?? '') : '';
-
-    showDialog(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-        title: Row(
-          children: [
-            const Icon(Icons.contact_phone_rounded, color: AppColors.primary),
-            const SizedBox(width: 10),
-            Text('Owner Contact',
-                style: GoogleFonts.montserrat(fontWeight: FontWeight.bold)),
-          ],
-        ),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text('Name: $ownerName',
-                style: GoogleFonts.inter(fontWeight: FontWeight.w600)),
-            const SizedBox(height: 8),
-            Text('Phone: ${phone.isNotEmpty ? phone : 'Not provided'}',
-                style: GoogleFonts.inter()),
-            const SizedBox(height: 4),
-            Text('Email: ${email.isNotEmpty ? email : 'Not provided'}',
-                style: GoogleFonts.inter()),
-          ],
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx),
-            child: const Text('Close'),
-          ),
-        ],
-      ),
-    );
-  }
-
-  void _showLocationDialog(Map<String, dynamic> report) {
-    final pet = report['pets'];
-    final petName = pet is Map ? (pet['name']?.toString() ?? 'Pet') : 'Pet';
-    final location = report['barangay']?.toString() ??
-        report['last_seen_address']?.toString() ??
-        'Catanduanes';
-    final note = report['notes']?.toString() ??
-        report['description']?.toString() ??
-        '';
-
-    showDialog(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-        title: Row(
-          children: [
-            const Icon(Icons.map_rounded, color: AppColors.primary),
-            const SizedBox(width: 10),
-            Text('Last Known Location',
-                style: GoogleFonts.montserrat(fontWeight: FontWeight.bold)),
-          ],
-        ),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text('Pet: $petName',
-                style: GoogleFonts.inter(fontWeight: FontWeight.w600)),
-            const SizedBox(height: 8),
-            Row(
-              children: [
-                const Icon(Icons.location_on,
-                    size: 16, color: AppColors.primary),
-                const SizedBox(width: 4),
-                Expanded(
-                  child: Text(location, style: GoogleFonts.inter()),
-                ),
-              ],
-            ),
-            if (note.isNotEmpty) ...[
-              const SizedBox(height: 10),
-              Text('Notes: $note',
-                  style: GoogleFonts.inter(
-                      fontSize: 12, color: AppColors.onSurfaceVariant)),
-            ],
-          ],
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx),
-            child: const Text('Close'),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Future<void> _repostReportToNews(Map<String, dynamic> report) async {
-    final pet = report['pets'];
-    final petName = pet is Map ? (pet['name']?.toString() ?? 'Pet') : 'Pet';
-    final barangay = report['barangay']?.toString() ?? 'Catanduanes';
-
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-        title: Row(
-          children: [
-            const Icon(Icons.campaign_rounded, color: AppColors.error, size: 24),
-            const SizedBox(width: 10),
-            Text('Broadcast to News?',
-                style: GoogleFonts.montserrat(fontWeight: FontWeight.bold, fontSize: 17)),
-          ],
-        ),
-        content: Text(
-          'This will publish "$petName" directly as an urgent alert on the public News feed and notify all users across Catanduanes, regardless of their barangay.',
-          style: GoogleFonts.inter(fontSize: 13, height: 1.5),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx, false),
-            child: Text('Cancel', style: GoogleFonts.inter(color: AppColors.onSurfaceVariant)),
-          ),
-          ElevatedButton.icon(
-            onPressed: () => Navigator.pop(ctx, true),
-            icon: const Icon(Icons.send_rounded, size: 16),
-            label: const Text('Publish & Notify All'),
-            style: ElevatedButton.styleFrom(
-              backgroundColor: AppColors.error,
-              foregroundColor: Colors.white,
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-            ),
-          ),
-        ],
-      ),
-    );
-
-    if (confirmed != true) return;
-
-    try {
-      final photoUrl = pet is Map
-          ? (pet['photo_url']?.toString() ?? '')
-          : (report['photo_url']?.toString() ?? '');
-      final breed = pet is Map ? (pet['breed']?.toString() ?? '') : '';
-      final species = pet is Map ? (pet['species']?.toString() ?? 'Pet') : 'Pet';
-      final desc = report['description'] ?? report['notes'] ?? '';
-      final owner = report['owner_id'];
-      final ownerName = owner is Map
-          ? '${owner['first_name'] ?? ''} ${owner['surname'] ?? ''}'.trim()
-          : '';
-      final ownerPhone = owner is Map ? (owner['phone']?.toString() ?? '') : '';
-
-      final summary = [
-        '$species • $breed',
-        if (desc.toString().isNotEmpty) 'Details: $desc',
-        'Last seen location: $barangay',
-        if (ownerName.isNotEmpty) 'Owner: $ownerName',
-        if (ownerPhone.isNotEmpty) 'Contact: $ownerPhone',
-        'Please report sightings to the owner or barangay authorities immediately.',
-      ].join('\n');
-
-      await Supabase.instance.client.from('news').insert({
-        'category': 'Lost & Found',
-        'title': '🚨 MISSING PET: $petName',
-        'source': 'PawTrace Admin Alert',
-        'summary': summary,
-        'image_url': photoUrl,
-        'accent_color': '#BA1A1A',
-        'barangay': 'Catanduanes',
-      });
-
-      final count = await AlertService.instance.broadcastLostPetNewsAlert(
-        petName: petName,
-        barangay: barangay,
-      );
-
-      if (mounted) {
-        AppToast.success(context, '$petName posted to News! ($count users notified)');
-      }
-    } catch (e) {
-      if (mounted) AppToast.error(context, 'Error reposting to news: $e');
-    }
   }
 
   Widget _buildBody(BuildContext context) {
@@ -423,6 +307,23 @@ class _AdminReportsScreenState extends State<AdminReportsScreen> {
     );
   }
 
+  Widget _buildSearchBar() {
+    return TextField(
+      controller: _searchCtrl,
+      onChanged: (_) => setState(() {}),
+      style: GoogleFonts.inter(fontSize: 15, color: AppColors.onSurface),
+      decoration: InputDecoration(
+        prefixIcon: const Icon(Icons.search, color: AppColors.onSurfaceVariant),
+        hintText: 'Search by pet name, owner, location...',
+        hintStyle: GoogleFonts.inter(fontSize: 15, color: AppColors.onSurfaceVariant.withOpacity(0.5)),
+        filled: true,
+        fillColor: AppColors.surfaceContainerLow,
+        border: OutlineInputBorder(borderRadius: BorderRadius.circular(14), borderSide: BorderSide.none),
+        contentPadding: const EdgeInsets.symmetric(vertical: 14),
+      ),
+    );
+  }
+
   Widget _buildNarrowReports() {
     return AdminContentWrapper(
       maxWidth: 1000,
@@ -431,7 +332,28 @@ class _AdminReportsScreenState extends State<AdminReportsScreen> {
           SliverToBoxAdapter(
             child: Padding(
               padding: const EdgeInsets.fromLTRB(20, 20, 20, 12),
-              child: _buildFilterChips(),
+              child: Column(
+                children: [
+                  _buildSearchBar(),
+                  const SizedBox(height: 12),
+                  Row(
+                    children: [
+                      Expanded(child: _buildFilterChips()),
+                      const SizedBox(width: 8),
+                      IconButton.filled(
+                        onPressed: _filtered.isEmpty ? null : _exportToExcel,
+                        icon: const Icon(Icons.table_chart_outlined, size: 18),
+                        tooltip: 'Export to Excel',
+                        style: IconButton.styleFrom(
+                          backgroundColor: const Color(0xFF1D6F42),
+                          foregroundColor: Colors.white,
+                          disabledBackgroundColor: Colors.grey.shade300,
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
             ),
           ),
           _filtered.isEmpty
@@ -485,7 +407,28 @@ class _AdminReportsScreenState extends State<AdminReportsScreen> {
           SliverToBoxAdapter(
             child: Padding(
               padding: const EdgeInsets.fromLTRB(20, 20, 20, 12),
-              child: _buildFilterChips(),
+              child: Column(
+                children: [
+                  _buildSearchBar(),
+                  const SizedBox(height: 12),
+                  Row(
+                    children: [
+                      Expanded(child: _buildFilterChips()),
+                      const SizedBox(width: 8),
+                      IconButton.filled(
+                        onPressed: _filtered.isEmpty ? null : _exportToExcel,
+                        icon: const Icon(Icons.table_chart_outlined, size: 18),
+                        tooltip: 'Export to Excel',
+                        style: IconButton.styleFrom(
+                          backgroundColor: const Color(0xFF1D6F42),
+                          foregroundColor: Colors.white,
+                          disabledBackgroundColor: Colors.grey.shade300,
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
             ),
           ),
           if (_filtered.isEmpty)
@@ -642,8 +585,9 @@ class _AdminReportsScreenState extends State<AdminReportsScreen> {
     final location = report['last_seen_address'] as String? ??
         report['barangay'] as String? ??
         'Calatagan';
+    final status = (report['status'] ?? 'active').toString().toLowerCase();
+    final isArchived = status == 'archived' || status == 'resolved';
     final note = report['description'] as String? ?? '';
-    final timeAgo = _formatTimeAgo(report['reported_at']);
 
     final ownerName = userData != null
         ? [
@@ -734,14 +678,18 @@ class _AdminReportsScreenState extends State<AdminReportsScreen> {
                       padding: const EdgeInsets.symmetric(
                           horizontal: 10, vertical: 5),
                       decoration: BoxDecoration(
-                          color: AppColors.errorContainer,
+                          color: isArchived
+                              ? const Color(0xFF64748B).withOpacity(0.15)
+                              : AppColors.errorContainer,
                           borderRadius: BorderRadius.circular(999)),
                       child: Text(
-                          'LOST',
+                          isArchived ? 'ARCHIVED' : 'LOST',
                           style: GoogleFonts.inter(
                               fontSize: 10,
                               fontWeight: FontWeight.w800,
-                              color: AppColors.error,
+                              color: isArchived
+                                  ? const Color(0xFF475569)
+                                  : AppColors.error,
                               letterSpacing: 0.8)),
                     ),
                   ],
@@ -771,12 +719,22 @@ class _AdminReportsScreenState extends State<AdminReportsScreen> {
                               color: AppColors.onSurfaceVariant))),
                 ]),
                 const SizedBox(height: 10),
-                // Time ago
+                // Date & Time reported (two separate rows)
+                Row(children: [
+                  const Icon(Icons.calendar_today_outlined,
+                      size: 15, color: AppColors.onSurfaceVariant),
+                  const SizedBox(width: 4),
+                  Text(_formatDate(report['reported_at']),
+                      style: GoogleFonts.inter(
+                          fontSize: 13,
+                          color: AppColors.onSurfaceVariant)),
+                ]),
+                const SizedBox(height: 4),
                 Row(children: [
                   const Icon(Icons.access_time,
-                      size: 16, color: AppColors.onSurfaceVariant),
+                      size: 15, color: AppColors.onSurfaceVariant),
                   const SizedBox(width: 4),
-                  Text(timeAgo,
+                  Text(_formatTime(report['reported_at']),
                       style: GoogleFonts.inter(
                           fontSize: 13,
                           color: AppColors.onSurfaceVariant)),
@@ -794,51 +752,6 @@ class _AdminReportsScreenState extends State<AdminReportsScreen> {
                         color: AppColors.onSurfaceVariant),
                   ),
                 ],
-                const SizedBox(height: 16),
-                // Contact Owner + View Map
-                Row(children: [
-                  Expanded(
-                    child: OutlinedButton.icon(
-                      onPressed: () => _showContactDialog(report),
-                      icon: const Icon(Icons.call, size: 18),
-                      label: const Text('Contact Owner'),
-                      style: OutlinedButton.styleFrom(
-                        padding:
-                            const EdgeInsets.symmetric(vertical: 14),
-                        side: BorderSide(
-                            color: AppColors.outlineVariant
-                                .withOpacity(0.28)),
-                        foregroundColor: AppColors.onSurface,
-                      ),
-                    ),
-                  ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: ElevatedButton.icon(
-                      onPressed: () => _showLocationDialog(report),
-                      icon: const Icon(Icons.map_outlined, size: 18),
-                      label: const Text('View Map'),
-                      style: ElevatedButton.styleFrom(
-                          minimumSize: const Size.fromHeight(50)),
-                    ),
-                  ),
-                ]),
-                const SizedBox(height: 10),
-                SizedBox(
-                  width: double.infinity,
-                  child: ElevatedButton.icon(
-                    onPressed: () => _repostReportToNews(report),
-                    icon: const Icon(Icons.campaign_rounded, size: 18),
-                    label: const Text('Repost to News & Alert All Users'),
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: const Color(0xFFBA1A1A),
-                      foregroundColor: Colors.white,
-                      padding: const EdgeInsets.symmetric(vertical: 12),
-                      shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(12)),
-                    ),
-                  ),
-                ),
               ],
             ),
           ),
@@ -847,16 +760,141 @@ class _AdminReportsScreenState extends State<AdminReportsScreen> {
     );
   }
 
-  String _formatTimeAgo(String? timestamp) {
-    if (timestamp == null || timestamp.isEmpty) return 'Recent';
+  /// Exports the currently filtered reports to an Excel (.xlsx) file.
+  /// On web: triggers a browser download. On mobile: opens the share sheet.
+  Future<void> _exportToExcel() async {
     try {
-      final dt = DateTime.parse(timestamp);
-      final diff = DateTime.now().difference(dt);
-      if (diff.inMinutes < 60) return '${diff.inMinutes}m ago';
-      if (diff.inHours < 24) return '${diff.inHours}h ago';
-      return '${diff.inDays}d ago';
+      final excel = Excel.createExcel();
+      final sheet = excel['Lost Pet Reports'];
+      excel.delete('Sheet1'); // Remove default sheet
+
+      // ── Header row ──────────────────────────────────────────────
+      const headers = [
+        'Pet Name', 'Breed', 'Species', 'Owner', 'Owner Phone',
+        'Barangay', 'Date Reported', 'Time Reported', 'Status', 'Where Pet Last Seen',
+      ];
+      final headerStyle = CellStyle(
+        bold: true,
+        backgroundColorHex: ExcelColor.fromHexString('#1D6F42'),
+        fontColorHex: ExcelColor.fromHexString('#FFFFFF'),
+        horizontalAlign: HorizontalAlign.Center,
+      );
+      for (var c = 0; c < headers.length; c++) {
+        final cell = sheet.cell(CellIndex.indexByColumnRow(columnIndex: c, rowIndex: 0));
+        cell.value = TextCellValue(headers[c]);
+        cell.cellStyle = headerStyle;
+        sheet.setColumnWidth(c, c == 9 ? 32 : 20);
+      }
+
+      // ── Data rows ────────────────────────────────────────────────
+      for (var r = 0; r < _filtered.length; r++) {
+        final report = _filtered[r];
+        final pet = report['pets'];
+        final owner = report['owner_id'];
+
+        final petName   = pet is Map ? (pet['name']?.toString() ?? '')  : '';
+        final breed     = pet is Map ? (pet['breed']?.toString() ?? '') : '';
+        final species   = pet is Map ? (pet['species']?.toString() ?? '') : '';
+        final ownerName = owner is Map
+            ? [owner['first_name'], owner['middle_name'], owner['surname'], owner['suffix']]
+                .where((s) => s != null && s.toString().isNotEmpty).join(' ')
+            : '';
+        final phone     = owner is Map ? (owner['phone']?.toString() ?? '') : '';
+        final barangay  = report['barangay']?.toString() ?? '';
+        final status    = (report['status']?.toString() ?? '').toUpperCase();
+        final lastSeenRaw = report['last_seen_address']?.toString() ?? '';
+        final whereLastSeen = lastSeenRaw.isNotEmpty
+            ? lastSeenRaw
+            : (barangay.isNotEmpty ? barangay : '-');
+
+        String dateStr = '', timeStr = '';
+        final raw = report['reported_at']?.toString() ?? '';
+        if (raw.isNotEmpty) {
+          try {
+            final dt = DateTime.parse(raw).toLocal();
+            const months = ['Jan','Feb','Mar','Apr','May','Jun',
+                            'Jul','Aug','Sep','Oct','Nov','Dec'];
+            dateStr = '${months[dt.month - 1]} ${dt.day}, ${dt.year}';
+            final h = dt.hour == 0 ? 12 : (dt.hour > 12 ? dt.hour - 12 : dt.hour);
+            final m = dt.minute.toString().padLeft(2, '0');
+            timeStr = '$h:$m ${dt.hour < 12 ? 'AM' : 'PM'}';
+          } catch (_) {}
+        }
+
+        final rowData = [
+          petName,
+          breed,
+          species,
+          ownerName,
+          phone,
+          barangay,
+          dateStr,
+          timeStr,
+          status,
+          whereLastSeen,
+        ];
+        final rowStyle = CellStyle(
+          backgroundColorHex: r.isEven
+              ? ExcelColor.fromHexString('#FFFFFF')
+              : ExcelColor.fromHexString('#F0FDF4'),
+        );
+        for (var c = 0; c < rowData.length; c++) {
+          final cell = sheet.cell(CellIndex.indexByColumnRow(columnIndex: c, rowIndex: r + 1));
+          cell.value = TextCellValue(rowData[c]);
+          cell.cellStyle = rowStyle;
+        }
+      }
+
+      final bytes = excel.encode()!;
+      final now = DateTime.now();
+      final filename =
+          'lost_reports_${now.year}${now.month.toString().padLeft(2, '0')}${now.day.toString().padLeft(2, '0')}.xlsx';
+
+      await saveAndShareFile(bytes, filename);
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text('Exported $filename successfully.',
+              style: GoogleFonts.inter()),
+          backgroundColor: const Color(0xFF1D6F42),
+          behavior: SnackBarBehavior.floating,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+        ));
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text('Export failed: $e', style: GoogleFonts.inter()),
+          backgroundColor: AppColors.error,
+          behavior: SnackBarBehavior.floating,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+        ));
+      }
+    }
+  }
+
+  String _formatDate(String? timestamp) {
+    if (timestamp == null || timestamp.isEmpty) return '-';
+    try {
+      final dt = DateTime.parse(timestamp).toLocal();
+      const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
+                      'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+      return '${months[dt.month - 1]} ${dt.day}, ${dt.year}';
     } catch (_) {
-      return 'Recent';
+      return '-';
+    }
+  }
+
+  String _formatTime(String? timestamp) {
+    if (timestamp == null || timestamp.isEmpty) return '-';
+    try {
+      final dt = DateTime.parse(timestamp).toLocal();
+      final hour = dt.hour == 0 ? 12 : (dt.hour > 12 ? dt.hour - 12 : dt.hour);
+      final minute = dt.minute.toString().padLeft(2, '0');
+      final period = dt.hour < 12 ? 'AM' : 'PM';
+      return '$hour:$minute $period';
+    } catch (_) {
+      return '-';
     }
   }
 }
@@ -864,16 +902,8 @@ class _AdminReportsScreenState extends State<AdminReportsScreen> {
 /// DataTableSource for AdminReportsScreen on desktop web.
 class _ReportsDataTableSource extends DataTableSource {
   final List<Map<String, dynamic>> reports;
-  final Function(Map<String, dynamic> report) onContact;
-  final Function(Map<String, dynamic> report) onViewMap;
-  final Function(Map<String, dynamic> report) onRepost;
 
-  _ReportsDataTableSource(
-    this.reports, {
-    required this.onContact,
-    required this.onViewMap,
-    required this.onRepost,
-  });
+  _ReportsDataTableSource(this.reports);
 
   @override
   DataRow? getRow(int index) {
@@ -898,10 +928,15 @@ class _ReportsDataTableSource extends DataTableSource {
     final status = (report['status']?.toString() ?? 'active').toLowerCase();
 
     String formattedDate = '';
+    String formattedTime = '';
     if (reportedAt.isNotEmpty) {
       try {
-        final dt = DateTime.parse(reportedAt);
+        final dt = DateTime.parse(reportedAt).toLocal();
         formattedDate = '${dt.month}/${dt.day}/${dt.year}';
+        final hour = dt.hour == 0 ? 12 : (dt.hour > 12 ? dt.hour - 12 : dt.hour);
+        final minute = dt.minute.toString().padLeft(2, '0');
+        final period = dt.hour < 12 ? 'AM' : 'PM';
+        formattedTime = '$hour:$minute $period';
       } catch (_) {
         formattedDate = reportedAt;
       }
@@ -950,6 +985,11 @@ class _ReportsDataTableSource extends DataTableSource {
           formattedDate,
           style: GoogleFonts.inter(fontSize: 13),
         )),
+        // Time Reported
+        DataCell(Text(
+          formattedTime,
+          style: GoogleFonts.inter(fontSize: 13),
+        )),
         // Status Chip
         DataCell(
           Container(
@@ -957,7 +997,9 @@ class _ReportsDataTableSource extends DataTableSource {
             decoration: BoxDecoration(
               color: status == 'resolved'
                   ? const Color(0xFF22C55E).withOpacity(0.15)
-                  : AppColors.error.withOpacity(0.15),
+                  : status == 'archived'
+                      ? const Color(0xFF64748B).withOpacity(0.15)
+                      : AppColors.error.withOpacity(0.15),
               borderRadius: BorderRadius.circular(12),
             ),
             child: Text(
@@ -967,67 +1009,11 @@ class _ReportsDataTableSource extends DataTableSource {
                 fontWeight: FontWeight.bold,
                 color: status == 'resolved'
                     ? const Color(0xFF22C55E)
-                    : AppColors.error,
+                    : status == 'archived'
+                        ? const Color(0xFF475569)
+                        : AppColors.error,
               ),
             ),
-          ),
-        ),
-        // Actions: Contact + View Map
-        DataCell(
-          Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              OutlinedButton.icon(
-                onPressed: () => onContact(report),
-                icon: const Icon(Icons.call, size: 14),
-                label: Text('Contact', style: GoogleFonts.inter(fontSize: 11)),
-                style: OutlinedButton.styleFrom(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                  minimumSize: Size.zero,
-                  tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                  side: BorderSide(
-                      color: AppColors.primary.withOpacity(0.5)),
-                  foregroundColor: AppColors.primary,
-                  shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(8)),
-                ),
-              ),
-              const SizedBox(width: 6),
-              ElevatedButton.icon(
-                onPressed: () => onViewMap(report),
-                icon: const Icon(Icons.map_outlined, size: 14),
-                label:
-                    Text('View Map', style: GoogleFonts.inter(fontSize: 11)),
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: AppColors.primary,
-                  foregroundColor: Colors.white,
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                  minimumSize: Size.zero,
-                  tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                  shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(8)),
-                ),
-              ),
-              const SizedBox(width: 6),
-              ElevatedButton.icon(
-                onPressed: () => onRepost(report),
-                icon: const Icon(Icons.campaign, size: 14),
-                label: Text('Repost to News',
-                    style: GoogleFonts.inter(fontSize: 11)),
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: const Color(0xFFBA1A1A),
-                  foregroundColor: Colors.white,
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                  minimumSize: Size.zero,
-                  tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                  shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(8)),
-                ),
-              ),
-            ],
           ),
         ),
       ],

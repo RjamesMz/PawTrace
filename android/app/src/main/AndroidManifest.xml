@@ -6,7 +6,7 @@
     <uses-feature android:name="android.hardware.camera" android:required="false" />
 
     <application
-        android:label="pawtrace_app"
+        android:label="PetTrace"
         android:name="${applicationName}"
         android:icon="@mipmap/ic_launcher">
         <activity
@@ -36,6 +36,7 @@
                 <category android:name="android.intent.category.DEFAULT" />
                 <category android:name="android.intent.category.BROWSABLE" />
                 <data android:scheme="pawtrace" android:host="verified" />
+                <data android:scheme="pettrace" android:host="verified" />
             </intent-filter>
         </activity>
         <!-- Google Maps API Key -->

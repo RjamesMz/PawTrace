@@ -36,6 +36,18 @@ class AuthService {
       password: password,
     );
     final uid = response.user!.id;
+
+    // Check if account is deactivated
+    final profile = await getCurrentUserProfile();
+    if (profile != null) {
+      final status = (profile['status'] ?? 'active').toString().toLowerCase();
+      if (status == 'deactivated' || status == 'de_activated') {
+        await signOut();
+        throw const AuthException(
+            'This account has been deactivated. Please contact your administrator.');
+      }
+    }
+
     final role = await _fetchRole(uid);
     _cachedRole = role;
     return role;
@@ -43,7 +55,7 @@ class AuthService {
 
   // ─── Register ──────────────────────────────────────────────────────────────
 
-  /// Creates a new user account with [role] = "owner".
+  /// Creates a new user account with [role] = "user".
   ///
   /// Also inserts a row into the `users` table with the supplied profile data.
   /// Throws [AuthException] on failure.
@@ -72,6 +84,7 @@ class AuthService {
         'phone': phone.trim(),
         'address': address?.trim(),
         'barangay': barangay,
+        'role': 'user',
       },
     );
 
@@ -143,7 +156,7 @@ class AuthService {
         final phone = meta['phone']?.toString() ?? '';
         final address = meta['address']?.toString() ?? '';
         final barangay = meta['barangay']?.toString() ?? 'Calatagan';
-        final role = meta['role']?.toString() ?? 'owner';
+        final role = meta['role']?.toString() ?? 'user';
 
         await _client.from('users').insert({
           'user_id': uid,
@@ -157,7 +170,11 @@ class AuthService {
         });
 
         // Re-fetch
-        data = await _client.from('users').select().eq('user_id', uid).maybeSingle();
+        data = await _client
+            .from('users')
+            .select()
+            .eq('user_id', uid)
+            .maybeSingle();
       }
       return data;
     } catch (_) {
@@ -196,6 +213,117 @@ class AuthService {
     final hasNumber = RegExp(r'[0-9]').hasMatch(value);
     if (!hasLetter || !hasNumber) {
       return 'Password must contain both letters and numbers.';
+    }
+    return null;
+  }
+
+  /// Validates a street / house address:
+  /// - Required and non-empty
+  /// - Min 5 characters, Max 120 characters
+  /// - Must contain alphabetic characters (rejects purely numeric inputs like '123123213123123213')
+  /// - Rejects repetitive spam sequences (e.g. 'aaaaaa')
+  static String? validateAddress(String? value) {
+    if (value == null || value.trim().isEmpty) {
+      return 'Please enter your street or house number.';
+    }
+    final trimmed = value.trim();
+    if (trimmed.length < 5) {
+      return 'Address is too short (minimum 5 characters).';
+    }
+    if (trimmed.length > 120) {
+      return 'Address is too long (maximum 120 characters).';
+    }
+    final hasLetters = RegExp(r'[a-zA-Z]').hasMatch(trimmed);
+    if (!hasLetters) {
+      return 'Address must include a street, purok, or place name (not numbers only).';
+    }
+    final clean = trimmed.replaceAll(RegExp(r'[\s,\.\-#/]+'), '');
+    if (clean.length >= 5 && RegExp(r'^(.)\1+$').hasMatch(clean)) {
+      return 'Please enter a valid, recognizable street address.';
+    }
+    return null;
+  }
+
+  /// Validates personal or entity names (First Name, Surname, etc.):
+  /// - Only letters, spaces, hyphens, and apostrophes allowed
+  /// - Rejects numbers, symbols, and repetitive spam
+  /// - Length: 2 to 50 characters
+  static String? validateName(
+    String? value, {
+    String fieldName = 'Name',
+    bool isRequired = true,
+  }) {
+    if (value == null || value.trim().isEmpty) {
+      if (!isRequired) return null;
+      return '$fieldName is required.';
+    }
+    final trimmed = value.trim();
+    if (trimmed.length < 2) {
+      return '$fieldName must be at least 2 characters.';
+    }
+    if (trimmed.length > 50) {
+      return '$fieldName cannot exceed 50 characters.';
+    }
+    if (!RegExp(r"^[a-zA-ZñÑáéíóúÁÉÍÓÚ\s\.\-']+$").hasMatch(trimmed)) {
+      return '$fieldName can only contain letters, spaces, and hyphens.';
+    }
+    final clean = trimmed.replaceAll(RegExp(r'[\s\.\-]+'), '');
+    if (clean.length >= 4 && RegExp(r'^(.)\1+$').hasMatch(clean)) {
+      return 'Please enter a valid $fieldName.';
+    }
+    return null;
+  }
+
+  /// Validates Philippine mobile phone numbers:
+  /// Formats: 09XXXXXXXXX (11 digits) or +639XXXXXXXXX (13 chars)
+  static String? validatePhone(String? value, {bool isRequired = false}) {
+    if (value == null || value.trim().isEmpty) {
+      if (!isRequired) return null;
+      return 'Phone number is required.';
+    }
+    final trimmed = value.trim().replaceAll(RegExp(r'[\s\-]+'), '');
+    final phRegex = RegExp(r'^(09|\+639)\d{9}$');
+    if (!phRegex.hasMatch(trimmed)) {
+      return 'Enter a valid 11-digit mobile number (e.g. 09123456789).';
+    }
+    return null;
+  }
+
+  /// Validates email address format
+  static String? validateEmail(String? value) {
+    if (value == null || value.trim().isEmpty) {
+      return 'Email address is required.';
+    }
+    final trimmed = value.trim();
+    final emailRegex =
+        RegExp(r'^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$');
+    if (!emailRegex.hasMatch(trimmed)) {
+      return 'Please enter a valid email address.';
+    }
+    if (trimmed.length > 100) {
+      return 'Email cannot exceed 100 characters.';
+    }
+    return null;
+  }
+
+  /// Validates general text fields (descriptions, titles, sources)
+  static String? validateText(
+    String? value, {
+    required String fieldName,
+    int minLength = 3,
+    int maxLength = 500,
+    bool isRequired = true,
+  }) {
+    if (value == null || value.trim().isEmpty) {
+      if (!isRequired) return null;
+      return '$fieldName is required.';
+    }
+    final trimmed = value.trim();
+    if (trimmed.length < minLength) {
+      return '$fieldName must be at least $minLength characters.';
+    }
+    if (trimmed.length > maxLength) {
+      return '$fieldName cannot exceed $maxLength characters.';
     }
     return null;
   }

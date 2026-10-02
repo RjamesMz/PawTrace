@@ -1,5 +1,6 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../core/app_colors.dart';
 import '../services/pet_embedding_service.dart';
@@ -66,16 +67,16 @@ class _MainAppLayoutState extends State<MainAppLayout> {
     // unawaited so the UI is never blocked.
     Future(() async {
       try {
-        debugPrint('[PawTrace] Background re-embed: starting...');
+        debugPrint('[PetTrace] Background re-embed: starting...');
         final count = await PetEmbeddingService.instance.reEmbedAllPets(
           onProgress: (done, total) {
-            debugPrint('[PawTrace] Re-embed progress: $done/$total');
+            debugPrint('[PetTrace] Re-embed progress: $done/$total');
           },
         );
-        debugPrint('[PawTrace] Background re-embed complete: $count pets updated.');
+        debugPrint('[PetTrace] Background re-embed complete: $count pets updated.');
       } catch (e) {
         // Swallow all errors — this is a best-effort background task.
-        debugPrint('[PawTrace] Background re-embed error (non-fatal): $e');
+        debugPrint('[PetTrace] Background re-embed error (non-fatal): $e');
       }
     });
   }
@@ -89,15 +90,22 @@ class _MainAppLayoutState extends State<MainAppLayout> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: AppColors.background,
-      body: IndexedStack(
-        index: _currentIndex,
-        children: _userScreens,
+    return AnnotatedRegion<SystemUiOverlayStyle>(
+      value: const SystemUiOverlayStyle(
+        statusBarColor: Colors.white,
+        statusBarIconBrightness: Brightness.dark,
+        statusBarBrightness: Brightness.light,
       ),
-      bottomNavigationBar: BottomNavBar(
-        currentIndex: _currentIndex,
-        onTabSelected: _onTabSelected,
+      child: Scaffold(
+        backgroundColor: AppColors.background,
+        body: IndexedStack(
+          index: _currentIndex,
+          children: _userScreens,
+        ),
+        bottomNavigationBar: BottomNavBar(
+          currentIndex: _currentIndex,
+          onTabSelected: _onTabSelected,
+        ),
       ),
     );
   }

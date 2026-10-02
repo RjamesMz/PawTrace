@@ -209,7 +209,7 @@ class _AiScanScreenState extends State<AiScanScreen>
 
               // Subtitle
               Text(
-                'The PawTrace AI scanning service is currently unavailable. Please try again later.',
+                'The PetTrace AI scanning service is currently unavailable. Please try again later.',
                 style: GoogleFonts.inter(
                   fontSize: 13,
                   color: AppColors.onSurfaceVariant,
@@ -373,7 +373,7 @@ class _AiScanScreenState extends State<AiScanScreen>
 
               // Subtitle
               Text(
-                'PawTrace AI only supports Dogs and Cats (including local Aspin and Puspin breeds).',
+                'PetTrace AI only supports Dogs and Cats (including local Aspin and Puspin breeds).',
                 style: GoogleFonts.inter(
                   fontSize: 13,
                   color: AppColors.onSurfaceVariant,

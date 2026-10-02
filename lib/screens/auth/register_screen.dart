@@ -144,7 +144,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
                     ),
                     const SizedBox(height: 6),
                     Text(
-                      'Join PawTrace and help find lost pets in Calatagan',
+                      'Join ${AppConstants.appName} and help find lost pets in Calatagan',
                       textAlign: TextAlign.center,
                       style: GoogleFonts.inter(
                         fontSize: 14,
@@ -162,9 +162,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
                       keyboardType: TextInputType.name,
                       textCapitalization: TextCapitalization.words,
                       validator: (v) =>
-                          (v == null || v.trim().isEmpty)
-                              ? 'First name is required'
-                              : null,
+                          AuthService.validateName(v, fieldName: 'First name'),
                     ),
                     const SizedBox(height: 12),
                     _formField(
@@ -173,6 +171,10 @@ class _RegisterScreenState extends State<RegisterScreen> {
                       icon: Icons.person_outline_rounded,
                       keyboardType: TextInputType.name,
                       textCapitalization: TextCapitalization.words,
+                      validator: (v) => v != null && v.trim().isNotEmpty
+                          ? AuthService.validateName(v,
+                              fieldName: 'Middle name', isRequired: false)
+                          : null,
                     ),
                     const SizedBox(height: 12),
                     Row(
@@ -186,9 +188,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
                             keyboardType: TextInputType.name,
                             textCapitalization: TextCapitalization.words,
                             validator: (v) =>
-                                (v == null || v.trim().isEmpty)
-                                    ? 'Surname is required'
-                                    : null,
+                                AuthService.validateName(v, fieldName: 'Surname'),
                           ),
                         ),
                         const SizedBox(width: 10),
@@ -204,13 +204,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
                       hint: 'Email Address',
                       icon: Icons.mail_outline_rounded,
                       keyboardType: TextInputType.emailAddress,
-                      validator: (v) {
-                        if (v == null || v.trim().isEmpty) {
-                          return 'Email is required';
-                        }
-                        if (!v.contains('@')) return 'Enter a valid email';
-                        return null;
-                      },
+                      validator: AuthService.validateEmail,
                     ),
                     const SizedBox(height: 12),
                     _passwordField(
@@ -245,6 +239,9 @@ class _RegisterScreenState extends State<RegisterScreen> {
                       hint: 'Phone Number',
                       icon: Icons.phone_outlined,
                       keyboardType: TextInputType.phone,
+                      validator: (v) => v != null && v.trim().isNotEmpty
+                          ? AuthService.validatePhone(v, isRequired: false)
+                          : null,
                     ),
                     const SizedBox(height: 12),
                     _buildBarangayDropdown(),
@@ -313,7 +310,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
                     Padding(
                       padding: const EdgeInsets.symmetric(horizontal: 12),
                       child: Text(
-                        'By clicking "Create Account", you agree to PawTrace\'s Terms of Service and Privacy Policy.',
+                        'By clicking "Create Account", you agree to PetTrace\'s Terms of Service and Privacy Policy.',
                         textAlign: TextAlign.center,
                         style: GoogleFonts.inter(
                           fontSize: 11,
@@ -352,18 +349,13 @@ class _RegisterScreenState extends State<RegisterScreen> {
   Widget _buildBrandHeader() {
     return Column(
       children: [
-        Container(
-          width: 64,
-          height: 64,
-          decoration: const BoxDecoration(
-            color: AppColors.primary,
-            shape: BoxShape.circle,
-          ),
-          child: const Icon(Icons.pets, color: Colors.white, size: 34),
+        AppConstants.buildLogoBadge(
+          size: 64,
+          iconSize: 34,
         ),
         const SizedBox(height: 10),
         Text(
-          'PawTrace',
+          AppConstants.appName,
           style: GoogleFonts.montserrat(
             fontSize: 24,
             fontWeight: FontWeight.w800,

@@ -1,7 +1,7 @@
-// PawTrace AI Service — server-backed implementation.
+// PetTrace AI Service — server-backed implementation.
 //
 // All AI inference (species detection + DINOv2 embedding) is delegated to the
-// PawTrace AI Server (FastAPI + YOLOv11 + DINOv2) running on the local laptop.
+// PetTrace AI Server (FastAPI + YOLOv11 + DINOv2) running on the local laptop.
 //
 // The server URL is configured via [PetEmbeddingService.serverUrl].
 // Change it to your ngrok URL when testing on a real device over the internet.
@@ -14,15 +14,18 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 
 // ─── Typed exception for server unavailability ───────────────────────────────
 
-/// Thrown when the PawTrace AI server cannot be reached.
+/// Thrown when the PetTrace AI server cannot be reached.
 /// The UI can catch this specifically to show a maintenance message.
-class PawTraceServerException implements Exception {
+class PetTraceServerException implements Exception {
   final String message;
-  const PawTraceServerException([this.message = 'AI server is unreachable.']);
+  const PetTraceServerException([this.message = 'AI server is unreachable.']);
 
   @override
-  String toString() => 'PawTraceServerException: $message';
+  String toString() => 'PetTraceServerException: $message';
 }
+
+/// Backward compatibility alias
+typedef PawTraceServerException = PetTraceServerException;
 
 // ─── Public result type (unchanged API) ──────────────────────────────────────
 
@@ -74,14 +77,14 @@ class PetEmbeddingService {
       final url = (row?['value'] as String?)?.trim();
       if (url != null && url.isNotEmpty) {
         _resolvedUrl = url;
-        debugPrint('[PawTrace] AI server URL loaded from Supabase: $url');
+        debugPrint('[PetTrace] AI server URL loaded from Supabase: $url');
         return url;
       }
     } catch (e) {
-      debugPrint('[PawTrace] Could not fetch server URL from Supabase: $e');
+      debugPrint('[PetTrace] Could not fetch server URL from Supabase: $e');
     }
 
-    debugPrint('[PawTrace] Using fallback server URL: $_fallbackUrl');
+    debugPrint('[PetTrace] Using fallback server URL: $_fallbackUrl');
     _resolvedUrl = _fallbackUrl;
     return _fallbackUrl;
   }
@@ -97,7 +100,7 @@ class PetEmbeddingService {
 
   /// Posts [imageFile] as multipart to [path] and returns the decoded JSON.
   ///
-  /// Throws [PawTraceServerException] when the server cannot be reached
+  /// Throws [PetTraceServerException] when the server cannot be reached
   /// (connection refused, timeout, or non-200 response).
   Future<Map<String, dynamic>> _post(String path, File imageFile) async {
     try {
@@ -108,29 +111,29 @@ class PetEmbeddingService {
       final streamed = await request.send().timeout(const Duration(seconds: 30));
       final body = await streamed.stream.bytesToString();
       if (streamed.statusCode != 200) {
-        debugPrint('[PawTrace] Server error ${streamed.statusCode}: $body');
-        throw PawTraceServerException(
+        debugPrint('[PetTrace] Server error ${streamed.statusCode}: $body');
+        throw PetTraceServerException(
             'Server returned status ${streamed.statusCode}.');
       }
       return jsonDecode(body) as Map<String, dynamic>;
-    } on PawTraceServerException {
+    } on PetTraceServerException {
       rethrow;
     } on SocketException catch (e) {
-      debugPrint('[PawTrace] Connection refused ($path): $e');
-      throw const PawTraceServerException(
+      debugPrint('[PetTrace] Connection refused ($path): $e');
+      throw const PetTraceServerException(
           'Could not connect to the AI server. It may be offline.');
     } on http.ClientException catch (e) {
-      debugPrint('[PawTrace] HTTP client error ($path): $e');
-      throw const PawTraceServerException(
+      debugPrint('[PetTrace] HTTP client error ($path): $e');
+      throw const PetTraceServerException(
           'Could not connect to the AI server. It may be offline.');
     } catch (e) {
-      // Only convert timeout errors to PawTraceServerException.
+      // Only convert timeout errors to PetTraceServerException.
       // All other errors (e.g. FormatException) propagate as-is so they
       // don't wrongly trigger the "server under maintenance" dialog.
       final msg = e.toString();
-      debugPrint('[PawTrace] Server call failed ($path): $msg');
+      debugPrint('[PetTrace] Server call failed ($path): $msg');
       if (msg.contains('TimeoutException') || msg.contains('timed out')) {
-        throw const PawTraceServerException(
+        throw const PetTraceServerException(
             'The AI server did not respond in time. Please try again.');
       }
       rethrow; // not a connectivity problem — let it surface normally
@@ -142,15 +145,15 @@ class PetEmbeddingService {
   /// Loads models — no-op for the server-backed implementation.
   /// Kept for API compatibility with callers that await this.
   Future<void> loadModels() async {
-    debugPrint('[PawTrace] Server-backed mode — no local models to load.');
+    debugPrint('[PetTrace] Server-backed mode — no local models to load.');
   }
 
   /// Calls /detect on the AI server to classify the pet species.
   ///
   /// Returns a map with keys: isAccepted, species, confidence, isDog, isCat.
-  /// Throws [PawTraceServerException] if the server is unreachable.
+  /// Throws [PetTraceServerException] if the server is unreachable.
   Future<Map<String, dynamic>> detectSpecies(File imageFile) async {
-    // _post now throws PawTraceServerException on failure — let it propagate.
+    // _post now throws PetTraceServerException on failure — let it propagate.
     final result = await _post('/detect', imageFile);
 
     final species    = result['species'] as String? ?? '';
@@ -159,7 +162,7 @@ class PetEmbeddingService {
     final isCat      = result['isCat']      as bool? ?? false;
     final confidence = (result['confidence'] as num? ?? 0.0).toDouble();
 
-    debugPrint('[PawTrace] detectSpecies: $species (conf=${confidence.toStringAsFixed(2)})');
+    debugPrint('[PetTrace] detectSpecies: $species (conf=${confidence.toStringAsFixed(2)})');
 
     return {
       'label':      isAccepted ? species : 'Not a Pet',
@@ -176,14 +179,14 @@ class PetEmbeddingService {
   /// Calls /embed on the AI server to get the DINOv2 embedding.
   ///
   /// Returns a 768-dim L2-normalised list, or null if no pet was detected.
-  /// Throws [PawTraceServerException] if the server is unreachable.
+  /// Throws [PetTraceServerException] if the server is unreachable.
   Future<List<double>?> extractEmbedding(File imageFile) async {
-    // _post throws PawTraceServerException on server failure — let it propagate.
+    // _post throws PetTraceServerException on server failure — let it propagate.
     final result = await _post('/embed', imageFile);
 
     final isAccepted = result['isAccepted'] as bool? ?? false;
     if (!isAccepted) {
-      debugPrint('[PawTrace] extractEmbedding: no pet detected by server.');
+      debugPrint('[PetTrace] extractEmbedding: no pet detected by server.');
       return null;
     }
 
@@ -191,7 +194,7 @@ class PetEmbeddingService {
     if (raw == null) return null;
 
     final embedding = List<double>.from((raw as List).map((v) => (v as num).toDouble()));
-    debugPrint('[PawTrace] extractEmbedding: ${embedding.length}-dim DINOv2 vector received.');
+    debugPrint('[PetTrace] extractEmbedding: ${embedding.length}-dim DINOv2 vector received.');
     return embedding;
   }
 
@@ -230,7 +233,7 @@ class PetEmbeddingService {
         final bytes    = await response.fold<List<int>>([], (acc, chunk) => acc..addAll(chunk));
         httpClient.close();
 
-        final tmpFile = File('${Directory.systemTemp.path}/pawtrace_reembed_$petId.jpg');
+        final tmpFile = File('${Directory.systemTemp.path}/pettrace_reembed_$petId.jpg');
         await tmpFile.writeAsBytes(bytes);
 
         final embedding = await extractEmbedding(tmpFile);
@@ -239,16 +242,16 @@ class PetEmbeddingService {
         if (embedding != null) {
           await supabase.from('pets').update({'embedding': embedding}).eq('pet_id', petId);
           done++;
-          debugPrint('[PawTrace] Re-embedded pet $petId ($done/${pets.length})');
+          debugPrint('[PetTrace] Re-embedded pet $petId ($done/${pets.length})');
         }
       } catch (e) {
-        debugPrint('[PawTrace] Re-embed failed for pet $petId: $e');
+        debugPrint('[PetTrace] Re-embed failed for pet $petId: $e');
       }
 
       onProgress?.call(done, pets.length);
     }
 
-    debugPrint('[PawTrace] Re-embed complete: $done/${pets.length} pets updated');
+    debugPrint('[PetTrace] Re-embed complete: $done/${pets.length} pets updated');
     return done;
   }
 

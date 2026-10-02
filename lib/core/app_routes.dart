@@ -20,4 +20,6 @@ class AppRoutes {
   static const String postNews = '/post-news';
   static const String adminReports = '/admin-reports';
   static const String superAdminHome = '/super-admin-home';
+  static const String adminSettings = '/admin-settings';
+  static const String resetPassword = '/reset-password';
 }

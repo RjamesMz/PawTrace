@@ -69,10 +69,13 @@ class _PetProfileDetailScreenState extends State<PetProfileDetailScreen> {
           .update({'status': 'active'})
           .eq('pet_id', petId);
 
-      // 2. Delete the active lost report for this pet
+      // 2. Soft-archive the active lost report for this pet (preserve data history)
       await Supabase.instance.client
           .from('lost_reports')
-          .delete()
+          .update({
+            'status': 'archived',
+            'updated_at': DateTime.now().toIso8601String(),
+          })
           .eq('pet_id', petId)
           .eq('status', 'active');
 
@@ -108,11 +111,15 @@ class _PetProfileDetailScreenState extends State<PetProfileDetailScreen> {
           })
           .eq('pet_id', petId);
 
-      // Close any active lost reports for this pet
+      // Soft-archive any active lost reports for this pet (preserve data history)
       await Supabase.instance.client
           .from('lost_reports')
-          .delete()
-          .eq('pet_id', petId);
+          .update({
+            'status': 'archived',
+            'updated_at': DateTime.now().toIso8601String(),
+          })
+          .eq('pet_id', petId)
+          .neq('status', 'archived');
 
       if (!mounted) return;
 

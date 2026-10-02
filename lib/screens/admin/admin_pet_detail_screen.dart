@@ -31,7 +31,8 @@ class _AdminPetDetailScreenState extends State<AdminPetDetailScreen> {
 
   Future<void> _repostLostPetToNews() async {
     final petName = pet['name'] ?? 'Pet';
-    final barangay = pet['barangay'] ?? pet['users']?['barangay'] ?? 'Catanduanes';
+    final barangay =
+        pet['barangay'] ?? pet['users']?['barangay'] ?? 'Catanduanes';
 
     final confirmed = await showDialog<bool>(
       context: context,
@@ -39,10 +40,12 @@ class _AdminPetDetailScreenState extends State<AdminPetDetailScreen> {
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
         title: Row(
           children: [
-            const Icon(Icons.campaign_rounded, color: AppColors.error, size: 24),
+            const Icon(Icons.campaign_rounded,
+                color: AppColors.error, size: 24),
             const SizedBox(width: 10),
             Text('Broadcast to News?',
-                style: GoogleFonts.montserrat(fontWeight: FontWeight.bold, fontSize: 17)),
+                style: GoogleFonts.montserrat(
+                    fontWeight: FontWeight.bold, fontSize: 17)),
           ],
         ),
         content: Text(
@@ -52,7 +55,8 @@ class _AdminPetDetailScreenState extends State<AdminPetDetailScreen> {
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx, false),
-            child: Text('Cancel', style: GoogleFonts.inter(color: AppColors.onSurfaceVariant)),
+            child: Text('Cancel',
+                style: GoogleFonts.inter(color: AppColors.onSurfaceVariant)),
           ),
           ElevatedButton.icon(
             onPressed: () => Navigator.pop(ctx, true),
@@ -61,7 +65,8 @@ class _AdminPetDetailScreenState extends State<AdminPetDetailScreen> {
             style: ElevatedButton.styleFrom(
               backgroundColor: AppColors.error,
               foregroundColor: Colors.white,
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+              shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12)),
             ),
           ),
         ],
@@ -79,42 +84,53 @@ class _AdminPetDetailScreenState extends State<AdminPetDetailScreen> {
       final color = pet['color'] ?? '';
       final u = pet['users'];
       final ownerName = u != null
-          ? [u['first_name'], u['surname']].where((s) => s != null && s.toString().isNotEmpty).join(' ')
+          ? [u['first_name'], u['surname']]
+              .where((s) => s != null && s.toString().isNotEmpty)
+              .join(' ')
           : '';
       final ownerPhone = u?['phone'] ?? '';
 
       final summary = [
         '$species • $breed',
         if (color.toString().isNotEmpty) 'Color: $color',
-        if (barangay.toString().isNotEmpty) 'Registered Barangay: Brgy. $barangay',
+        if (barangay.toString().isNotEmpty)
+          'Registered Barangay: Brgy. $barangay',
         if (ownerName.isNotEmpty) 'Owner: $ownerName',
         if (ownerPhone.toString().isNotEmpty) 'Contact: $ownerPhone',
         'Please report any sightings or details to the owner or barangay authorities immediately.',
       ].join('\n');
 
       // 1. Mark pet as lost in pets table
-      await _supabase.from('pets').update({'status': 'lost'}).eq('pet_id', petId);
+      await _supabase
+          .from('pets')
+          .update({'status': 'lost'}).eq('pet_id', petId);
 
       // 2. Publish to news feed so it appears on home/news tab
+      final postBarangay = (barangay.toString().trim().isNotEmpty)
+          ? barangay.toString().trim()
+          : 'Catanduanes';
+
       await _supabase.from('news').insert({
         'category': 'Lost & Found',
         'title': '🚨 MISSING PET: $petName',
-        'source': 'PawTrace Admin Alert',
+        'source': 'PetTrace Admin Alert',
         'summary': summary,
         'image_url': photoUrl,
         'accent_color': '#BA1A1A',
-        'barangay': 'Catanduanes',
+        'barangay': postBarangay,
       });
 
       // 3. Dispatch notifications to ALL users across all barangays
-      final alertedCount = await AlertService.instance.broadcastLostPetNewsAlert(
+      final alertedCount =
+          await AlertService.instance.broadcastLostPetNewsAlert(
         petName: petName.toString(),
         barangay: barangay.toString(),
       );
 
       if (!mounted) return;
       setState(() => pet['status'] = 'lost');
-      AppToast.success(context, '$petName posted to News! ($alertedCount users notified)');
+      AppToast.success(
+          context, '$petName posted to News! ($alertedCount users notified)');
     } catch (e) {
       if (!mounted) return;
       AppToast.error(context, 'Error broadcasting pet: $e');
@@ -123,10 +139,137 @@ class _AdminPetDetailScreenState extends State<AdminPetDetailScreen> {
     }
   }
 
+  void _showContactDialog() {
+    final owner = pet['users'];
+    final ownerName = owner is Map
+        ? [
+            owner['first_name'],
+            owner['middle_name'],
+            owner['surname'],
+            owner['suffix']
+          ].where((s) => s != null && s.toString().isNotEmpty).join(' ')
+        : 'Unknown Owner';
+    final phone = owner is Map ? (owner['phone']?.toString() ?? '') : '';
+    final email = owner is Map ? (owner['email']?.toString() ?? '') : '';
+
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        title: Row(
+          children: [
+            const Icon(Icons.contact_phone_rounded, color: AppColors.primary),
+            const SizedBox(width: 10),
+            Text('Owner Contact',
+                style: GoogleFonts.montserrat(fontWeight: FontWeight.bold)),
+          ],
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text('Name: ${ownerName.isNotEmpty ? ownerName : 'Not provided'}',
+                style: GoogleFonts.inter(fontWeight: FontWeight.w600)),
+            const SizedBox(height: 8),
+            Text('Phone: ${phone.isNotEmpty ? phone : 'Not provided'}',
+                style: GoogleFonts.inter()),
+            const SizedBox(height: 4),
+            Text('Email: ${email.isNotEmpty ? email : 'Not provided'}',
+                style: GoogleFonts.inter()),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('Close'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _showLocationDialog() async {
+    final petName = pet['name']?.toString() ?? 'Pet';
+    String location = pet['barangay']?.toString() ??
+        pet['users']?['barangay']?.toString() ??
+        'Catanduanes';
+    String note = '';
+
+    try {
+      final petId = pet['pet_id'] ?? pet['id'];
+      if (petId != null) {
+        final reports = await _supabase
+            .from('lost_reports')
+            .select('*')
+            .eq('pet_id', petId)
+            .order('reported_at', ascending: false)
+            .limit(1);
+        if (reports.isNotEmpty) {
+          final r = reports.first;
+          if (r['last_seen_address'] != null &&
+              r['last_seen_address'].toString().isNotEmpty) {
+            location = r['last_seen_address'].toString();
+          } else if (r['barangay'] != null &&
+              r['barangay'].toString().isNotEmpty) {
+            location = r['barangay'].toString();
+          }
+          note = (r['description'] ?? r['notes'] ?? '').toString();
+        }
+      }
+    } catch (_) {}
+
+    if (!mounted) return;
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        title: Row(
+          children: [
+            const Icon(Icons.map_rounded, color: AppColors.primary),
+            const SizedBox(width: 10),
+            Text('Last Known Location',
+                style: GoogleFonts.montserrat(fontWeight: FontWeight.bold)),
+          ],
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text('Pet: $petName',
+                style: GoogleFonts.inter(fontWeight: FontWeight.w600)),
+            const SizedBox(height: 8),
+            Row(
+              children: [
+                const Icon(Icons.location_on,
+                    size: 16, color: AppColors.primary),
+                const SizedBox(width: 4),
+                Expanded(
+                  child: Text(location, style: GoogleFonts.inter()),
+                ),
+              ],
+            ),
+            if (note.isNotEmpty) ...[
+              const SizedBox(height: 10),
+              Text('Notes: $note',
+                  style: GoogleFonts.inter(
+                      fontSize: 12, color: AppColors.onSurfaceVariant)),
+            ],
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('Close'),
+          ),
+        ],
+      ),
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
-    final isLost = (pet['status'] ?? 'active').toString().toLowerCase() == 'lost';
+    final isLost =
+        (pet['status'] ?? 'active').toString().toLowerCase() == 'lost';
     final photoUrl = pet['photo_url'] ?? '';
     final name = pet['name'] ?? 'Unknown';
     final breed = pet['breed'] ?? '';
@@ -137,7 +280,9 @@ class _AdminPetDetailScreenState extends State<AdminPetDetailScreen> {
     final collarId = pet['collar_id'] ?? '-';
     final u = pet['users'];
     final ownerName = u != null
-        ? [u['first_name'], u['middle_name'], u['surname'], u['suffix']].where((s) => s != null && s.toString().isNotEmpty).join(' ')
+        ? [u['first_name'], u['middle_name'], u['surname'], u['suffix']]
+            .where((s) => s != null && s.toString().isNotEmpty)
+            .join(' ')
         : 'Unknown';
     final ownerEmail = pet['users']?['email'] ?? '-';
     final ownerPhone = pet['users']?['phone'] ?? '-';
@@ -162,7 +307,11 @@ class _AdminPetDetailScreenState extends State<AdminPetDetailScreen> {
           onPressed: () => handleSafeBack(context),
           color: AppColors.onSurfaceVariant,
         ),
-        title: Text(name, style: GoogleFonts.montserrat(fontSize: 18, fontWeight: FontWeight.w700, color: AppColors.onSurface)),
+        title: Text(name,
+            style: GoogleFonts.montserrat(
+                fontSize: 18,
+                fontWeight: FontWeight.w700,
+                color: AppColors.onSurface)),
         actions: [
           IconButton(
             icon: const Icon(Icons.edit, color: AppColors.primary),
@@ -173,7 +322,8 @@ class _AdminPetDetailScreenState extends State<AdminPetDetailScreen> {
         ],
       ),
       body: _isUpdating
-          ? const Center(child: CircularProgressIndicator(color: AppColors.primary))
+          ? const Center(
+              child: CircularProgressIndicator(color: AppColors.primary))
           : SingleChildScrollView(
               padding: const EdgeInsets.fromLTRB(20, 0, 20, 40),
               child: AdminContentWrapper(
@@ -282,8 +432,8 @@ class _AdminPetDetailScreenState extends State<AdminPetDetailScreen> {
                     ),
                   ),
                   Container(
-                    padding: const EdgeInsets.symmetric(
-                        horizontal: 14, vertical: 5),
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 14, vertical: 5),
                     decoration: BoxDecoration(
                       color: isLost
                           ? AppColors.errorContainer
@@ -296,9 +446,8 @@ class _AdminPetDetailScreenState extends State<AdminPetDetailScreen> {
                         fontSize: 11,
                         fontWeight: FontWeight.w700,
                         letterSpacing: 0.5,
-                        color: isLost
-                            ? AppColors.error
-                            : const Color(0xFF065F46),
+                        color:
+                            isLost ? AppColors.error : const Color(0xFF065F46),
                       ),
                     ),
                   ),
@@ -383,12 +532,10 @@ class _AdminPetDetailScreenState extends State<AdminPetDetailScreen> {
               ),
             ),
             Container(
-              padding:
-                  const EdgeInsets.symmetric(horizontal: 14, vertical: 5),
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 5),
               decoration: BoxDecoration(
-                color: isLost
-                    ? AppColors.errorContainer
-                    : const Color(0xFFD1FAE5),
+                color:
+                    isLost ? AppColors.errorContainer : const Color(0xFFD1FAE5),
                 borderRadius: BorderRadius.circular(999),
               ),
               child: Text(
@@ -397,9 +544,7 @@ class _AdminPetDetailScreenState extends State<AdminPetDetailScreen> {
                   fontSize: 11,
                   fontWeight: FontWeight.w700,
                   letterSpacing: 0.5,
-                  color: isLost
-                      ? AppColors.error
-                      : const Color(0xFF065F46),
+                  color: isLost ? AppColors.error : const Color(0xFF065F46),
                 ),
               ),
             ),
@@ -443,8 +588,8 @@ class _AdminPetDetailScreenState extends State<AdminPetDetailScreen> {
               Expanded(
                   child: _infoCell('Date of Birth', dobDisplay,
                       border: const Border(
-                          right:
-                              BorderSide(color: Color(0xFFDDC1AE), width: 0.5)))),
+                          right: BorderSide(
+                              color: Color(0xFFDDC1AE), width: 0.5)))),
               Expanded(
                   child: Padding(
                       padding: const EdgeInsets.only(left: 16),
@@ -457,8 +602,8 @@ class _AdminPetDetailScreenState extends State<AdminPetDetailScreen> {
               Expanded(
                   child: _infoCell('Color & Markings', color,
                       border: const Border(
-                          right:
-                              BorderSide(color: Color(0xFFDDC1AE), width: 0.5)))),
+                          right: BorderSide(
+                              color: Color(0xFFDDC1AE), width: 0.5)))),
               Expanded(
                   child: Padding(
                       padding: const EdgeInsets.only(left: 16),
@@ -501,12 +646,58 @@ class _AdminPetDetailScreenState extends State<AdminPetDetailScreen> {
   Widget _buildActionButtons(bool isLost) {
     return Column(
       children: [
+        Row(
+          children: [
+            Expanded(
+              child: SizedBox(
+                height: 48,
+                child: OutlinedButton.icon(
+                  onPressed: _showContactDialog,
+                  icon: const Icon(Icons.call, size: 18),
+                  label: const Text('Contact Owner'),
+                  style: OutlinedButton.styleFrom(
+                    side: BorderSide(
+                        color: AppColors.outlineVariant.withOpacity(0.5)),
+                    foregroundColor: AppColors.onSurface,
+                    shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(999)),
+                  ),
+                ),
+              ),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: SizedBox(
+                height: 48,
+                child: ElevatedButton.icon(
+                  onPressed: _showLocationDialog,
+                  icon: const Icon(Icons.map_outlined, size: 18),
+                  label: const Text('View Map'),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: AppColors.primary,
+                    foregroundColor: Colors.white,
+                    shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(999)),
+                  ),
+                ),
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 12),
         SizedBox(
           width: double.infinity,
           height: 52,
           child: ElevatedButton.icon(
-            onPressed: _repostLostPetToNews,
-            icon: const Icon(Icons.campaign_rounded, size: 22),
+            onPressed: _isUpdating ? null : _repostLostPetToNews,
+            icon: _isUpdating
+                ? const SizedBox(
+                    width: 20,
+                    height: 20,
+                    child: CircularProgressIndicator(
+                        strokeWidth: 2, color: Colors.white),
+                  )
+                : const Icon(Icons.campaign_rounded, size: 22),
             label: Text(
               isLost
                   ? 'Repost to News & Notify All Users'
@@ -516,7 +707,7 @@ class _AdminPetDetailScreenState extends State<AdminPetDetailScreen> {
               backgroundColor: const Color(0xFFBA1A1A),
               foregroundColor: Colors.white,
               shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(16)),
+                  borderRadius: BorderRadius.circular(999)),
               textStyle:
                   GoogleFonts.inter(fontSize: 15, fontWeight: FontWeight.w700),
             ),
@@ -531,9 +722,18 @@ class _AdminPetDetailScreenState extends State<AdminPetDetailScreen> {
       decoration: BoxDecoration(border: border),
       padding: border != null ? const EdgeInsets.only(right: 16) : null,
       child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-        Text(label.toUpperCase(), style: GoogleFonts.inter(fontSize: 10, fontWeight: FontWeight.w600, letterSpacing: 0.5, color: AppColors.onSurfaceVariant)),
+        Text(label.toUpperCase(),
+            style: GoogleFonts.inter(
+                fontSize: 10,
+                fontWeight: FontWeight.w600,
+                letterSpacing: 0.5,
+                color: AppColors.onSurfaceVariant)),
         const SizedBox(height: 4),
-        Text(value, style: GoogleFonts.inter(fontSize: 15, fontWeight: FontWeight.w700, color: AppColors.onSurface)),
+        Text(value,
+            style: GoogleFonts.inter(
+                fontSize: 15,
+                fontWeight: FontWeight.w700,
+                color: AppColors.onSurface)),
       ]),
     );
   }
@@ -544,7 +744,11 @@ class _AdminPetDetailScreenState extends State<AdminPetDetailScreen> {
         Icon(icon, size: 18, color: AppColors.primary),
         const SizedBox(width: 10),
         Expanded(
-          child: Text(text, style: GoogleFonts.inter(fontSize: 14, fontWeight: FontWeight.w500, color: AppColors.onSurface)),
+          child: Text(text,
+              style: GoogleFonts.inter(
+                  fontSize: 14,
+                  fontWeight: FontWeight.w500,
+                  color: AppColors.onSurface)),
         ),
       ],
     );
@@ -553,12 +757,26 @@ class _AdminPetDetailScreenState extends State<AdminPetDetailScreen> {
   Widget _photoPlaceholder() {
     return Container(
       color: AppColors.primaryContainer.withOpacity(0.2),
-      child: const Center(child: Icon(Icons.pets, color: AppColors.primaryContainer, size: 60)),
+      child: const Center(
+          child: Icon(Icons.pets, color: AppColors.primaryContainer, size: 60)),
     );
   }
 
   String _monthName(int month) {
-    const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+    const months = [
+      'Jan',
+      'Feb',
+      'Mar',
+      'Apr',
+      'May',
+      'Jun',
+      'Jul',
+      'Aug',
+      'Sep',
+      'Oct',
+      'Nov',
+      'Dec'
+    ];
     return months[month - 1];
   }
 }

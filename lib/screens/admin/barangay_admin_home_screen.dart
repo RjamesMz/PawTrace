@@ -3,6 +3,7 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:responsive_framework/responsive_framework.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../core/app_colors.dart';
+import '../../core/app_constants.dart';
 import '../../core/app_routes.dart';
 import '../../core/app_toast.dart';
 import '../../services/auth_service.dart';
@@ -86,8 +87,11 @@ class _BarangayAdminHomeScreenState extends State<BarangayAdminHomeScreen> {
       final pets = await petQuery;
       _registeredPets = pets.length;
 
-      // Lost reports
-      var lostQuery = _supabase.from('lost_reports').select('report_id');
+      // Lost reports (active only)
+      var lostQuery = _supabase
+          .from('lost_reports')
+          .select('report_id')
+          .eq('status', 'active');
       if (_adminBarangay.isNotEmpty) {
         lostQuery = lostQuery.eq('barangay', _adminBarangay);
       }
@@ -108,10 +112,12 @@ class _BarangayAdminHomeScreenState extends State<BarangayAdminHomeScreen> {
 
   Future<void> _fetchNews() async {
     try {
-      final data = await _supabase
-          .from('news')
-          .select()
-          .eq('barangay', _adminBarangay)
+      var query = _supabase.from('news').select();
+      if (_adminBarangay.isNotEmpty) {
+        query = query.or(
+            'barangay.eq.$_adminBarangay,barangay.eq.Catanduanes,barangay.eq.All');
+      }
+      final data = await query
           .order('created_at', ascending: false)
           .limit(3);
       _news = List<Map<String, dynamic>>.from(data);
@@ -184,7 +190,8 @@ class _BarangayAdminHomeScreenState extends State<BarangayAdminHomeScreen> {
     try {
       final data = await _supabase
           .from('lost_reports')
-          .select('*, pets(name, photo_url), owner_id(first_name, surname, phone)')
+          .select(
+              '*, pets(name, photo_url), owner_id(first_name, surname, phone)')
           .eq('barangay', _adminBarangay)
           .order('reported_at', ascending: false);
 
@@ -229,7 +236,7 @@ class _BarangayAdminHomeScreenState extends State<BarangayAdminHomeScreen> {
     if (_isLoading) {
       return const AdminWebLayout(
         currentIndex: 0,
-        pageTitle: 'Barangay Dashboard',
+        pageTitle: 'Dashboard',
         body: Center(
           child: Padding(
             padding: EdgeInsets.all(60.0),
@@ -241,7 +248,7 @@ class _BarangayAdminHomeScreenState extends State<BarangayAdminHomeScreen> {
 
     return AdminWebLayout(
       currentIndex: 0,
-      pageTitle: 'Barangay Dashboard',
+      pageTitle: 'Dashboard',
       body: _buildDesktopDashboard(),
     );
   }
@@ -288,8 +295,8 @@ class _BarangayAdminHomeScreenState extends State<BarangayAdminHomeScreen> {
                     const SizedBox(height: 4),
                     Text(
                       _adminBarangay.isNotEmpty
-                          ? 'Brgy. $_adminBarangay Control Center'
-                          : 'Barangay Control Center',
+                          ? 'Brgy. $_adminBarangay '
+                          : 'Barangay',
                       style: GoogleFonts.inter(
                         fontSize: 13,
                         color: Colors.white.withOpacity(0.9),
@@ -395,7 +402,7 @@ class _BarangayAdminHomeScreenState extends State<BarangayAdminHomeScreen> {
                         mainAxisAlignment: MainAxisAlignment.spaceBetween,
                         children: [
                           Text(
-                            'Pending Verification Reports',
+                            'Lost Pet Reports',
                             style: GoogleFonts.montserrat(
                               fontSize: 16,
                               fontWeight: FontWeight.bold,
@@ -460,11 +467,11 @@ class _BarangayAdminHomeScreenState extends State<BarangayAdminHomeScreen> {
                             final petPhoto = pet is Map
                                 ? (pet['photo_url']?.toString() ?? '')
                                 : '';
-                            final location =
-                                report['barangay']?.toString() ?? _adminBarangay;
-                            final status = (report['status']?.toString() ??
-                                    'pending')
-                                .toUpperCase();
+                            final location = report['barangay']?.toString() ??
+                                _adminBarangay;
+                            final status =
+                                (report['status']?.toString() ?? 'pending')
+                                    .toUpperCase();
 
                             return ListTile(
                               dense: true,
@@ -760,26 +767,21 @@ class _BarangayAdminHomeScreenState extends State<BarangayAdminHomeScreen> {
         if (screenWidth >= 800) return const SizedBox.shrink();
         return Container(
           height: 64 + MediaQuery.of(context).padding.top,
-          padding:
-              EdgeInsets.fromLTRB(16, MediaQuery.of(context).padding.top, 16, 0),
+          padding: EdgeInsets.fromLTRB(
+              16, MediaQuery.of(context).padding.top, 16, 0),
           decoration: const BoxDecoration(
             color: Colors.white,
           ),
           child: Row(
             children: [
               // PawTrace logo + name
-              Container(
-                width: 36,
-                height: 36,
-                decoration: const BoxDecoration(
-                  color: AppColors.primary,
-                  shape: BoxShape.circle,
-                ),
-                child: const Icon(Icons.pets, color: Colors.white, size: 20),
+              AppConstants.buildLogoBadge(
+                size: 36,
+                iconSize: 20,
               ),
               const SizedBox(width: 10),
               Text(
-                'PawTrace',
+                AppConstants.appName,
                 style: GoogleFonts.montserrat(
                   fontSize: 20,
                   fontWeight: FontWeight.w800,
@@ -1116,7 +1118,8 @@ class _BarangayAdminHomeScreenState extends State<BarangayAdminHomeScreen> {
                             topLeft: Radius.circular(14),
                             bottomLeft: Radius.circular(14)),
                       ),
-                      child: Icon(Icons.article_rounded, color: accentColor, size: 28),
+                      child: Icon(Icons.article_rounded,
+                          color: accentColor, size: 28),
                     ),
                   const SizedBox(width: 12),
                   Expanded(
@@ -1150,7 +1153,8 @@ class _BarangayAdminHomeScreenState extends State<BarangayAdminHomeScreen> {
                           if (summary.isNotEmpty)
                             Text(summary,
                                 style: GoogleFonts.inter(
-                                    fontSize: 11, color: AppColors.onSurfaceVariant),
+                                    fontSize: 11,
+                                    color: AppColors.onSurfaceVariant),
                                 maxLines: 2,
                                 overflow: TextOverflow.ellipsis),
                         ],
@@ -1273,4 +1277,3 @@ class _BarangayAdminHomeScreenState extends State<BarangayAdminHomeScreen> {
     }
   }
 }
-

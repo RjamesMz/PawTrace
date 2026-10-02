@@ -1,27 +1,84 @@
+import 'dart:async';
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../services/auth_service.dart';
 import '../../core/app_colors.dart';
+import '../../core/app_constants.dart';
 import 'login_screen.dart';
+import '../../widgets/change_password_dialog.dart';
 import '../../widgets/main_app_layout.dart';
 import '../admin/barangay_admin_home_screen.dart';
 import '../admin/super_admin_screen.dart';
 
 /// Listens to Supabase auth state and redirects to the correct screen.
 ///
+/// - Password recovery active       → [ChangePasswordDialog]
 /// - Not signed in                  → [LoginScreen]
 /// - Signed in, role = "superAdmin" → [SuperAdminScreen]
 /// - Signed in, role = "admin"      → [BarangayAdminHomeScreen]
 /// - Signed in, role = "user":
 ///   - On Web                       → [_WebAccessDeniedScreen]
 ///   - On Mobile                    → [DashboardHomeScreen]
-class AuthWrapper extends StatelessWidget {
+class AuthWrapper extends StatefulWidget {
   const AuthWrapper({super.key});
 
   @override
+  State<AuthWrapper> createState() => _AuthWrapperState();
+}
+
+class _AuthWrapperState extends State<AuthWrapper> {
+  bool _isPasswordRecovery = false;
+  StreamSubscription<AuthState>? _authSubscription;
+
+  @override
+  void initState() {
+    super.initState();
+    if (kIsWeb) {
+      final uri = Uri.base;
+      if (uri.fragment.contains('type=recovery')) {
+        _isPasswordRecovery = true;
+      }
+    }
+
+    _authSubscription = AuthService.instance.onAuthStateChange.listen((data) {
+      if (data.event == AuthChangeEvent.passwordRecovery) {
+        if (mounted) setState(() => _isPasswordRecovery = true);
+      }
+    });
+  }
+
+  @override
+  void dispose() {
+    _authSubscription?.cancel();
+    super.dispose();
+  }
+
+  @override
   Widget build(BuildContext context) {
+    if (_isPasswordRecovery) {
+      final userEmail =
+          Supabase.instance.client.auth.currentUser?.email ?? '';
+      return Scaffold(
+        backgroundColor: AppColors.background,
+        body: Center(
+          child: SingleChildScrollView(
+            padding: const EdgeInsets.all(24),
+            child: ChangePasswordDialog(
+              email: userEmail,
+              startAtNewPassword: true,
+              onSuccess: () {
+                if (mounted) {
+                  setState(() => _isPasswordRecovery = false);
+                }
+              },
+            ),
+          ),
+        ),
+      );
+    }
+
     return StreamBuilder<AuthState>(
       stream: AuthService.instance.onAuthStateChange,
       builder: (context, snapshot) {
@@ -53,7 +110,7 @@ class AuthWrapper extends StatelessWidget {
               return const BarangayAdminHomeScreen();
             }
 
-            // Regular user (owner/finder) on Web platform is restricted
+            // Regular user on Web platform is restricted
             if (kIsWeb) {
               return const _WebAccessDeniedScreen();
             }
@@ -117,7 +174,7 @@ class _WebAccessDeniedScreen extends StatelessWidget {
                 ),
                 const SizedBox(height: 12),
                 Text(
-                  'The PawTrace Web Portal is restricted to Barangay Administrators and Super Administrators.\n\nPet owners and finders should use the PawTrace Mobile App.',
+                  'The PetTrace Web Portal is restricted to Barangay Administrators and Super Administrators.\n\nRegular users should use the PetTrace Mobile App.',
                   textAlign: TextAlign.center,
                   style: GoogleFonts.inter(
                     fontSize: 14,
@@ -170,13 +227,11 @@ class _SplashLoader extends StatelessWidget {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Container(
-              padding: const EdgeInsets.all(20),
-              decoration: const BoxDecoration(
-                color: AppColors.primaryContainer,
-                shape: BoxShape.circle,
-              ),
-              child: const Icon(Icons.pets, color: AppColors.onPrimaryContainer, size: 40),
+            AppConstants.buildLogoBadge(
+              size: 80,
+              iconSize: 40,
+              backgroundColor: AppColors.primaryContainer,
+              iconColor: AppColors.onPrimaryContainer,
             ),
             const SizedBox(height: 24),
             const CircularProgressIndicator(color: AppColors.primary, strokeWidth: 2.5),

@@ -63,7 +63,7 @@ class PetMatchService {
     // where detectSpecies() misclassified the scanned photo.
     if (results.isEmpty) {
       debugPrint(
-          '[PawTrace] No matches with strict species filter — retrying without species filter');
+          '[PetTrace] No matches with strict species filter — retrying without species filter');
       return _findMatchesFiltered(
         queryEmbedding,
         isDog: isDog,
@@ -122,7 +122,7 @@ class PetMatchService {
           List<double>.from(embList.map((v) => (v as num).toDouble()));
       final sim = PetEmbeddingService.cosineSimilarity(queryEmbedding, stored);
       debugPrint(
-          '[PawTrace] ${petData['name']} (${petData['species']}) sim=${sim.toStringAsFixed(3)}');
+          '[PetTrace] ${petData['name']} (${petData['species']}) sim=${sim.toStringAsFixed(3)}');
 
       if (sim >= minSimilarity) {
         // 'owner_id' is the FK-hint alias; fall back to 'users' key for safety

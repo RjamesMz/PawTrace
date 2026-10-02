@@ -25,9 +25,23 @@ class _LostPetScreenState extends State<LostPetScreen> {
   // 0 = Recent (last 48h), 1 = This Week, 2 = This Month
   int _filterIndex = 0;
 
-  static const List<String> _filterLabels = ['Recent', 'This Week', 'This Month', 'Dog', 'Cat'];
+  static const List<String> _filterLabels = ['Recent', 'This Week', 'This Month', 'Dog', 'Cat', 'Archived'];
 
   List<Map<String, dynamic>> get _filtered {
+    if (_filterIndex == 5) {
+      // Archived reports
+      return _lostPetsList.where((r) {
+        final st = (r['status'] ?? '').toString().toLowerCase();
+        return st == 'archived' || st == 'resolved';
+      }).toList();
+    }
+
+    // Active reports for emergency feeds:
+    final activeList = _lostPetsList.where((r) {
+      final st = (r['status'] ?? 'active').toString().toLowerCase();
+      return st == 'active';
+    }).toList();
+
     final now = DateTime.now();
     DateTime cutoff;
     switch (_filterIndex) {
@@ -38,14 +52,14 @@ class _LostPetScreenState extends State<LostPetScreen> {
         cutoff = now.subtract(const Duration(days: 30));
         break;
       case 3: // Dog
-        return _lostPetsList.where((r) {
+        return activeList.where((r) {
           final pet = r['pets'];
           final petSpecies = pet is Map ? (pet['species'] ?? '').toString().trim().toLowerCase() : '';
           final rSpecies = (r['species'] ?? '').toString().trim().toLowerCase();
           return petSpecies == 'dog' || rSpecies == 'dog';
         }).toList();
       case 4: // Cat
-        return _lostPetsList.where((r) {
+        return activeList.where((r) {
           final pet = r['pets'];
           final petSpecies = pet is Map ? (pet['species'] ?? '').toString().trim().toLowerCase() : '';
           final rSpecies = (r['species'] ?? '').toString().trim().toLowerCase();
@@ -54,7 +68,7 @@ class _LostPetScreenState extends State<LostPetScreen> {
       default: // Recent — last 48 hours
         cutoff = now.subtract(const Duration(hours: 48));
     }
-    return _lostPetsList.where((r) {
+    return activeList.where((r) {
       final ts = r['reported_at']?.toString() ?? '';
       if (ts.isEmpty) return true;
       try {
@@ -76,7 +90,6 @@ class _LostPetScreenState extends State<LostPetScreen> {
       final data = await Supabase.instance.client
           .from('lost_reports')
           .select('*, pets(*), owner_id(*)')
-          .eq('status', 'active')
           .order('reported_at', ascending: false);
       if (mounted) {
         setState(() {
@@ -95,11 +108,20 @@ class _LostPetScreenState extends State<LostPetScreen> {
   @override
   Widget build(BuildContext context) {
     final displayList = _filtered;
-    return Scaffold(
-      backgroundColor: AppColors.background,
-      body: CustomScrollView(
-        slivers: [
-          SliverToBoxAdapter(child: _buildHeader(context)),
+    return AnnotatedRegion<SystemUiOverlayStyle>(
+      value: const SystemUiOverlayStyle(
+        statusBarColor: Colors.white,
+        statusBarIconBrightness: Brightness.dark,
+        statusBarBrightness: Brightness.light,
+      ),
+      child: Scaffold(
+        backgroundColor: AppColors.background,
+        body: Column(
+          children: [
+            _buildHeader(context),
+            Expanded(
+              child: CustomScrollView(
+                slivers: [
 
           // ── Time-filter pill row ────────────────────────────────────────
           SliverToBoxAdapter(
@@ -198,7 +220,11 @@ class _LostPetScreenState extends State<LostPetScreen> {
                 childCount: displayList.length,
               ),
             ),
-        ],
+                ],
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -251,6 +277,8 @@ class _LostPetCard extends StatelessWidget {
     final location = rawAddress.replaceAll(RegExp(r'\s*\(?Lat:\s*[-\d.]+,\s*Lng:\s*[-\d.]+\)?'), '').trim();
     final note = pet['description'] as String? ?? '';
     final timeAgo = _formatTimeAgo(pet['reported_at']);
+    final status = (pet['status'] ?? 'active').toString().toLowerCase();
+    final isArchived = status == 'archived' || status == 'resolved';
     
     final ownerName = userData != null
         ? [userData['first_name'], userData['middle_name'], userData['surname'], userData['suffix']]
@@ -333,8 +361,23 @@ class _LostPetCard extends StatelessWidget {
                       ),
                       Container(
                         padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-                        decoration: BoxDecoration(color: AppColors.errorContainer, borderRadius: BorderRadius.circular(999)),
-                        child: Text('LOST', style: GoogleFonts.inter(fontSize: 10, fontWeight: FontWeight.w800, color: AppColors.error, letterSpacing: 0.8)),
+                        decoration: BoxDecoration(
+                          color: isArchived
+                              ? const Color(0xFF64748B).withOpacity(0.15)
+                              : AppColors.errorContainer,
+                          borderRadius: BorderRadius.circular(999),
+                        ),
+                        child: Text(
+                          isArchived ? 'ARCHIVED' : 'LOST',
+                          style: GoogleFonts.inter(
+                            fontSize: 10,
+                            fontWeight: FontWeight.w800,
+                            color: isArchived
+                                ? const Color(0xFF475569)
+                                : AppColors.error,
+                            letterSpacing: 0.8,
+                          ),
+                        ),
                       ),
                     ],
                   ),

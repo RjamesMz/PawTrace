@@ -137,7 +137,7 @@ class _ProfilePetRegistrationScreenState
             setState(() => _selectedSpecies = 'Cat');
           }
         } catch (e) {
-          debugPrint('[PawTrace] Auto-detect on photo pick: $e');
+          debugPrint('[PetTrace] Auto-detect on photo pick: $e');
         }
       }
     }
@@ -395,8 +395,6 @@ class _ProfilePetRegistrationScreenState
     );
   }
 
-
-
   Future<void> _pickDOB() async {
     final now = DateTime.now();
     final picked = await showDatePicker(
@@ -426,10 +424,49 @@ class _ProfilePetRegistrationScreenState
 
   Future<void> _savePet() async {
     // Validate required fields
-    if (_nameCtrl.text.trim().isEmpty) {
+    final petName = _nameCtrl.text.trim();
+    if (petName.isEmpty) {
       _showError('Please enter your pet\'s name.');
       return;
     }
+    if (petName.length < 2) {
+      _showError('Pet name must be at least 2 characters.');
+      return;
+    }
+    if (petName.length > 40) {
+      _showError('Pet name cannot exceed 40 characters.');
+      return;
+    }
+    if (!RegExp(r'[a-zA-ZñÑ]').hasMatch(petName)) {
+      _showError('Pet name must include letters (cannot be numbers only).');
+      return;
+    }
+    if (!RegExp(r"^[a-zA-Z0-9ñÑ\s\.\-']+$").hasMatch(petName)) {
+      _showError('Pet name can only contain letters, numbers, spaces, and hyphens.');
+      return;
+    }
+
+    final breedVal = _breedCtrl.text.trim();
+    if (breedVal.isNotEmpty && breedVal.length > 50) {
+      _showError('Breed cannot exceed 50 characters.');
+      return;
+    }
+
+    final colorVal = _colorCtrl.text.trim();
+    if (colorVal.isNotEmpty && colorVal.length > 50) {
+      _showError('Color description cannot exceed 50 characters.');
+      return;
+    }
+
+    final weightVal = _weightCtrl.text.trim();
+    if (weightVal.isNotEmpty && weightVal.toUpperCase() != 'N/A') {
+      final parsed = double.tryParse(weightVal);
+      if (parsed == null || parsed <= 0 || parsed > 200) {
+        _showError('Please enter a realistic weight in kg (e.g. 5.5).');
+        return;
+      }
+    }
+
     if (_faceImage == null) {
       _showError('Please upload a Face / Front photo of your pet.');
       return;
@@ -540,11 +577,11 @@ class _ProfilePetRegistrationScreenState
 
       // Step 4: Extract multi-angle DINOv2 embeddings and fuse into a rich 768-dim vector
       final petId = insertedRows['pet_id']?.toString();
-      debugPrint('[PawTrace] Pet inserted with ID: $petId');
+      debugPrint('[PetTrace] Pet inserted with ID: $petId');
 
       if (petId != null) {
         try {
-          debugPrint('[PawTrace] Starting multi-angle embedding generation...');
+          debugPrint('[PetTrace] Starting multi-angle embedding generation...');
           final faceEmb =
               await PetEmbeddingService.instance.extractEmbedding(_faceImage!);
           final leftEmb = await PetEmbeddingService.instance
@@ -566,16 +603,16 @@ class _ProfilePetRegistrationScreenState
 
           if (fused != null) {
             debugPrint(
-                '[PawTrace] Fused multi-angle embedding generated (${fused.length} dims), saving...');
+                '[PetTrace] Fused multi-angle embedding generated (${fused.length} dims), saving...');
             await _supabase
                 .from('pets')
                 .update({'embedding': fused}).eq('pet_id', petId);
-            debugPrint('[PawTrace] Multi-angle embedding saved successfully!');
+            debugPrint('[PetTrace] Multi-angle embedding saved successfully!');
           } else {
-            debugPrint('[PawTrace] WARNING: Fused embedding returned null!');
+            debugPrint('[PetTrace] WARNING: Fused embedding returned null!');
           }
         } catch (embErr) {
-          debugPrint('[PawTrace] Embedding extraction/saving error: $embErr');
+          debugPrint('[PetTrace] Embedding extraction/saving error: $embErr');
         }
       }
 
@@ -600,7 +637,7 @@ class _ProfilePetRegistrationScreenState
     if (label.isEmpty || label.toLowerCase() == 'not a pet') {
       return 'Registration rejected: Photo is unrecognizable. Please upload a clear, well-lit photo that shows a supported dog or cat.';
     }
-    return 'Registration rejected: PawTrace only supports Dogs and Cats. Detected: "$label".';
+    return 'Registration rejected: PetTrace only supports Dogs and Cats. Detected: "$label".';
   }
 
   void _showError(String message) {
@@ -792,7 +829,7 @@ class _ProfilePetRegistrationScreenState
                       ],
                       onChanged: (v) => setState(() => _selectedSpecies = v),
                       validator: (v) => v == null
-                          ? 'PawTrace only supports Dogs and Cats'
+                          ? 'PetTrace only supports Dogs and Cats'
                           : null,
                       decoration: InputDecoration(
                         filled: true,
