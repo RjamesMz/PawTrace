@@ -4,6 +4,7 @@ import 'package:flutter/services.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../core/app_colors.dart';
 import '../services/pet_embedding_service.dart';
+import '../services/auth_service.dart';
 import 'bottom_nav_bar.dart';
 
 // User Screens
@@ -33,19 +34,28 @@ class _MainAppLayoutState extends State<MainAppLayout> {
   /// tabs). Set to true after the first successful schedule.
   static bool _reEmbedScheduled = false;
 
-  final List<Widget> _userScreens = [
-    const DashboardHomeScreen(),
-    const LostPetScreen(),
-    const AiScanScreen(),
-    const ProfilePetRegistrationScreen(),
-    const SettingsScreen(showBottomNav: false),
-  ];
+  late final List<Widget> _userScreens;
 
   @override
   void initState() {
     super.initState();
     _currentIndex = widget.initialIndex;
     _scheduleBackgroundReEmbed();
+    _userScreens = [
+      DashboardHomeScreen(onNavigateToTab: _onTabSelected),
+      const LostPetScreen(),
+      const AiScanScreen(),
+      const ProfilePetRegistrationScreen(),
+      const SettingsScreen(showBottomNav: false),
+    ];
+  }
+
+  @override
+  void didUpdateWidget(MainAppLayout oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.initialIndex != oldWidget.initialIndex) {
+      _onTabSelected(widget.initialIndex);
+    }
   }
 
   /// Silently re-embeds all pets in the background using the improved
@@ -86,6 +96,9 @@ class _MainAppLayoutState extends State<MainAppLayout> {
     setState(() {
       _currentIndex = index;
     });
+    if (index == 0) {
+      AuthService.instance.getCurrentUserProfile();
+    }
   }
 
   @override

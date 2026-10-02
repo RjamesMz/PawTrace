@@ -122,7 +122,7 @@ class _BottomNavBarState extends State<BottomNavBar> {
 
     final currentRoute = ModalRoute.of(context)?.settings.name;
     int activeIndex = widget.currentIndex;
-    if (currentRoute != null) {
+    if (widget.onTabSelected == null && currentRoute != null) {
       final foundIndex = items.indexWhere((item) => item.route == currentRoute);
       if (foundIndex != -1) activeIndex = foundIndex;
     }

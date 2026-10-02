@@ -13,7 +13,9 @@ import '../shared/news_detail_screen.dart';
 /// Dashboard Home screen – news-first landing page with a quick view of
 /// the most recent lost-pet reports.
 class DashboardHomeScreen extends StatefulWidget {
-  const DashboardHomeScreen({super.key});
+  final void Function(int tabIndex)? onNavigateToTab;
+
+  const DashboardHomeScreen({super.key, this.onNavigateToTab});
 
   @override
   State<DashboardHomeScreen> createState() => _DashboardHomeScreenState();
@@ -30,9 +32,31 @@ class _DashboardHomeScreenState extends State<DashboardHomeScreen> {
   @override
   void initState() {
     super.initState();
+    AuthService.instance.profileNotifier.addListener(_onProfileChanged);
     _loadProfile();
     _fetchNews();
     _fetchLostPets();
+  }
+
+  @override
+  void dispose() {
+    AuthService.instance.profileNotifier.removeListener(_onProfileChanged);
+    super.dispose();
+  }
+
+  void _onProfileChanged() {
+    final profile = AuthService.instance.profileNotifier.value;
+    if (profile != null && mounted) {
+      setState(() {
+        final fName = profile['first_name'] as String? ?? '';
+        final mName = profile['middle_name'] as String? ?? '';
+        final sName = profile['surname'] as String? ?? '';
+        final suffix = profile['suffix'] as String? ?? '';
+        _userName =
+            [fName, mName, sName, suffix].where((s) => s.isNotEmpty).join(' ');
+        _photoUrl = profile['photo_url'] as String?;
+      });
+    }
   }
 
   Future<void> _loadProfile() async {
@@ -118,8 +142,16 @@ class _DashboardHomeScreenState extends State<DashboardHomeScreen> {
           children: [
             _TopBar(
               photoUrl: _photoUrl,
-              onSettings: () =>
-                  Navigator.pushNamed(context, AppRoutes.settings),
+              onSettings: () async {
+                if (widget.onNavigateToTab != null) {
+                  widget.onNavigateToTab!(4);
+                } else {
+                  await Navigator.pushNamed(context, AppRoutes.settings);
+                  if (mounted) {
+                    _loadProfile();
+                  }
+                }
+              },
             ),
             Expanded(
               child: CustomScrollView(
@@ -213,8 +245,14 @@ class _DashboardHomeScreenState extends State<DashboardHomeScreen> {
                             ),
                             child: _LostPetPreviewCard(
                               pet: pet,
-                              onTap: () => Navigator.pushNamed(
-                                  context, AppRoutes.lostPetScreen),
+                              onTap: () {
+                                if (widget.onNavigateToTab != null) {
+                                  widget.onNavigateToTab!(1);
+                                } else {
+                                  Navigator.pushNamed(
+                                      context, AppRoutes.lostPetScreen);
+                                }
+                              },
                             ),
                           );
                         },
@@ -313,7 +351,9 @@ class _TopBar extends StatelessWidget {
                     child: photoUrl != null && photoUrl!.isNotEmpty
                         ? Image.network(
                             photoUrl!,
+                            key: ValueKey(photoUrl),
                             fit: BoxFit.cover,
+                            gaplessPlayback: true,
                             errorBuilder: (_, __, ___) => Container(
                               color: AppColors.surfaceContainerHighest,
                               child: const Icon(Icons.person,

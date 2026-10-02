@@ -1,5 +1,5 @@
 name: pawtrace_app
-description: PawTrace - Community-driven pet protection and recovery app.
+description: PetTrace - Community-driven pet protection and recovery app.
 
 publish_to: 'none'
 
@@ -46,6 +46,8 @@ dependencies:
 
 flutter:
   uses-material-design: true
+  assets:
+    - assets/images/
 
 dev_dependencies:
   flutter_test:

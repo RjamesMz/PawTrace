@@ -34,6 +34,7 @@ class _BarangayAdminHomeScreenState extends State<BarangayAdminHomeScreen> {
 
   String _adminBarangay = '';
   String _adminName = 'Admin';
+  String? _photoUrl;
   bool _isLoading = true;
 
   // Stat counts
@@ -50,7 +51,28 @@ class _BarangayAdminHomeScreenState extends State<BarangayAdminHomeScreen> {
   @override
   void initState() {
     super.initState();
+    AuthService.instance.profileNotifier.addListener(_onProfileChanged);
     _loadDashboard();
+  }
+
+  @override
+  void dispose() {
+    AuthService.instance.profileNotifier.removeListener(_onProfileChanged);
+    super.dispose();
+  }
+
+  void _onProfileChanged() {
+    final profile = AuthService.instance.profileNotifier.value;
+    if (profile != null && mounted) {
+      setState(() {
+        final first = profile['first_name'] ?? '';
+        final surname = profile['surname'] ?? '';
+        if (first.toString().isNotEmpty) {
+          _adminName = '$first $surname'.trim();
+        }
+        _photoUrl = profile['photo_url']?.toString();
+      });
+    }
   }
 
   Future<void> _loadDashboard() async {
@@ -65,6 +87,7 @@ class _BarangayAdminHomeScreenState extends State<BarangayAdminHomeScreen> {
       if (first.toString().isNotEmpty) {
         _adminName = '$first $surname'.trim();
       }
+      _photoUrl = profile['photo_url']?.toString();
     }
 
     await Future.wait([
@@ -796,16 +819,25 @@ class _BarangayAdminHomeScreenState extends State<BarangayAdminHomeScreen> {
               const NotificationBellButton(size: 26),
               const SizedBox(width: 4),
               // Admin avatar
-              CircleAvatar(
-                radius: 18,
-                backgroundColor: AppColors.primaryContainer,
-                child: Text(
-                  _adminName.isNotEmpty ? _adminName[0].toUpperCase() : 'A',
-                  style: GoogleFonts.montserrat(
-                    fontSize: 16,
-                    fontWeight: FontWeight.w700,
-                    color: AppColors.onPrimaryContainer,
-                  ),
+              InkWell(
+                onTap: () => Navigator.pushNamed(context, AppRoutes.adminSettings),
+                borderRadius: BorderRadius.circular(20),
+                child: CircleAvatar(
+                  radius: 18,
+                  backgroundColor: AppColors.primaryContainer,
+                  backgroundImage: _photoUrl != null && _photoUrl!.isNotEmpty
+                      ? NetworkImage(_photoUrl!)
+                      : null,
+                  child: (_photoUrl == null || _photoUrl!.isEmpty)
+                      ? Text(
+                          _adminName.isNotEmpty ? _adminName[0].toUpperCase() : 'A',
+                          style: GoogleFonts.montserrat(
+                            fontSize: 16,
+                            fontWeight: FontWeight.w700,
+                            color: AppColors.onPrimaryContainer,
+                          ),
+                        )
+                      : null,
                 ),
               ),
             ],

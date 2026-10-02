@@ -21,12 +21,14 @@ class AdminSidebar extends StatefulWidget {
   final int currentIndex;
   final String adminName;
   final UserRole role;
+  final String? photoUrl;
 
   const AdminSidebar({
     super.key,
     required this.currentIndex,
     required this.adminName,
     required this.role,
+    this.photoUrl,
   });
 
   @override
@@ -143,14 +145,19 @@ class _AdminSidebarState extends State<AdminSidebar> {
                   CircleAvatar(
                     radius: 20,
                     backgroundColor: AppColors.primary.withOpacity(0.85),
-                    child: Text(
-                      initial,
-                      style: GoogleFonts.montserrat(
-                        fontSize: 16,
-                        fontWeight: FontWeight.w700,
-                        color: Colors.white,
-                      ),
-                    ),
+                    backgroundImage: widget.photoUrl != null && widget.photoUrl!.isNotEmpty
+                        ? NetworkImage(widget.photoUrl!)
+                        : null,
+                    child: (widget.photoUrl == null || widget.photoUrl!.isEmpty)
+                        ? Text(
+                            initial,
+                            style: GoogleFonts.montserrat(
+                              fontSize: 16,
+                              fontWeight: FontWeight.w700,
+                              color: Colors.white,
+                            ),
+                          )
+                        : null,
                   ),
                   const SizedBox(width: 10),
                   Expanded(

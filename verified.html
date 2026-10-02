@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>PawTrace — Email Verified</title>
+  <title>PetTrace — Email Verified</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Montserrat:wght@700;800&display=swap" rel="stylesheet">
@@ -125,7 +125,7 @@
 <body>
   <div class="card">
     <div class="badge" id="cardBadge">
-      🐾 PawTrace Community
+      🐾 PetTrace Community
     </div>
     
     <div class="icon-container" id="cardIcon">
@@ -135,10 +135,10 @@
     </div>
 
     <h1 id="cardTitle">Email Verified!</h1>
-    <p id="cardDesc">Your email has been successfully verified. Your PawTrace account is now active and ready to keep your pets safe.</p>
+    <p id="cardDesc">Your email has been successfully verified. Your PetTrace account is now active and ready to keep your pets safe.</p>
 
-    <a href="pawtrace://verified" class="btn" id="openAppBtn">
-      <span id="btnText">Open PawTrace App</span>
+    <a href="pettrace://verified" class="btn" id="openAppBtn">
+      <span id="btnText">Open PetTrace App</span>
       <svg width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24">
         <path stroke-linecap="round" stroke-linejoin="round" d="M14 5l7 7m0 0l-7 7m7-7H3"></path>
       </svg>
@@ -170,7 +170,7 @@
       var footerNote = document.getElementById('footerNote');
 
       // Crucial: preserve query parameters and hash so Supabase in Flutter receives the tokens!
-      var targetDeepLink = 'pawtrace://verified' + search + hash;
+      var targetDeepLink = 'pettrace://verified' + search + hash;
 
       if (errorCode) {
         cardBadge.textContent = '⚠️ Security Notice';
@@ -181,8 +181,8 @@
         cardIcon.style.borderColor = '#FECACA';
         cardTitle.textContent = 'Link Expired';
         cardDesc.textContent = errorDesc ? decodeURIComponent(errorDesc.replace(/\+/g, ' ')) : 'This link has expired or has already been used. Please request a new one from the app.';
-        btnText.textContent = 'Return to PawTrace';
-        if (footerNote) footerNote.textContent = 'Please open the PawTrace app and try again.';
+        btnText.textContent = 'Return to PetTrace';
+        if (footerNote) footerNote.textContent = 'Please open the PetTrace app and try again.';
       } else if (isRecovery) {
         cardBadge.textContent = '🔐 Password Recovery';
         cardBadge.style.color = '#FF6600';
@@ -190,9 +190,9 @@
         cardIcon.style.background = '#FFF7ED';
         cardIcon.style.borderColor = '#FED7AA';
         cardTitle.textContent = 'Reset Password';
-        cardDesc.textContent = 'Your reset link is verified! Redirecting to PawTrace so you can enter your new password...';
+        cardDesc.textContent = 'Your reset link is verified! Redirecting to PetTrace so you can enter your new password...';
         btnText.textContent = 'Enter New Password';
-        if (footerNote) footerNote.textContent = 'Tap the button above if PawTrace does not open automatically.';
+        if (footerNote) footerNote.textContent = 'Tap the button above if PetTrace does not open automatically.';
       }
 
       openAppBtn.href = targetDeepLink;

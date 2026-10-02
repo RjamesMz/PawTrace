@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../core/app_colors.dart';
+import '../core/app_routes.dart';
 import '../services/auth_service.dart';
 import 'admin_sidebar.dart';
 import 'bottom_nav_bar.dart';
@@ -39,6 +40,7 @@ class AdminLayout extends StatefulWidget {
 
 class _AdminLayoutState extends State<AdminLayout> {
   String _adminName = 'Admin';
+  String? _photoUrl;
   UserRole _role = UserRole.admin;
 
   @override
@@ -47,7 +49,26 @@ class _AdminLayoutState extends State<AdminLayout> {
     if (widget.role != null) {
       _role = widget.role!;
     }
+    AuthService.instance.profileNotifier.addListener(_onProfileChanged);
     _loadProfile();
+  }
+
+  @override
+  void dispose() {
+    AuthService.instance.profileNotifier.removeListener(_onProfileChanged);
+    super.dispose();
+  }
+
+  void _onProfileChanged() {
+    final profile = AuthService.instance.profileNotifier.value;
+    if (profile != null && mounted) {
+      setState(() {
+        final first = profile['first_name']?.toString() ?? '';
+        final surname = profile['surname']?.toString() ?? '';
+        if (first.isNotEmpty) _adminName = '$first $surname'.trim();
+        _photoUrl = profile['photo_url']?.toString();
+      });
+    }
   }
 
   Future<void> _loadProfile() async {
@@ -59,6 +80,7 @@ class _AdminLayoutState extends State<AdminLayout> {
       final first = profile['first_name']?.toString() ?? '';
       final surname = profile['surname']?.toString() ?? '';
       if (first.isNotEmpty) name = '$first $surname'.trim();
+      _photoUrl = profile['photo_url']?.toString();
     }
     setState(() {
       _adminName = name;
@@ -118,6 +140,7 @@ class _AdminLayoutState extends State<AdminLayout> {
           currentIndex: widget.currentIndex,
           adminName: _adminName,
           role: _role,
+          photoUrl: _photoUrl,
         ),
         // Main content area
         Expanded(
@@ -172,16 +195,29 @@ class _AdminLayoutState extends State<AdminLayout> {
           const NotificationBellButton(size: 22),
           const SizedBox(width: 8),
           // Admin avatar
-          CircleAvatar(
-            radius: 18,
-            backgroundColor: AppColors.primaryContainer,
-            child: Text(
-              _initial,
-              style: GoogleFonts.montserrat(
-                fontSize: 14,
-                fontWeight: FontWeight.w700,
-                color: AppColors.onPrimaryContainer,
-              ),
+          InkWell(
+            onTap: () {
+              if (widget.currentIndex != 5) {
+                Navigator.pushReplacementNamed(context, AppRoutes.adminSettings);
+              }
+            },
+            borderRadius: BorderRadius.circular(20),
+            child: CircleAvatar(
+              radius: 18,
+              backgroundColor: AppColors.primaryContainer,
+              backgroundImage: _photoUrl != null && _photoUrl!.isNotEmpty
+                  ? NetworkImage(_photoUrl!)
+                  : null,
+              child: (_photoUrl == null || _photoUrl!.isEmpty)
+                  ? Text(
+                      _initial,
+                      style: GoogleFonts.montserrat(
+                        fontSize: 14,
+                        fontWeight: FontWeight.w700,
+                        color: AppColors.onPrimaryContainer,
+                      ),
+                    )
+                  : null,
             ),
           ),
         ],

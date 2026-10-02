@@ -1,3 +1,5 @@
+import 'package:flutter/foundation.dart';
+import 'package:flutter/painting.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 /// Roles a PawTrace user can hold.
@@ -15,6 +17,27 @@ class AuthService {
   final SupabaseClient _client = Supabase.instance.client;
   UserRole? _cachedRole;
   String? _cachedBarangay;
+
+  /// Global reactive profile notifier — emits the user's latest profile map
+  /// whenever loaded from Supabase or updated locally in Settings.
+  final ValueNotifier<Map<String, dynamic>?> profileNotifier =
+      ValueNotifier<Map<String, dynamic>?>(null);
+
+  /// Synchronously and reactively notifies all listening screens (Dashboards,
+  /// AppBars, Sidebars, Settings) of updated profile fields.
+  void updateProfileData(Map<String, dynamic> partialData) {
+    final current = Map<String, dynamic>.from(profileNotifier.value ?? {});
+    current.addAll(partialData);
+    profileNotifier.value = current;
+  }
+
+  /// Clears Flutter's in-memory image cache so updated profile photos re-render immediately.
+  static void evictImageCache() {
+    try {
+      PaintingBinding.instance.imageCache.clear();
+      PaintingBinding.instance.imageCache.clearLiveImages();
+    } catch (_) {}
+  }
 
   // ─── Stream ────────────────────────────────────────────────────────────────
 
@@ -98,6 +121,7 @@ class AuthService {
   Future<void> signOut() async {
     _cachedRole = null;
     _cachedBarangay = null;
+    profileNotifier.value = null;
     await _client.auth.signOut();
   }
 
@@ -185,6 +209,9 @@ class AuthService {
           data['status'] = 'active';
         } catch (_) {}
       }
+      if (data != null) {
+        profileNotifier.value = Map<String, dynamic>.from(data);
+      }
       return data;
     } catch (_) {
       return null;
@@ -204,7 +231,7 @@ class AuthService {
       if (role == 'admin') return UserRole.admin;
       return UserRole.user;
     } catch (e) {
-      print('Error fetching role: $e');
+      debugPrint('Error fetching role: $e');
       return UserRole.user;
     }
   }

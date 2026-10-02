@@ -19,10 +19,10 @@ class AppConstants {
   /// Set [logoAsset] to your asset path (e.g. 'assets/images/logo.png')
   /// and ensure it is registered in [pubspec.yaml] under `flutter: assets:`.
   /// When this is non-null and not empty, the image will be displayed.
-  static const String? logoAsset = null;
+  static const String logoAsset = 'assets/images/logo.png';
 
   /// Option 2: Material Icon
-  /// If [logoAsset] is null or empty, this icon is displayed across the app.
+  /// If [logoAsset] is empty, this icon is displayed across the app.
   static const IconData logoIcon = Icons.pets;
 
   // ── Barangay / Location List ───────────────────────────────────────────────
@@ -39,9 +39,9 @@ class AppConstants {
     BoxFit fit = BoxFit.contain,
     bool applyColorToAsset = false,
   }) {
-    if (logoAsset != null && logoAsset!.isNotEmpty) {
+    if (logoAsset.isNotEmpty) {
       return Image.asset(
-        logoAsset!,
+        logoAsset,
         width: size,
         height: size,
         fit: fit,

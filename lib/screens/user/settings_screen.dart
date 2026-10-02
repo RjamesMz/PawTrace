@@ -1,4 +1,3 @@
-import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:image_picker/image_picker.dart';
@@ -147,9 +146,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
     setState(() => _isUploadingPhoto = true);
     try {
-      final file = File(picked.path);
+      final bytes = await picked.readAsBytes();
       final ext = picked.path.split('.').last.toLowerCase();
-      final storagePath = 'avatars/$uid.$ext';
+      final timestamp = DateTime.now().millisecondsSinceEpoch;
+      final storagePath = 'avatars/${uid}_$timestamp.$ext';
 
       String? uploadedPublicUrl;
       dynamic lastError;
@@ -162,9 +162,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
       ];
       for (final bucket in candidateBuckets) {
         try {
-          await Supabase.instance.client.storage.from(bucket).upload(
+          await Supabase.instance.client.storage.from(bucket).uploadBinary(
                 storagePath,
-                file,
+                bytes,
                 fileOptions:
                     const FileOptions(upsert: true, contentType: 'image/jpeg'),
               );
@@ -186,17 +186,21 @@ class _SettingsScreenState extends State<SettingsScreen> {
             Exception('No storage bucket found for profile photos.');
       }
 
-      final publicUrl = uploadedPublicUrl;
-
-      // Cache-bust the URL so the widget re-fetches the new image
-      final bustUrl = '$publicUrl?t=${DateTime.now().millisecondsSinceEpoch}';
+      // Append query timestamp so all clients and Flutter NetworkImage bust cache
+      final publicUrl = '$uploadedPublicUrl?t=$timestamp';
 
       await Supabase.instance.client
           .from('users')
           .update({'photo_url': publicUrl}).eq('user_id', uid);
 
+      // Clear Flutter's memory image cache
+      AuthService.evictImageCache();
+
+      // Broadcast new photo URL to all active screens (Dashboard, etc.)
+      AuthService.instance.updateProfileData({'photo_url': publicUrl});
+
       if (!mounted) return;
-      setState(() => _photoUrl = bustUrl);
+      setState(() => _photoUrl = publicUrl);
       AppToast.success(context, 'Profile photo updated!');
     } catch (e) {
       if (!mounted) return;
@@ -354,6 +358,12 @@ class _SettingsScreenState extends State<SettingsScreen> {
       }).eq('user_id', uid);
 
       if (!mounted) return;
+      AuthService.instance.updateProfileData({
+        'first_name': fn,
+        'middle_name': mn,
+        'surname': sn,
+        'suffix': sfx,
+      });
       setState(() {
         _firstName = fn;
         _middleName = mn;

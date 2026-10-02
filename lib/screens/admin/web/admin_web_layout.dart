@@ -33,11 +33,31 @@ class _AdminWebLayoutState extends State<AdminWebLayout> {
 
   String _adminName = 'Admin';
   UserRole _role = UserRole.admin;
+  String? _photoUrl;
 
   @override
   void initState() {
     super.initState();
+    AuthService.instance.profileNotifier.addListener(_onProfileChanged);
     _loadProfile();
+  }
+
+  @override
+  void dispose() {
+    AuthService.instance.profileNotifier.removeListener(_onProfileChanged);
+    super.dispose();
+  }
+
+  void _onProfileChanged() {
+    final profile = AuthService.instance.profileNotifier.value;
+    if (profile != null && mounted) {
+      setState(() {
+        final first = profile['first_name']?.toString() ?? '';
+        final surname = profile['surname']?.toString() ?? '';
+        if (first.isNotEmpty) _adminName = '$first $surname'.trim();
+        _photoUrl = profile['photo_url']?.toString();
+      });
+    }
   }
 
   Future<void> _loadProfile() async {
@@ -50,6 +70,7 @@ class _AdminWebLayoutState extends State<AdminWebLayout> {
         final first = profile['first_name']?.toString() ?? '';
         final surname = profile['surname']?.toString() ?? '';
         if (first.isNotEmpty) name = '$first $surname'.trim();
+        _photoUrl = profile['photo_url']?.toString();
       }
       setState(() {
         _adminName = name;
@@ -193,14 +214,19 @@ class _AdminWebLayoutState extends State<AdminWebLayout> {
                       CircleAvatar(
                         radius: 20,
                         backgroundColor: AppColors.primary,
-                        child: Text(
-                          _initial,
-                          style: GoogleFonts.montserrat(
-                            fontSize: 16,
-                            fontWeight: FontWeight.bold,
-                            color: Colors.white,
-                          ),
-                        ),
+                        backgroundImage: _photoUrl != null && _photoUrl!.isNotEmpty
+                            ? NetworkImage(_photoUrl!)
+                            : null,
+                        child: (_photoUrl == null || _photoUrl!.isEmpty)
+                            ? Text(
+                                _initial,
+                                style: GoogleFonts.montserrat(
+                                  fontSize: 16,
+                                  fontWeight: FontWeight.bold,
+                                  color: Colors.white,
+                                ),
+                              )
+                            : null,
                       ),
                       const SizedBox(width: 12),
                       Expanded(
@@ -372,32 +398,45 @@ class _AdminWebLayoutState extends State<AdminWebLayout> {
                         const SizedBox(width: 8),
 
                         // Admin name with CircleAvatar
-                        Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Text(
-                              _adminName,
-                              style: GoogleFonts.inter(
-                                fontSize: 13,
-                                fontWeight: FontWeight.w600,
-                                color: AppColors.onSurface,
-                              ),
-                            ),
-                            const SizedBox(width: 10),
-                            CircleAvatar(
-                              radius: 18,
-                              backgroundColor:
-                                  AppColors.primary.withOpacity(0.15),
-                              child: Text(
-                                _initial,
-                                style: GoogleFonts.montserrat(
-                                  fontSize: 14,
-                                  fontWeight: FontWeight.bold,
-                                  color: AppColors.primary,
+                        // Admin name with CircleAvatar (clickable to navigate to settings)
+                        InkWell(
+                          borderRadius: BorderRadius.circular(20),
+                          onTap: () => _onNavSelected(5),
+                          child: Padding(
+                            padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 4),
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Text(
+                                  _adminName,
+                                  style: GoogleFonts.inter(
+                                    fontSize: 13,
+                                    fontWeight: FontWeight.w600,
+                                    color: AppColors.onSurface,
+                                  ),
                                 ),
-                              ),
+                                const SizedBox(width: 10),
+                                CircleAvatar(
+                                  radius: 18,
+                                  backgroundColor:
+                                      AppColors.primary.withOpacity(0.15),
+                                  backgroundImage: _photoUrl != null && _photoUrl!.isNotEmpty
+                                      ? NetworkImage(_photoUrl!)
+                                      : null,
+                                  child: (_photoUrl == null || _photoUrl!.isEmpty)
+                                      ? Text(
+                                          _initial,
+                                          style: GoogleFonts.montserrat(
+                                            fontSize: 14,
+                                            fontWeight: FontWeight.bold,
+                                            color: AppColors.primary,
+                                          ),
+                                        )
+                                      : null,
+                                ),
+                              ],
                             ),
-                          ],
+                          ),
                         ),
                       ],
                     ),

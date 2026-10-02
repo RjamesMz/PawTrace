@@ -763,7 +763,7 @@ class LostPetMapScreen extends StatelessWidget {
             children: [
               TileLayer(
                 urlTemplate: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
-                userAgentPackageName: 'com.pawtrace.app',
+                userAgentPackageName: 'com.pettrace.app',
               ),
               MarkerLayer(
                 markers: [

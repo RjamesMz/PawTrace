@@ -500,7 +500,7 @@ class _ReportLostPetScreenState extends State<ReportLostPetScreen> {
                     TileLayer(
                       urlTemplate:
                           'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
-                      userAgentPackageName: 'com.pawtrace.app',
+                      userAgentPackageName: 'com.pettrace.app',
                     ),
                     MarkerLayer(
                       markers: [

@@ -47,7 +47,7 @@ void main() async {
     ]);
   }
 
-  // Set system UI overlay style to match PawTrace brand
+  // Set system UI overlay style to match PetTrace brand
   SystemChrome.setSystemUIOverlayStyle(const SystemUiOverlayStyle(
     statusBarColor: Colors.white,
     statusBarIconBrightness: Brightness.dark,
@@ -55,17 +55,17 @@ void main() async {
     systemNavigationBarIconBrightness: Brightness.dark,
   ));
 
-  runApp(const PawTraceApp());
+  runApp(const PetTraceApp());
 }
 
 final GlobalKey<NavigatorState> rootNavigatorKey = GlobalKey<NavigatorState>();
 
-/// Root application widget for PawTrace.
+/// Root application widget for PetTrace.
 ///
-/// Configures [MaterialApp] with the PawTrace design system theme and
+/// Configures [MaterialApp] with the PetTrace design system theme and
 /// named routes for every screen in the application.
-class PawTraceApp extends StatelessWidget {
-  const PawTraceApp({super.key});
+class PetTraceApp extends StatelessWidget {
+  const PetTraceApp({super.key});
 
   @override
   Widget build(BuildContext context) {

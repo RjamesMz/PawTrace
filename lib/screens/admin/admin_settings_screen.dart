@@ -204,7 +204,8 @@ class _AdminSettingsScreenState extends State<AdminSettingsScreen> {
     try {
       final bytes = await picked.readAsBytes();
       final ext = picked.path.split('.').last.toLowerCase();
-      final storagePath = 'avatars/$uid.$ext';
+      final timestamp = DateTime.now().millisecondsSinceEpoch;
+      final storagePath = 'avatars/${uid}_$timestamp.$ext';
 
       String? uploadedPublicUrl;
       dynamic lastError;
@@ -240,15 +241,17 @@ class _AdminSettingsScreenState extends State<AdminSettingsScreen> {
             Exception('No storage bucket found for profile photos.');
       }
 
-      final publicUrl = uploadedPublicUrl;
-      final bustUrl = '$publicUrl?t=${DateTime.now().millisecondsSinceEpoch}';
+      final publicUrl = '$uploadedPublicUrl?t=$timestamp';
 
       await _supabase
           .from('users')
           .update({'photo_url': publicUrl}).eq('user_id', uid);
 
+      AuthService.evictImageCache();
+      AuthService.instance.updateProfileData({'photo_url': publicUrl});
+
       if (!mounted) return;
-      setState(() => _photoUrl = bustUrl);
+      setState(() => _photoUrl = publicUrl);
       AppToast.success(context, 'Profile photo updated successfully!');
     } catch (e) {
       if (!mounted) return;
@@ -288,6 +291,15 @@ class _AdminSettingsScreenState extends State<AdminSettingsScreen> {
       }).eq('user_id', uid);
 
       if (!mounted) return;
+
+      AuthService.instance.updateProfileData({
+        'first_name': fn,
+        'middle_name': mn,
+        'surname': sn,
+        'suffix': sfx,
+        'phone': phone,
+        'address': address,
+      });
 
       _initialFirstName = fn;
       _initialMiddleName = mn;
