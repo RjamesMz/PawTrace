@@ -74,7 +74,6 @@ class _PetProfileDetailScreenState extends State<PetProfileDetailScreen> {
           .from('lost_reports')
           .update({
             'status': 'archived',
-            'updated_at': DateTime.now().toIso8601String(),
           })
           .eq('pet_id', petId)
           .eq('status', 'active');
@@ -116,7 +115,6 @@ class _PetProfileDetailScreenState extends State<PetProfileDetailScreen> {
           .from('lost_reports')
           .update({
             'status': 'archived',
-            'updated_at': DateTime.now().toIso8601String(),
           })
           .eq('pet_id', petId)
           .neq('status', 'archived');

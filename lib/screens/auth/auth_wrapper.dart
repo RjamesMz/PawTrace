@@ -3,6 +3,7 @@ import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import '../../main.dart';
 import '../../services/auth_service.dart';
 import '../../core/app_colors.dart';
 import '../../core/app_constants.dart';
@@ -44,6 +45,7 @@ class _AuthWrapperState extends State<AuthWrapper> {
 
     _authSubscription = AuthService.instance.onAuthStateChange.listen((data) {
       if (data.event == AuthChangeEvent.passwordRecovery) {
+        rootNavigatorKey.currentState?.popUntil((route) => route.isFirst);
         if (mounted) setState(() => _isPasswordRecovery = true);
       }
     });

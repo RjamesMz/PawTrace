@@ -118,6 +118,7 @@ class _AdminPetDetailScreenState extends State<AdminPetDetailScreen> {
         'image_url': photoUrl,
         'accent_color': '#BA1A1A',
         'barangay': postBarangay,
+        'status': 'active',
       });
 
       // 3. Dispatch notifications to ALL users across all barangays

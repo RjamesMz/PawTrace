@@ -39,7 +39,11 @@ class _LostPetDetailScreenState extends State<LostPetDetailScreen> {
     if (ownerId == null || ownerId.isEmpty) return;
     setState(() => _loadingOwner = true);
     try {
-      final data = await Supabase.instance.client.from('users').select().eq('id', ownerId).maybeSingle();
+      final data = await Supabase.instance.client
+          .from('users')
+          .select()
+          .eq('user_id', ownerId)
+          .maybeSingle();
       if (mounted) setState(() => _ownerData = data);
     } catch (e) {
       debugPrint('[PetTrace] owner fetch: $e');
@@ -59,7 +63,6 @@ class _LostPetDetailScreenState extends State<LostPetDetailScreen> {
     try {
       await Supabase.instance.client.from('lost_reports').update({
         'status': 'archived',
-        'updated_at': DateTime.now().toIso8601String(),
       }).eq('report_id', reportId);
 
       if (petId != null && petId.isNotEmpty) {

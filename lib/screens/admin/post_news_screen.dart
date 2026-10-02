@@ -74,7 +74,10 @@ class _PostNewsScreenState extends State<PostNewsScreen> {
       final data = await query.order('created_at', ascending: false);
       if (mounted) {
         setState(() {
-          _newsPosts = List<Map<String, dynamic>>.from(data);
+          _newsPosts = List<Map<String, dynamic>>.from(data)
+              .where((p) =>
+                  (p['status'] as String? ?? '').toLowerCase() != 'archived')
+              .toList();
           _isLoadingPosts = false;
         });
       }
@@ -136,6 +139,7 @@ class _PostNewsScreenState extends State<PostNewsScreen> {
         'image_url': photoUrl,
         'accent_color': _defaultAccentColor,
         'barangay': _adminBarangay.isNotEmpty ? _adminBarangay : 'Catanduanes',
+        'status': 'active',
       });
 
       if (!mounted) return;
@@ -157,19 +161,18 @@ class _PostNewsScreenState extends State<PostNewsScreen> {
     }
   }
 
-  Future<void> _deletePost(Map<String, dynamic> post) async {
-    final postId =
-        (post['news_id'] ?? post['post_id'] ?? post['id'])?.toString() ?? '';
+  Future<void> _archivePost(Map<String, dynamic> post) async {
+    final rawId = post['news_id'] ?? post['post_id'] ?? post['id'];
     final title = post['title']?.toString() ?? 'this post';
 
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (_) => AlertDialog(
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-        title: Text('Delete Post?',
+        title: Text('Archive Post?',
             style: GoogleFonts.montserrat(fontWeight: FontWeight.w700)),
         content: Text(
-            'Are you sure you want to delete "$title"? This will permanently remove the news post.',
+            'Are you sure you want to archive "$title"? It will be removed from published news and preserved in records.',
             style: GoogleFonts.inter(fontSize: 14)),
         actions: [
           TextButton(
@@ -179,12 +182,12 @@ class _PostNewsScreenState extends State<PostNewsScreen> {
           ),
           ElevatedButton(
             style: ElevatedButton.styleFrom(
-                backgroundColor: AppColors.error,
+                backgroundColor: AppColors.primary,
                 foregroundColor: Colors.white,
                 shape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(12))),
             onPressed: () => Navigator.pop(context, true),
-            child: Text('Delete',
+            child: Text('Archive',
                 style: GoogleFonts.inter(fontWeight: FontWeight.w600)),
           ),
         ],
@@ -192,29 +195,66 @@ class _PostNewsScreenState extends State<PostNewsScreen> {
     );
     if (confirmed != true || !mounted) return;
     try {
-      bool deleted = false;
-      for (final idCol in ['news_id', 'post_id', 'id']) {
-        if (postId.isNotEmpty) {
+      dynamic idToUse = rawId;
+      if (rawId != null) {
+        final parsed = int.tryParse(rawId.toString());
+        if (parsed != null) idToUse = parsed;
+      }
+
+      List<dynamic> res = [];
+      if (idToUse != null) {
+        for (final idCol in ['news_id', 'post_id', 'id']) {
           try {
-            await Supabase.instance.client
+            res = await Supabase.instance.client
                 .from('news')
-                .delete()
-                .eq(idCol, postId);
-            deleted = true;
-            break;
-          } catch (_) {}
+                .update({'status': 'archived'})
+                .eq(idCol, idToUse)
+                .select();
+            if (res.isNotEmpty) break;
+          } catch (err) {
+            debugPrint('[News Archive] Failed with $idCol: $err');
+          }
         }
       }
-      if (!deleted && title.isNotEmpty) {
-        await Supabase.instance.client.from('news').delete().eq('title', title);
+
+      if (res.isEmpty && title.isNotEmpty) {
+        try {
+          res = await Supabase.instance.client
+              .from('news')
+              .update({'status': 'archived'})
+              .eq('title', title)
+              .select();
+        } catch (err) {
+          debugPrint('[News Archive] Failed with title: $err');
+        }
       }
-      _fetchNewsPosts();
+
+      // Optimistically remove from local state
       if (mounted) {
-        AppToast.success(context, 'News post deleted successfully.');
+        setState(() {
+          _newsPosts.removeWhere((item) =>
+              (rawId != null &&
+                  (item['news_id'] == rawId ||
+                      item['post_id'] == rawId ||
+                      item['id'] == rawId)) ||
+              (item['title'] == title));
+        });
+      }
+
+      await _fetchNewsPosts();
+      if (mounted) {
+        if (res.isNotEmpty) {
+          AppToast.success(context, 'News post archived successfully.');
+        } else {
+          AppToast.error(
+            context,
+            'Unable to archive. Please run SQL to add status column or check Supabase permissions.',
+          );
+        }
       }
     } catch (e) {
       if (mounted) {
-        AppToast.error(context, 'Error deleting post: $e');
+        AppToast.error(context, 'Error archiving post: $e');
       }
     }
   }
@@ -588,10 +628,10 @@ class _PostNewsScreenState extends State<PostNewsScreen> {
             ),
           ),
           IconButton(
-            icon: const Icon(Icons.delete_outline_rounded,
-                color: AppColors.error, size: 20),
-            tooltip: 'Delete post',
-            onPressed: () => _deletePost(post),
+            icon: const Icon(Icons.archive_outlined,
+                color: AppColors.onSurfaceVariant, size: 20),
+            tooltip: 'Archive post',
+            onPressed: () => _archivePost(post),
           ),
         ],
       ),

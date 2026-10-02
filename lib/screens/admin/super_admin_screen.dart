@@ -217,9 +217,9 @@ class _SuperAdminScreenState extends State<SuperAdminScreen> {
     try {
       final data = await _supabase
           .from('lost_reports')
-          .select('report_id, reported_at, barangay, pets(name, photo_url), owner_id(first_name, surname)')
+          .select('*, pets(*), owner_id(*)')
           .order('reported_at', ascending: false)
-          .limit(5);
+          .limit(10);
       _recentReports = List<Map<String, dynamic>>.from(data);
     } catch (e) {
       debugPrint('Error fetching recent reports: $e');
@@ -557,9 +557,9 @@ class _SuperAdminScreenState extends State<SuperAdminScreen> {
         Row(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // Left 60%: Card with PaginatedDataTable of recent lost reports
+            // Left 70%: Card with PaginatedDataTable of recent lost reports
             Expanded(
-              flex: 6,
+              flex: 7,
               child: Card(
                 elevation: 0,
                 shape: RoundedRectangleBorder(
@@ -574,6 +574,8 @@ class _SuperAdminScreenState extends State<SuperAdminScreen> {
                     dividerColor: Colors.grey.shade200,
                   ),
                   child: PaginatedDataTable(
+                    columnSpacing: 16,
+                    horizontalMargin: 16,
                     header: Row(
                       children: [
                         Text(
@@ -586,11 +588,14 @@ class _SuperAdminScreenState extends State<SuperAdminScreen> {
                         ),
                         const Spacer(),
                         TextButton(
-                          onPressed: () => Navigator.push(
-                            context,
-                            MaterialPageRoute(
-                                builder: (_) => const AdminReportsScreen()),
-                          ),
+                          onPressed: () async {
+                            await Navigator.push(
+                              context,
+                              MaterialPageRoute(
+                                  builder: (_) => const AdminReportsScreen()),
+                            );
+                            _loadDashboard();
+                          },
                           child: Text(
                             'View All Reports',
                             style: GoogleFonts.inter(
@@ -607,10 +612,12 @@ class _SuperAdminScreenState extends State<SuperAdminScreen> {
                     columns: const [
                       DataColumn(label: Text('Photo')),
                       DataColumn(label: Text('Pet Name')),
-                      DataColumn(label: Text('Municipality')),
                       DataColumn(label: Text('Owner')),
-                      DataColumn(label: Text('Date')),
-                      DataColumn(label: Text('Status')),
+                      DataColumn(label: Text('Location')),
+                      DataColumn(label: Text('Date Reported')),
+                      DataColumn(label: Text('Time Reported')),
+                      DataColumn(label: Text('Pet Status')),
+                      DataColumn(label: Text('Archive')),
                     ],
                     source: _RecentReportsDataTableSource(_recentReports),
                   ),
@@ -619,9 +626,9 @@ class _SuperAdminScreenState extends State<SuperAdminScreen> {
             ),
             const SizedBox(width: 20),
 
-            // Right 40%: Card with title Barangay Admins list showing each admin as compact ListTile
+            // Right 30%: Card with title Barangay Admins list showing each admin as compact ListTile
             Expanded(
-              flex: 4,
+              flex: 3,
               child: Card(
                 elevation: 0,
                 shape: RoundedRectangleBorder(
@@ -1505,10 +1512,33 @@ class _SuperAdminScreenState extends State<SuperAdminScreen> {
 
     final barangay = report['barangay']?.toString() ?? report['municipality']?.toString() ?? '';
     final reportedAt = report['reported_at']?.toString() ?? '';
+    final reportStatus = (report['status']?.toString() ?? 'active').toLowerCase();
+    final petStatus = pet is Map ? (pet['status']?.toString() ?? '').toLowerCase() : '';
+
+    final bool isFound = reportStatus == 'resolved' ||
+        reportStatus == 'found' ||
+        report['is_found'] == true ||
+        (petStatus == 'active' && reportStatus == 'archived') ||
+        petStatus == 'found';
+    final String petCondition = isFound ? 'FOUND' : 'LOST';
+
+    String formattedDate = '';
+    String formattedTime = '';
+    if (reportedAt.isNotEmpty) {
+      try {
+        final dt = DateTime.parse(reportedAt).toLocal();
+        formattedDate = '${dt.month}/${dt.day}/${dt.year}';
+        final hour = dt.hour == 0 ? 12 : (dt.hour > 12 ? dt.hour - 12 : dt.hour);
+        final minute = dt.minute.toString().padLeft(2, '0');
+        final period = dt.hour < 12 ? 'AM' : 'PM';
+        formattedTime = '$hour:$minute $period';
+      } catch (_) {
+        formattedDate = reportedAt;
+      }
+    }
 
     return Container(
       margin: EdgeInsets.only(bottom: removeBottomMargin ? 0 : 8),
-      padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(14),
@@ -1520,77 +1550,97 @@ class _SuperAdminScreenState extends State<SuperAdminScreen> {
           ),
         ],
       ),
-      child: Row(
-        children: [
-          // Pet photo
-          ClipRRect(
-            borderRadius: BorderRadius.circular(8),
-            child: petPhoto.isNotEmpty
-                ? Image.network(
-                    petPhoto,
-                    width: 52,
-                    height: 52,
-                    fit: BoxFit.cover,
-                    errorBuilder: (_, __, ___) => _buildPhotoPlaceholder(),
-                  )
-                : _buildPhotoPlaceholder(),
-          ),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          borderRadius: BorderRadius.circular(14),
+          onTap: () async {
+            await Navigator.push(
+              context,
+              MaterialPageRoute(builder: (_) => const AdminReportsScreen()),
+            );
+            _loadDashboard();
+          },
+          child: Padding(
+            padding: const EdgeInsets.all(12),
+            child: Row(
               children: [
-                Text(
-                  petName,
-                  style: GoogleFonts.montserrat(
-                    fontSize: 14,
-                    fontWeight: FontWeight.bold,
-                    color: AppColors.onSurface,
+                // Pet photo
+                ClipRRect(
+                  borderRadius: BorderRadius.circular(8),
+                  child: petPhoto.isNotEmpty
+                      ? Image.network(
+                          petPhoto,
+                          width: 52,
+                          height: 52,
+                          fit: BoxFit.cover,
+                          errorBuilder: (_, __, ___) => _buildPhotoPlaceholder(),
+                        )
+                      : _buildPhotoPlaceholder(),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        petName,
+                        style: GoogleFonts.montserrat(
+                          fontSize: 14,
+                          fontWeight: FontWeight.bold,
+                          color: AppColors.onSurface,
+                        ),
+                      ),
+                      const SizedBox(height: 2),
+                      Text(
+                        'Owner: $ownerName',
+                        style: GoogleFonts.inter(
+                            fontSize: 12, color: AppColors.onSurfaceVariant),
+                      ),
+                      if (barangay.isNotEmpty) ...[
+                        const SizedBox(height: 1),
+                        Text(
+                          barangay,
+                          style: GoogleFonts.inter(
+                              fontSize: 11, color: AppColors.onSurfaceVariant),
+                        ),
+                      ],
+                      if (formattedDate.isNotEmpty)
+                        Text(
+                          '$formattedDate • $formattedTime (${_formatTimeAgo(reportedAt)})',
+                          style: GoogleFonts.inter(
+                            fontSize: 11,
+                            fontWeight: FontWeight.w600,
+                            color: AppColors.primary,
+                          ),
+                        ),
+                    ],
                   ),
                 ),
-                const SizedBox(height: 2),
-                Text(
-                  'Owner: $ownerName',
-                  style: GoogleFonts.inter(
-                      fontSize: 12, color: AppColors.onSurfaceVariant),
-                ),
-                if (barangay.isNotEmpty) ...[
-                  const SizedBox(height: 1),
-                  Text(
-                    barangay,
-                    style: GoogleFonts.inter(
-                        fontSize: 11, color: AppColors.onSurfaceVariant),
+                // Pet Condition badge (LOST or FOUND)
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                  decoration: BoxDecoration(
+                    color: petCondition == 'FOUND'
+                        ? const Color(0xFF22C55E).withOpacity(0.15)
+                        : AppColors.errorContainer,
+                    borderRadius: BorderRadius.circular(8),
                   ),
-                ],
-                if (reportedAt.isNotEmpty)
-                  Text(
-                    _formatTimeAgo(reportedAt),
+                  child: Text(
+                    petCondition,
                     style: GoogleFonts.inter(
-                      fontSize: 11,
-                      fontWeight: FontWeight.w600,
-                      color: AppColors.primary,
+                      fontSize: 10,
+                      fontWeight: FontWeight.w800,
+                      color: petCondition == 'FOUND'
+                          ? const Color(0xFF16A34A)
+                          : AppColors.error,
                     ),
                   ),
+                ),
               ],
             ),
           ),
-          // LOST badge
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-            decoration: BoxDecoration(
-              color: AppColors.errorContainer,
-              borderRadius: BorderRadius.circular(8),
-            ),
-            child: Text(
-              'LOST',
-              style: GoogleFonts.inter(
-                fontSize: 10,
-                fontWeight: FontWeight.w800,
-                color: AppColors.error,
-              ),
-            ),
-          ),
-        ],
+        ),
       ),
     );
   }
@@ -1833,68 +1883,143 @@ class _RecentReportsDataTableSource extends DataTableSource {
         ? '${owner['first_name'] ?? ''} ${owner['surname'] ?? ''}'.trim()
         : 'Unknown Owner';
 
-    final municipality = report['barangay']?.toString() ??
+    final location = report['barangay']?.toString() ??
         report['municipality']?.toString() ??
         'Catanduanes';
     final reportedAt = report['reported_at']?.toString() ?? '';
-    final status = (report['status']?.toString() ?? 'active').toLowerCase();
+    final reportStatus =
+        (report['status']?.toString() ?? 'active').toLowerCase();
+    final petStatus =
+        pet is Map ? (pet['status']?.toString() ?? '').toLowerCase() : '';
+
+    final bool isFound = reportStatus == 'resolved' ||
+        reportStatus == 'found' ||
+        report['is_found'] == true ||
+        (petStatus == 'active' && reportStatus == 'archived') ||
+        petStatus == 'found';
+    final String petCondition = isFound ? 'FOUND' : 'LOST';
 
     String formattedDate = '';
+    String formattedTime = '';
     if (reportedAt.isNotEmpty) {
       try {
-        final dt = DateTime.parse(reportedAt);
+        final dt = DateTime.parse(reportedAt).toLocal();
         formattedDate = '${dt.month}/${dt.day}/${dt.year}';
+        final hour =
+            dt.hour == 0 ? 12 : (dt.hour > 12 ? dt.hour - 12 : dt.hour);
+        final minute = dt.minute.toString().padLeft(2, '0');
+        final period = dt.hour < 12 ? 'AM' : 'PM';
+        formattedTime = '$hour:$minute $period';
       } catch (_) {
         formattedDate = reportedAt;
       }
     }
 
+    final isEven = index % 2 == 0;
+
     return DataRow.byIndex(
       index: index,
+      color: WidgetStateProperty.resolveWith<Color?>(
+        (states) => isEven ? Colors.white : const Color(0xFFF9FAFB),
+      ),
       cells: [
+        // Photo 40x40
         DataCell(
-          CircleAvatar(
-            radius: 18,
-            backgroundColor: AppColors.primaryContainer,
-            backgroundImage:
-                petPhoto.isNotEmpty ? NetworkImage(petPhoto) : null,
-            child: petPhoto.isEmpty
-                ? const Icon(Icons.pets, size: 16, color: AppColors.primary)
-                : null,
+          ClipRRect(
+            borderRadius: BorderRadius.circular(8),
+            child: petPhoto.isNotEmpty
+                ? Image.network(
+                    petPhoto,
+                    width: 40,
+                    height: 40,
+                    fit: BoxFit.cover,
+                    errorBuilder: (_, __, ___) => _photoPlaceholder(),
+                  )
+                : _photoPlaceholder(),
           ),
         ),
+        // Pet Name
         DataCell(Text(
           petName,
-          style: GoogleFonts.inter(fontWeight: FontWeight.w600),
+          style: GoogleFonts.inter(fontWeight: FontWeight.bold, fontSize: 13),
         )),
-        DataCell(Text(municipality, style: GoogleFonts.inter())),
+        // Owner
         DataCell(Text(
-          ownerName.isNotEmpty ? ownerName : 'Unknown',
-          style: GoogleFonts.inter(),
+          ownerName.isNotEmpty ? ownerName : '-',
+          style: GoogleFonts.inter(fontSize: 13),
         )),
-        DataCell(Text(formattedDate, style: GoogleFonts.inter())),
+        // Location
+        DataCell(Text(
+          location,
+          style: GoogleFonts.inter(fontSize: 13),
+        )),
+        // Date Reported
+        DataCell(Text(
+          formattedDate,
+          style: GoogleFonts.inter(fontSize: 13),
+        )),
+        // Time Reported
+        DataCell(Text(
+          formattedTime,
+          style: GoogleFonts.inter(fontSize: 13),
+        )),
+        // Pet Status Chip (LOST or FOUND)
         DataCell(
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
             decoration: BoxDecoration(
-              color: status == 'resolved'
+              color: petCondition == 'FOUND'
                   ? const Color(0xFF22C55E).withOpacity(0.15)
                   : AppColors.error.withOpacity(0.15),
               borderRadius: BorderRadius.circular(12),
             ),
             child: Text(
-              status.toUpperCase(),
+              petCondition,
               style: GoogleFonts.inter(
                 fontSize: 11,
                 fontWeight: FontWeight.bold,
-                color: status == 'resolved'
-                    ? const Color(0xFF22C55E)
+                color: petCondition == 'FOUND'
+                    ? const Color(0xFF16A34A)
                     : AppColors.error,
               ),
             ),
           ),
         ),
+        // Archive Status Chip
+        DataCell(
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+            decoration: BoxDecoration(
+              color: reportStatus == 'archived'
+                  ? const Color(0xFF64748B).withOpacity(0.15)
+                  : const Color(0xFF3B82F6).withOpacity(0.15),
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: Text(
+              reportStatus == 'archived' ? 'ARCHIVED' : 'ACTIVE',
+              style: GoogleFonts.inter(
+                fontSize: 11,
+                fontWeight: FontWeight.bold,
+                color: reportStatus == 'archived'
+                    ? const Color(0xFF475569)
+                    : const Color(0xFF1D4ED8),
+              ),
+            ),
+          ),
+        ),
       ],
+    );
+  }
+
+  Widget _photoPlaceholder() {
+    return Container(
+      width: 40,
+      height: 40,
+      decoration: BoxDecoration(
+        color: AppColors.primaryContainer.withOpacity(0.3),
+        borderRadius: BorderRadius.circular(8),
+      ),
+      child: const Icon(Icons.pets, color: AppColors.primary, size: 20),
     );
   }
 

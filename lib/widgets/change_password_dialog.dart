@@ -124,7 +124,10 @@ class _ChangePasswordDialogState extends State<ChangePasswordDialog> {
     });
 
     try {
-      await _supabase.auth.resetPasswordForEmail(widget.email);
+      await _supabase.auth.resetPasswordForEmail(
+        widget.email,
+        redirectTo: 'https://rjamesmz.github.io/PawTrace/web/verified.html',
+      );
 
       if (!mounted) return;
       setState(() {
@@ -307,7 +310,12 @@ class _ChangePasswordDialogState extends State<ChangePasswordDialog> {
             if (!_isLoading && _step != _PasswordStep.success)
               IconButton(
                 icon: const Icon(Icons.close_rounded, size: 20),
-                onPressed: () => Navigator.pop(context),
+                onPressed: () {
+                  widget.onSuccess?.call();
+                  if (Navigator.canPop(context)) {
+                    Navigator.pop(context);
+                  }
+                },
                 color: AppColors.onSurfaceVariant,
               ),
           ],

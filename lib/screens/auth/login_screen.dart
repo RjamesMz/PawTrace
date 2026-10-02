@@ -7,6 +7,7 @@ import '../../core/app_constants.dart';
 import '../../core/app_routes.dart';
 import '../../core/app_toast.dart';
 import '../../services/auth_service.dart';
+import '../../widgets/change_password_dialog.dart';
 
 /// Standalone Login screen for PawTrace.
 ///
@@ -74,6 +75,68 @@ class _LoginScreenState extends State<LoginScreen> {
   void _showError(String message) {
     if (!mounted) return;
     AppToast.error(context, message);
+  }
+
+  void _handleForgotPassword() {
+    final email = _emailCtrl.text.trim();
+    if (email.isNotEmpty && email.contains('@')) {
+      ChangePasswordDialog.show(context, email: email);
+    } else {
+      final ctrl = TextEditingController();
+      showDialog(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+          title: Text(
+            'Reset Password',
+            style: GoogleFonts.montserrat(fontWeight: FontWeight.w700, fontSize: 18),
+          ),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                'Enter your registered email address to receive a password reset link.',
+                style: GoogleFonts.inter(fontSize: 14, color: AppColors.onSurfaceVariant),
+              ),
+              const SizedBox(height: 16),
+              TextField(
+                controller: ctrl,
+                keyboardType: TextInputType.emailAddress,
+                decoration: InputDecoration(
+                  hintText: 'Enter your email',
+                  prefixIcon: const Icon(Icons.email_outlined),
+                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                ),
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx),
+              child: const Text('Cancel'),
+            ),
+            ElevatedButton(
+              onPressed: () {
+                final entered = ctrl.text.trim();
+                if (entered.isEmpty || !entered.contains('@')) {
+                  AppToast.error(context, 'Please enter a valid email address.');
+                  return;
+                }
+                Navigator.pop(ctx);
+                ChangePasswordDialog.show(context, email: entered);
+              },
+              style: ElevatedButton.styleFrom(
+                backgroundColor: AppColors.primary,
+                foregroundColor: Colors.white,
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+              ),
+              child: const Text('Continue'),
+            ),
+          ],
+        ),
+      );
+    }
   }
 
   // ─── Build ────────────────────────────────────────────────────────────────
@@ -189,7 +252,7 @@ class _LoginScreenState extends State<LoginScreen> {
         Align(
           alignment: Alignment.centerRight,
           child: TextButton(
-            onPressed: () {},
+            onPressed: _handleForgotPassword,
             child: Text(
               'Forgot password?',
               style: GoogleFonts.inter(

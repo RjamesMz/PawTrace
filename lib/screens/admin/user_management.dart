@@ -4,7 +4,6 @@ import 'package:responsive_framework/responsive_framework.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../core/app_colors.dart';
 import '../../core/app_constants.dart';
-import '../../core/app_routes.dart';
 import '../../core/app_toast.dart';
 import '../../services/auth_service.dart';
 import '../../widgets/admin_content_wrapper.dart';
@@ -106,25 +105,25 @@ class _UserManagementScreenState extends State<UserManagementScreen> {
   List<Map<String, dynamic>> get _filteredCitizens {
     List<Map<String, dynamic>> list = List.from(_citizenUsers);
     if (_filterIndex == 1) {
-      // Active
+      // Active (Verified & Not Deactivated)
       list = list.where((u) {
-        final st = (u['status'] ?? 'active').toString().toLowerCase();
-        return st != 'deactivated' && st != 'de_activated';
+        final st = (u['status'] ?? 'unverified').toString().toLowerCase();
+        return (st == 'active' || st == 'verified') &&
+            st != 'deactivated' &&
+            st != 'de_activated';
       }).toList();
     } else if (_filterIndex == 2) {
-      // Unverified (empty phone or explicitly unverified, and not deactivated)
+      // Unverified
       list = list.where((u) {
-        final st = (u['status'] ?? 'active').toString().toLowerCase();
-        final phone = (u['phone'] ?? '').toString().trim();
-        final isExplicitUnverified = st == 'unverified' || st == 'pending';
-        return (phone.isEmpty || isExplicitUnverified) &&
+        final st = (u['status'] ?? 'unverified').toString().toLowerCase();
+        return (st == 'unverified' || st == 'pending') &&
             st != 'deactivated' &&
             st != 'de_activated';
       }).toList();
     } else if (_filterIndex == 3) {
       // Deactivated
       list = list.where((u) {
-        final st = (u['status'] ?? 'active').toString().toLowerCase();
+        final st = (u['status'] ?? 'unverified').toString().toLowerCase();
         return st == 'deactivated' || st == 'de_activated';
       }).toList();
     }
@@ -149,23 +148,23 @@ class _UserManagementScreenState extends State<UserManagementScreen> {
     if (_filterIndex == 1) {
       // Active
       list = list.where((u) {
-        final st = (u['status'] ?? 'active').toString().toLowerCase();
-        return st != 'deactivated' && st != 'de_activated';
+        final st = (u['status'] ?? 'unverified').toString().toLowerCase();
+        return (st == 'active' || st == 'verified') &&
+            st != 'deactivated' &&
+            st != 'de_activated';
       }).toList();
     } else if (_filterIndex == 2) {
       // Unverified
       list = list.where((u) {
-        final st = (u['status'] ?? 'active').toString().toLowerCase();
-        final phone = (u['phone'] ?? '').toString().trim();
-        final isExplicitUnverified = st == 'unverified' || st == 'pending';
-        return (phone.isEmpty || isExplicitUnverified) &&
+        final st = (u['status'] ?? 'unverified').toString().toLowerCase();
+        return (st == 'unverified' || st == 'pending') &&
             st != 'deactivated' &&
             st != 'de_activated';
       }).toList();
     } else if (_filterIndex == 3) {
       // Deactivated
       list = list.where((u) {
-        final st = (u['status'] ?? 'active').toString().toLowerCase();
+        final st = (u['status'] ?? 'unverified').toString().toLowerCase();
         return st == 'deactivated' || st == 'de_activated';
       }).toList();
     }
@@ -283,29 +282,6 @@ class _UserManagementScreenState extends State<UserManagementScreen> {
                           ),
                         ),
                         const Spacer(),
-                        ElevatedButton.icon(
-                          onPressed: _showAddUserModal,
-                          icon: const Icon(Icons.add, size: 16),
-                          label: Text(
-                            'Add User',
-                            style: GoogleFonts.inter(
-                              fontWeight: FontWeight.bold,
-                              fontSize: 13,
-                            ),
-                          ),
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: AppColors.primary,
-                            foregroundColor: Colors.white,
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 16,
-                              vertical: 10,
-                            ),
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(8),
-                            ),
-                          ),
-                        ),
-                        const SizedBox(width: 8),
                         IconButton(
                           icon: const Icon(Icons.refresh),
                           tooltip: 'Refresh',
@@ -431,96 +407,6 @@ class _UserManagementScreenState extends State<UserManagementScreen> {
           ),
         ],
       ],
-    );
-  }
-
-  void _showAddUserModal() {
-    showDialog(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        title: Text(
-          'Add User',
-          style: GoogleFonts.montserrat(
-            fontSize: 18,
-            fontWeight: FontWeight.bold,
-            color: AppColors.onSurface,
-          ),
-        ),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              'Select account type to register:',
-              style: GoogleFonts.inter(
-                fontSize: 13,
-                color: AppColors.onSurfaceVariant,
-              ),
-            ),
-            const SizedBox(height: 16),
-            ListTile(
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(12),
-                side: BorderSide(color: Colors.grey.shade200),
-              ),
-              leading: Container(
-                padding: const EdgeInsets.all(8),
-                decoration: BoxDecoration(
-                  color: AppColors.primary.withOpacity(0.1),
-                  borderRadius: BorderRadius.circular(10),
-                ),
-                child: const Icon(Icons.person,
-                    color: AppColors.primary, size: 22),
-              ),
-              title: Text('Standard User',
-                  style: GoogleFonts.inter(
-                      fontSize: 14, fontWeight: FontWeight.w600)),
-              subtitle: Text('Citizen user account',
-                  style: GoogleFonts.inter(
-                      fontSize: 12, color: AppColors.onSurfaceVariant)),
-              onTap: () {
-                Navigator.pop(ctx);
-                Navigator.pushNamed(context, AppRoutes.register);
-              },
-            ),
-            if (_currentUserRole == UserRole.superAdmin) ...[
-              const SizedBox(height: 10),
-              ListTile(
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(12),
-                  side: BorderSide(color: Colors.grey.shade200),
-                ),
-                leading: Container(
-                  padding: const EdgeInsets.all(8),
-                  decoration: BoxDecoration(
-                    color: const Color(0xFF00796B).withOpacity(0.15),
-                    borderRadius: BorderRadius.circular(10),
-                  ),
-                  child: const Icon(Icons.admin_panel_settings,
-                      color: Color(0xFF00796B), size: 22),
-                ),
-                title: Text('Barangay Admin',
-                    style: GoogleFonts.inter(
-                        fontSize: 14, fontWeight: FontWeight.w600)),
-                subtitle: Text('Barangay administrator account',
-                    style: GoogleFonts.inter(
-                        fontSize: 12, color: AppColors.onSurfaceVariant)),
-                onTap: () {
-                  Navigator.pop(ctx);
-                  _showAddAdminModal();
-                },
-              ),
-            ],
-          ],
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx),
-            child: const Text('Close'),
-          ),
-        ],
-      ),
     );
   }
 
@@ -714,12 +600,12 @@ class _UserManagementScreenState extends State<UserManagementScreen> {
     final fullName = '$fName $sName'.trim();
     final phone = user['phone']?.toString() ?? '';
     final email = user['email']?.toString() ?? '';
-    final rawUserStatus = (user['status'] ?? 'active').toString().toLowerCase();
+    final rawUserStatus = (user['status'] ?? 'unverified').toString().toLowerCase();
     final isUserDeactivated =
         rawUserStatus == 'deactivated' || rawUserStatus == 'de_activated';
-    final isUserVerified = phone.isNotEmpty &&
-        rawUserStatus != 'unverified' &&
-        rawUserStatus != 'pending';
+    final isUserUnverified =
+        rawUserStatus == 'unverified' || rawUserStatus == 'pending';
+    final isUserVerified = !isUserDeactivated && !isUserUnverified;
 
     if (action == 'view') {
       showDialog(
@@ -759,12 +645,14 @@ class _UserManagementScreenState extends State<UserManagementScreen> {
               ),
               const SizedBox(height: 6),
               Text(
-                'Status: ${isUserDeactivated ? 'Deactivated' : 'Active'}',
+                'Status: ${isUserDeactivated ? 'Deactivated' : (isUserVerified ? 'Verified' : 'Unverified')}',
                 style: GoogleFonts.inter(
                   fontWeight: FontWeight.w600,
                   color: isUserDeactivated
                       ? const Color(0xFFDC2626)
-                      : const Color(0xFF16A34A),
+                      : (isUserVerified
+                          ? const Color(0xFF16A34A)
+                          : const Color(0xFFD97706)),
                 ),
               ),
               const SizedBox(height: 6),
@@ -858,18 +746,18 @@ class _UserManagementScreenState extends State<UserManagementScreen> {
       if (confirmed != true) return;
 
       try {
-        final userId = user['user_id'] ?? user['id'];
-        if (userId != null) {
-          try {
-            await Supabase.instance.client
-                .from('users')
-                .update({'status': targetStatus})
-                .eq('user_id', userId);
-          } catch (_) {
-            await Supabase.instance.client
-                .from('users')
-                .update({'status': targetStatus})
-                .eq('id', userId);
+        final userId = user['user_id']?.toString() ?? user['id']?.toString();
+        if (userId != null && userId.isNotEmpty) {
+          final res = await Supabase.instance.client
+              .from('users')
+              .update({'status': targetStatus})
+              .eq('user_id', userId)
+              .select();
+
+          if (res.isEmpty) {
+            throw Exception(
+              'No user row was updated. Please check Supabase Row Level Security (RLS) policies on the users table.',
+            );
           }
         }
         await _fetchUsers();
@@ -1258,9 +1146,10 @@ class _UserManagementScreenState extends State<UserManagementScreen> {
     final barangay = user['barangay'] as String? ?? '';
     final photoUrl = user['photo_url'] as String? ?? '';
     final phone = user['phone'] as String? ?? '';
-    final verified = phone.isNotEmpty;
-    final rawStatus = (user['status'] ?? 'active').toString().toLowerCase();
+    final rawStatus = (user['status'] ?? 'unverified').toString().toLowerCase();
     final isDeactivated = rawStatus == 'deactivated' || rawStatus == 'de_activated';
+    final isUnverified = rawStatus == 'unverified' || rawStatus == 'pending';
+    final verified = !isDeactivated && !isUnverified;
 
     if (isCompact) {
       return Container(
@@ -1660,87 +1549,16 @@ class _UserManagementScreenState extends State<UserManagementScreen> {
     );
   }
 
-  Widget _buildFab() {
+  Widget? _buildFab() {
+    if (_currentUserRole != UserRole.superAdmin) return null;
     return Padding(
       padding: const EdgeInsets.only(bottom: 80),
       child: FloatingActionButton.extended(
-        onPressed: () {
-          // Add user modal
-          showModalBottomSheet(
-            context: context,
-            shape: const RoundedRectangleBorder(
-                borderRadius: BorderRadius.vertical(top: Radius.circular(24))),
-            builder: (_) => Padding(
-              padding: const EdgeInsets.all(24),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Text(
-                    'Add User',
-                    style: GoogleFonts.montserrat(
-                        fontSize: 16,
-                        fontWeight: FontWeight.w600,
-                        color: AppColors.onSurface),
-                  ),
-                  const SizedBox(height: 8),
-                  Text(
-                    'Create a new citizen user account for Brgy. ${_adminBarangay.isNotEmpty ? _adminBarangay : 'Catanduanes'}',
-                    textAlign: TextAlign.center,
-                    style: GoogleFonts.inter(
-                        fontSize: 13, color: AppColors.onSurfaceVariant),
-                  ),
-                  const SizedBox(height: 16),
-                  ListTile(
-                    leading: Container(
-                      padding: const EdgeInsets.all(8),
-                      decoration: BoxDecoration(
-                          color: AppColors.primary.withOpacity(0.1),
-                          borderRadius: BorderRadius.circular(10)),
-                      child: const Icon(Icons.person,
-                          color: AppColors.primary, size: 20),
-                    ),
-                    title: Text('Standard User',
-                        style: GoogleFonts.inter(
-                            fontSize: 14, fontWeight: FontWeight.w600)),
-                    subtitle: Text('Citizen user account',
-                        style: GoogleFonts.inter(
-                            fontSize: 12, color: AppColors.onSurfaceVariant)),
-                    onTap: () {
-                      Navigator.pop(context);
-                      Navigator.pushNamed(context, AppRoutes.register);
-                    },
-                  ),
-                  if (_currentUserRole == UserRole.superAdmin) ...[
-                    ListTile(
-                      leading: Container(
-                        padding: const EdgeInsets.all(8),
-                        decoration: BoxDecoration(
-                            color: const Color(0xFF00796B).withOpacity(0.15),
-                            borderRadius: BorderRadius.circular(10)),
-                        child: const Icon(Icons.admin_panel_settings,
-                            color: Color(0xFF00796B), size: 20),
-                      ),
-                      title: Text('Barangay Admin',
-                          style: GoogleFonts.inter(
-                              fontSize: 14, fontWeight: FontWeight.w600)),
-                      subtitle: Text('Can manage a barangay\'s news and pets',
-                          style: GoogleFonts.inter(
-                              fontSize: 12, color: AppColors.onSurfaceVariant)),
-                      onTap: () {
-                        Navigator.pop(context);
-                        _showAddAdminModal();
-                      },
-                    ),
-                  ],
-                ],
-              ),
-            ),
-          );
-        },
-        backgroundColor: AppColors.primaryContainer,
-        foregroundColor: AppColors.onPrimaryContainer,
+        onPressed: _showAddAdminModal,
+        backgroundColor: const Color(0xFF00796B),
+        foregroundColor: Colors.white,
         icon: const Icon(Icons.add),
-        label: Text('Add User',
+        label: Text('Add Admin',
             style: GoogleFonts.montserrat(
                 fontSize: 13, fontWeight: FontWeight.w700)),
         elevation: 8,
@@ -1863,13 +1681,12 @@ class _UsersDataTableSource extends DataTableSource {
         DataCell(
           Builder(builder: (context) {
             final rawStatus =
-                (user['status'] ?? 'active').toString().toLowerCase();
+                (user['status'] ?? 'unverified').toString().toLowerCase();
             final isDeactivated =
                 rawStatus == 'deactivated' || rawStatus == 'de_activated';
-            final isExplicitUnverified =
+            final isUnverified =
                 rawStatus == 'unverified' || rawStatus == 'pending';
-            final isVerified = !isExplicitUnverified &&
-                (user['phone'] as String? ?? '').trim().isNotEmpty;
+            final isVerified = !isDeactivated && !isUnverified;
 
             final String label;
             final Color bg;

@@ -60,10 +60,14 @@ class _DashboardHomeScreenState extends State<DashboardHomeScreen> {
       if (barangay != null && barangay.isNotEmpty) {
         query = query.or('barangay.eq.$barangay,barangay.eq.Catanduanes,barangay.eq.All');
       }
-      final data = await query.order('created_at', ascending: false).limit(5);
+      final data = await query.order('created_at', ascending: false).limit(10);
       if (mounted) {
         setState(() {
-          _newsList = List<Map<String, dynamic>>.from(data);
+          _newsList = List<Map<String, dynamic>>.from(data)
+              .where((p) =>
+                  (p['status'] as String? ?? '').toLowerCase() != 'archived')
+              .take(5)
+              .toList();
           _isLoadingNews = false;
         });
       }

@@ -271,7 +271,8 @@ class _AdminReportsScreenState extends State<AdminReportsScreen> {
                 DataColumn(label: Text('Location')),
                 DataColumn(label: Text('Date Reported')),
                 DataColumn(label: Text('Time Reported')),
-                DataColumn(label: Text('Status')),
+                DataColumn(label: Text('Pet Status')),
+                DataColumn(label: Text('Archive')),
               ],
               source: _ReportsDataTableSource(_filtered),
             ),
@@ -587,6 +588,22 @@ class _AdminReportsScreenState extends State<AdminReportsScreen> {
         'Calatagan';
     final status = (report['status'] ?? 'active').toString().toLowerCase();
     final isArchived = status == 'archived' || status == 'resolved';
+    final petStatus = petData?['status']?.toString().toLowerCase() ?? '';
+
+    String petCondition = (report['outcome'] ??
+            report['pet_status'] ??
+            report['condition'] ??
+            '')
+        .toString()
+        .toUpperCase();
+    if (petCondition != 'FOUND' && petCondition != 'LOST') {
+      final bool isFound = status == 'resolved' ||
+          status == 'found' ||
+          report['is_found'] == true ||
+          (petStatus == 'active' && status == 'archived') ||
+          petStatus == 'found';
+      petCondition = isFound ? 'FOUND' : 'LOST';
+    }
     final note = report['description'] as String? ?? '';
 
     final ownerName = userData != null
@@ -674,23 +691,46 @@ class _AdminReportsScreenState extends State<AdminReportsScreen> {
                         ],
                       ),
                     ),
-                    Container(
-                      padding: const EdgeInsets.symmetric(
-                          horizontal: 10, vertical: 5),
-                      decoration: BoxDecoration(
-                          color: isArchived
-                              ? const Color(0xFF64748B).withOpacity(0.15)
-                              : AppColors.errorContainer,
-                          borderRadius: BorderRadius.circular(999)),
-                      child: Text(
-                          isArchived ? 'ARCHIVED' : 'LOST',
-                          style: GoogleFonts.inter(
-                              fontSize: 10,
-                              fontWeight: FontWeight.w800,
-                              color: isArchived
-                                  ? const Color(0xFF475569)
-                                  : AppColors.error,
-                              letterSpacing: 0.8)),
+                    Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 10, vertical: 5),
+                          decoration: BoxDecoration(
+                              color: petCondition == 'FOUND'
+                                  ? const Color(0xFF22C55E).withOpacity(0.15)
+                                  : AppColors.errorContainer,
+                              borderRadius: BorderRadius.circular(999)),
+                          child: Text(
+                              petCondition,
+                              style: GoogleFonts.inter(
+                                  fontSize: 10,
+                                  fontWeight: FontWeight.w800,
+                                  color: petCondition == 'FOUND'
+                                      ? const Color(0xFF16A34A)
+                                      : AppColors.error,
+                                  letterSpacing: 0.8)),
+                        ),
+                        if (isArchived) ...[
+                          const SizedBox(width: 6),
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 8, vertical: 5),
+                            decoration: BoxDecoration(
+                                color:
+                                    const Color(0xFF64748B).withOpacity(0.15),
+                                borderRadius: BorderRadius.circular(999)),
+                            child: Text(
+                                'ARCHIVED',
+                                style: GoogleFonts.inter(
+                                    fontSize: 10,
+                                    fontWeight: FontWeight.w800,
+                                    color: const Color(0xFF475569),
+                                    letterSpacing: 0.8)),
+                          ),
+                        ],
+                      ],
                     ),
                   ],
                 ),
@@ -771,7 +811,7 @@ class _AdminReportsScreenState extends State<AdminReportsScreen> {
       // ── Header row ──────────────────────────────────────────────
       const headers = [
         'Pet Name', 'Breed', 'Species', 'Owner', 'Owner Phone',
-        'Barangay', 'Date Reported', 'Time Reported', 'Status', 'Where Pet Last Seen',
+        'Barangay', 'Date Reported', 'Time Reported', 'Pet Status', 'Archive Status', 'Where Pet Last Seen',
       ];
       final headerStyle = CellStyle(
         bold: true,
@@ -783,7 +823,7 @@ class _AdminReportsScreenState extends State<AdminReportsScreen> {
         final cell = sheet.cell(CellIndex.indexByColumnRow(columnIndex: c, rowIndex: 0));
         cell.value = TextCellValue(headers[c]);
         cell.cellStyle = headerStyle;
-        sheet.setColumnWidth(c, c == 9 ? 32 : 20);
+        sheet.setColumnWidth(c, c == 10 ? 32 : 20);
       }
 
       // ── Data rows ────────────────────────────────────────────────
@@ -801,7 +841,25 @@ class _AdminReportsScreenState extends State<AdminReportsScreen> {
             : '';
         final phone     = owner is Map ? (owner['phone']?.toString() ?? '') : '';
         final barangay  = report['barangay']?.toString() ?? '';
-        final status    = (report['status']?.toString() ?? '').toUpperCase();
+        final reportStatus = (report['status']?.toString() ?? 'active').toLowerCase();
+        final petStatus = pet is Map ? (pet['status']?.toString() ?? '').toLowerCase() : '';
+
+        String petCondition = (report['outcome'] ??
+                report['pet_status'] ??
+                report['condition'] ??
+                '')
+            .toString()
+            .toUpperCase();
+        if (petCondition != 'FOUND' && petCondition != 'LOST') {
+          final bool isFound = reportStatus == 'resolved' ||
+              reportStatus == 'found' ||
+              report['is_found'] == true ||
+              (petStatus == 'active' && reportStatus == 'archived') ||
+              petStatus == 'found';
+          petCondition = isFound ? 'FOUND' : 'LOST';
+        }
+        final archiveStatus = reportStatus == 'archived' ? 'ARCHIVED' : 'ACTIVE';
+
         final lastSeenRaw = report['last_seen_address']?.toString() ?? '';
         final whereLastSeen = lastSeenRaw.isNotEmpty
             ? lastSeenRaw
@@ -830,7 +888,8 @@ class _AdminReportsScreenState extends State<AdminReportsScreen> {
           barangay,
           dateStr,
           timeStr,
-          status,
+          petCondition,
+          archiveStatus,
           whereLastSeen,
         ];
         final rowStyle = CellStyle(
@@ -925,7 +984,26 @@ class _ReportsDataTableSource extends DataTableSource {
         report['barangay']?.toString() ??
         '-';
     final reportedAt = report['reported_at']?.toString() ?? '';
-    final status = (report['status']?.toString() ?? 'active').toLowerCase();
+    final petStatus =
+        pet is Map ? (pet['status']?.toString() ?? '').toLowerCase() : '';
+    final reportStatus =
+        (report['status']?.toString() ?? 'active').toLowerCase();
+
+    // Determine Pet Condition: LOST or FOUND
+    String petCondition = (report['outcome'] ??
+            report['pet_status'] ??
+            report['condition'] ??
+            '')
+        .toString()
+        .toUpperCase();
+    if (petCondition != 'FOUND' && petCondition != 'LOST') {
+      final bool isFound = reportStatus == 'resolved' ||
+          reportStatus == 'found' ||
+          report['is_found'] == true ||
+          (petStatus == 'active' && reportStatus == 'archived') ||
+          petStatus == 'found';
+      petCondition = isFound ? 'FOUND' : 'LOST';
+    }
 
     String formattedDate = '';
     String formattedTime = '';
@@ -990,28 +1068,46 @@ class _ReportsDataTableSource extends DataTableSource {
           formattedTime,
           style: GoogleFonts.inter(fontSize: 13),
         )),
-        // Status Chip
+        // Pet Status Chip (LOST or FOUND)
         DataCell(
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
             decoration: BoxDecoration(
-              color: status == 'resolved'
+              color: petCondition == 'FOUND'
                   ? const Color(0xFF22C55E).withOpacity(0.15)
-                  : status == 'archived'
-                      ? const Color(0xFF64748B).withOpacity(0.15)
-                      : AppColors.error.withOpacity(0.15),
+                  : AppColors.error.withOpacity(0.15),
               borderRadius: BorderRadius.circular(12),
             ),
             child: Text(
-              status.toUpperCase(),
+              petCondition,
               style: GoogleFonts.inter(
                 fontSize: 11,
                 fontWeight: FontWeight.bold,
-                color: status == 'resolved'
-                    ? const Color(0xFF22C55E)
-                    : status == 'archived'
-                        ? const Color(0xFF475569)
-                        : AppColors.error,
+                color: petCondition == 'FOUND'
+                    ? const Color(0xFF16A34A)
+                    : AppColors.error,
+              ),
+            ),
+          ),
+        ),
+        // Archive Status Chip
+        DataCell(
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+            decoration: BoxDecoration(
+              color: reportStatus == 'archived'
+                  ? const Color(0xFF64748B).withOpacity(0.15)
+                  : const Color(0xFF3B82F6).withOpacity(0.15),
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: Text(
+              reportStatus == 'archived' ? 'ARCHIVED' : 'ACTIVE',
+              style: GoogleFonts.inter(
+                fontSize: 11,
+                fontWeight: FontWeight.bold,
+                color: reportStatus == 'archived'
+                    ? const Color(0xFF475569)
+                    : const Color(0xFF1D4ED8),
               ),
             ),
           ),

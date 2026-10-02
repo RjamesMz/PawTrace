@@ -30,13 +30,13 @@
                 <action android:name="android.intent.action.MAIN"/>
                 <category android:name="android.intent.category.LAUNCHER"/>
             </intent-filter>
-            <!-- Deep link for PawTrace email verification callback -->
+            <!-- Deep link for PawTrace email verification & password recovery callback -->
             <intent-filter>
                 <action android:name="android.intent.action.VIEW" />
                 <category android:name="android.intent.category.DEFAULT" />
                 <category android:name="android.intent.category.BROWSABLE" />
-                <data android:scheme="pawtrace" android:host="verified" />
-                <data android:scheme="pettrace" android:host="verified" />
+                <data android:scheme="pawtrace" />
+                <data android:scheme="pettrace" />
             </intent-filter>
         </activity>
         <!-- Google Maps API Key -->

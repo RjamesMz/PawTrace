@@ -85,6 +85,7 @@ class AuthService {
         'address': address?.trim(),
         'barangay': barangay,
         'role': 'user',
+        'status': 'unverified',
       },
     );
 
@@ -157,6 +158,8 @@ class AuthService {
         final address = meta['address']?.toString() ?? '';
         final barangay = meta['barangay']?.toString() ?? 'Calatagan';
         final role = meta['role']?.toString() ?? 'user';
+        final isConfirmed = user.emailConfirmedAt != null;
+        final status = isConfirmed ? 'active' : 'unverified';
 
         await _client.from('users').insert({
           'user_id': uid,
@@ -167,6 +170,7 @@ class AuthService {
           'address': address.isEmpty ? null : address,
           'barangay': barangay.isEmpty ? null : barangay,
           'role': role,
+          'status': status,
         });
 
         // Re-fetch
@@ -175,6 +179,11 @@ class AuthService {
             .select()
             .eq('user_id', uid)
             .maybeSingle();
+      } else if (user.emailConfirmedAt != null && data['status'] == 'unverified') {
+        try {
+          await _client.from('users').update({'status': 'active'}).eq('user_id', uid);
+          data['status'] = 'active';
+        } catch (_) {}
       }
       return data;
     } catch (_) {

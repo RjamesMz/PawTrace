@@ -58,6 +58,8 @@ void main() async {
   runApp(const PawTraceApp());
 }
 
+final GlobalKey<NavigatorState> rootNavigatorKey = GlobalKey<NavigatorState>();
+
 /// Root application widget for PawTrace.
 ///
 /// Configures [MaterialApp] with the PawTrace design system theme and
@@ -68,6 +70,7 @@ class PawTraceApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
+      navigatorKey: rootNavigatorKey,
       title: AppConstants.appName,
       debugShowCheckedModeBanner: false,
       theme: AppTheme.light,

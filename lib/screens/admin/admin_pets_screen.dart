@@ -356,6 +356,7 @@ class _AdminPetsScreenState extends State<AdminPetsScreen> {
         'image_url': photoUrl,
         'accent_color': '#BA1A1A',
         'barangay': postBarangay,
+        'status': 'active',
       });
 
       final count = await AlertService.instance.broadcastLostPetNewsAlert(

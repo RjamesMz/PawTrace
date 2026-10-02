@@ -1,18 +1,22 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>PawTrace — Email Verified</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Montserrat:wght@700;800&display=swap" rel="stylesheet">
+  <link
+    href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Montserrat:wght@700;800&display=swap"
+    rel="stylesheet">
   <style>
     * {
       box-sizing: border-box;
       margin: 0;
       padding: 0;
     }
+
     body {
       font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
       background: linear-gradient(135deg, #FFF7ED 0%, #FFFFFF 50%, #F5F3FF 100%);
@@ -23,6 +27,7 @@
       justify-content: center;
       padding: 24px;
     }
+
     .card {
       background: #FFFFFF;
       max-width: 440px;
@@ -30,20 +35,23 @@
       border-radius: 28px;
       padding: 40px 32px;
       box-shadow: 0 20px 40px -15px rgba(255, 102, 0, 0.12),
-                  0 0 1px 1px rgba(0, 0, 0, 0.04);
+        0 0 1px 1px rgba(0, 0, 0, 0.04);
       text-align: center;
       animation: slideUp 0.5s ease-out;
     }
+
     @keyframes slideUp {
       from {
         opacity: 0;
         transform: translateY(20px);
       }
+
       to {
         opacity: 1;
         transform: translateY(0);
       }
     }
+
     .icon-container {
       width: 88px;
       height: 88px;
@@ -56,10 +64,12 @@
       margin-bottom: 24px;
       color: #10B981;
     }
+
     .icon-container svg {
       width: 44px;
       height: 44px;
     }
+
     .badge {
       display: inline-flex;
       align-items: center;
@@ -75,6 +85,7 @@
       margin-bottom: 16px;
       border: 1px solid rgba(255, 102, 0, 0.2);
     }
+
     h1 {
       font-family: 'Montserrat', sans-serif;
       font-size: 26px;
@@ -83,12 +94,14 @@
       margin-bottom: 12px;
       line-height: 1.25;
     }
+
     p {
       font-size: 15px;
       line-height: 1.6;
       color: #4B5563;
       margin-bottom: 32px;
     }
+
     .btn {
       display: inline-flex;
       align-items: center;
@@ -108,13 +121,16 @@
       cursor: pointer;
       border: none;
     }
+
     .btn:hover {
       background: #E65C00;
       transform: translateY(-1px);
     }
+
     .btn:active {
       transform: translateY(1px);
     }
+
     .footer-note {
       margin-top: 24px;
       font-size: 13px;
@@ -122,12 +138,13 @@
     }
   </style>
 </head>
+
 <body>
   <div class="card">
     <div class="badge">
-      🐾 PawTrace Community
+       PawTrace Community
     </div>
-    
+
     <div class="icon-container">
       <svg fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24">
         <path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"></path>
@@ -135,7 +152,8 @@
     </div>
 
     <h1>Email Verified!</h1>
-    <p>Your email has been successfully verified. Your PawTrace account is now active and ready to keep your pets safe.</p>
+    <p>Your email has been successfully verified. Your PawTrace account is now active and ready to keep your pets safe.
+    </p>
 
     <a href="pawtrace://verified" class="btn" id="openAppBtn">
       <span>Open PawTrace App</span>
@@ -149,14 +167,15 @@
 
   <script>
     // Automatically attempt to trigger deep link into the mobile app if on Android/iOS
-    window.onload = function() {
+    window.onload = function () {
       var isMobile = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
       if (isMobile) {
-        setTimeout(function() {
+        setTimeout(function () {
           window.location.href = "pawtrace://verified";
         }, 800);
       }
     };
   </script>
 </body>
+
 </html>
