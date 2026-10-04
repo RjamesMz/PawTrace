@@ -1253,8 +1253,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
   }
 
   Widget _buildAppBar(BuildContext context) {
-    final titleColor =
-        const Color(0xFF6E3900); // Warm brown/orange color from visual palette
     return Container(
       height: 60,
       padding: const EdgeInsets.symmetric(horizontal: 20),

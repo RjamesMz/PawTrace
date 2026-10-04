@@ -126,6 +126,13 @@ class _DashboardHomeScreenState extends State<DashboardHomeScreen> {
     }
   }
 
+  Future<void> _refreshAll() async {
+    await Future.wait([
+      _loadProfile(),
+      _fetchLostPets(),
+    ]);
+  }
+
   @override
   Widget build(BuildContext context) {
     // Get first name for greeting
@@ -155,117 +162,122 @@ class _DashboardHomeScreenState extends State<DashboardHomeScreen> {
               },
             ),
             Expanded(
-              child: CustomScrollView(
-                slivers: [
-                  SliverToBoxAdapter(
-                    child: Padding(
-                      padding: const EdgeInsets.fromLTRB(20, 18, 20, 0),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          _HeroCard(userName: firstName),
-                          const SizedBox(height: 24),
-                          const _SectionHeader(
-                            title: 'Latest news',
-                            subtitle:
-                                'Fresh updates from the community and field team',
-                          ),
-                        ],
-                      ),
-                    ),
-                  ),
-                  SliverToBoxAdapter(
-                    child: SizedBox(
-                      height: 248,
-                      child: _isLoadingNews
-                          ? const Center(
-                              child: CircularProgressIndicator(
-                                  color: AppColors.primary))
-                          : _newsList.isEmpty
-                              ? Center(
-                                  child: Text(
-                                    'No news updates found.',
-                                    style: GoogleFonts.inter(
-                                        color: AppColors.onSurfaceVariant
-                                            .withOpacity(0.5)),
-                                  ),
-                                )
-                              : ListView.separated(
-                                  padding:
-                                      const EdgeInsets.fromLTRB(20, 16, 20, 0),
-                                  scrollDirection: Axis.horizontal,
-                                  itemCount: _newsList.length,
-                                  separatorBuilder: (_, __) =>
-                                      const SizedBox(width: 14),
-                                  itemBuilder: (context, index) =>
-                                      _NewsCard(item: _newsList[index]),
-                                ),
-                    ),
-                  ),
-                  const SliverToBoxAdapter(
-                    child: Padding(
-                      padding: EdgeInsets.fromLTRB(20, 28, 20, 0),
-                      child: _SectionHeader(
-                        title: 'Current lost pets',
-                        subtitle:
-                            'The latest active reports available right now',
-                      ),
-                    ),
-                  ),
-                  _isLoadingLostPets
-                      ? const SliverToBoxAdapter(
-                          child: Padding(
-                            padding: EdgeInsets.all(32),
-                            child: Center(
-                                child: CircularProgressIndicator(
-                                    color: AppColors.primary)),
-                          ),
-                        )
-                      : _lostPetsList.isEmpty
-                          ? SliverToBoxAdapter(
-                              child: Padding(
-                                padding: const EdgeInsets.symmetric(
-                                    vertical: 40, horizontal: 20),
-                                child: Center(
-                                  child: Text(
-                                    'No active lost pet reports.',
-                                    style: GoogleFonts.inter(
-                                        color: AppColors.onSurfaceVariant
-                                            .withOpacity(0.5)),
-                                  ),
-                                ),
-                              ),
-                            )
-                          : SliverList(
-                              delegate: SliverChildBuilderDelegate(
-                                (context, index) {
-                                  final pet = _lostPetsList[index];
-                                  return Padding(
-                                    padding: EdgeInsets.fromLTRB(
-                                      20,
-                                      0,
-                                      20,
-                                      index == _lostPetsList.length - 1
-                                          ? 120
-                                          : 16,
-                                    ),
-                                    child: _LostPetPreviewCard(
-                                      pet: pet,
-                                      onTap: () {
-                                        if (widget.onNavigateToTab != null) {
-                                          widget.onNavigateToTab!(1);
-                                        } else {
-                                          Navigator.pushNamed(
-                                              context, AppRoutes.lostPetScreen);
-                                        }
-                                      },
-                                    ),
-                                  );
-                                },
-                                childCount: _lostPetsList.length,
-                              ),
+              child: RefreshIndicator(
+                onRefresh: _refreshAll,
+                color: AppColors.primary,
+                child: CustomScrollView(
+                  physics: const AlwaysScrollableScrollPhysics(),
+                  slivers: [
+                    SliverToBoxAdapter(
+                      child: Padding(
+                        padding: const EdgeInsets.fromLTRB(20, 18, 20, 0),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            _HeroCard(userName: firstName),
+                            const SizedBox(height: 24),
+                            const _SectionHeader(
+                              title: 'Latest news',
+                              subtitle:
+                                  'Fresh updates from the community and field team',
                             ),
-                ],
+                          ],
+                        ),
+                      ),
+                    ),
+                    SliverToBoxAdapter(
+                      child: SizedBox(
+                        height: 248,
+                        child: _isLoadingNews
+                            ? const Center(
+                                child: CircularProgressIndicator(
+                                    color: AppColors.primary))
+                            : _newsList.isEmpty
+                                ? Center(
+                                    child: Text(
+                                      'No news updates found.',
+                                      style: GoogleFonts.inter(
+                                          color: AppColors.onSurfaceVariant
+                                              .withOpacity(0.5)),
+                                    ),
+                                  )
+                                : ListView.separated(
+                                    padding: const EdgeInsets.fromLTRB(
+                                        20, 16, 20, 0),
+                                    scrollDirection: Axis.horizontal,
+                                    itemCount: _newsList.length,
+                                    separatorBuilder: (_, __) =>
+                                        const SizedBox(width: 14),
+                                    itemBuilder: (context, index) =>
+                                        _NewsCard(item: _newsList[index]),
+                                  ),
+                      ),
+                    ),
+                    const SliverToBoxAdapter(
+                      child: Padding(
+                        padding: EdgeInsets.fromLTRB(20, 28, 20, 0),
+                        child: _SectionHeader(
+                          title: 'Current lost pets',
+                          subtitle:
+                              'The latest active reports available right now',
+                        ),
+                      ),
+                    ),
+                    _isLoadingLostPets
+                        ? const SliverToBoxAdapter(
+                            child: Padding(
+                              padding: EdgeInsets.all(32),
+                              child: Center(
+                                  child: CircularProgressIndicator(
+                                      color: AppColors.primary)),
+                            ),
+                          )
+                        : _lostPetsList.isEmpty
+                            ? SliverToBoxAdapter(
+                                child: Padding(
+                                  padding: const EdgeInsets.symmetric(
+                                      vertical: 40, horizontal: 20),
+                                  child: Center(
+                                    child: Text(
+                                      'No active lost pet reports.',
+                                      style: GoogleFonts.inter(
+                                          color: AppColors.onSurfaceVariant
+                                              .withOpacity(0.5)),
+                                    ),
+                                  ),
+                                ),
+                              )
+                            : SliverList(
+                                delegate: SliverChildBuilderDelegate(
+                                  (context, index) {
+                                    final pet = _lostPetsList[index];
+                                    return Padding(
+                                      padding: EdgeInsets.fromLTRB(
+                                        20,
+                                        0,
+                                        20,
+                                        index == _lostPetsList.length - 1
+                                            ? 120
+                                            : 16,
+                                      ),
+                                      child: _LostPetPreviewCard(
+                                        pet: pet,
+                                        onTap: () {
+                                          if (widget.onNavigateToTab != null) {
+                                            widget.onNavigateToTab!(1);
+                                          } else {
+                                            Navigator.pushNamed(context,
+                                                AppRoutes.lostPetScreen);
+                                          }
+                                        },
+                                      ),
+                                    );
+                                  },
+                                  childCount: _lostPetsList.length,
+                                ),
+                              ),
+                  ],
+                ),
               ),
             ),
           ],

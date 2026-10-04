@@ -7,7 +7,6 @@ import 'package:flutter_map/flutter_map.dart';
 import 'package:latlong2/latlong.dart' as ll;
 
 import '../../core/app_colors.dart';
-import '../../core/app_constants.dart';
 import '../../core/app_toast.dart';
 import 'lost_pet_detail_screen.dart';
 
@@ -158,8 +157,12 @@ class _LostPetScreenState extends State<LostPetScreen> {
           children: [
             _buildHeader(context),
             Expanded(
-              child: CustomScrollView(
-                slivers: [
+              child: RefreshIndicator(
+                onRefresh: _fetchLostPets,
+                color: AppColors.primary,
+                child: CustomScrollView(
+                  physics: const AlwaysScrollableScrollPhysics(),
+                  slivers: [
                   // ── Search Bar on top of pills ──────────────────────────────────
                   SliverToBoxAdapter(
                     child: Padding(
@@ -282,6 +285,7 @@ class _LostPetScreenState extends State<LostPetScreen> {
                 ],
               ),
             ),
+          ),
           ],
         ),
       ),

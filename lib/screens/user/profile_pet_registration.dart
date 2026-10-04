@@ -520,7 +520,15 @@ class _ProfilePetRegistrationScreenState
         }
       }
 
-      // Step 2: Upload all photos to Supabase Storage bucket 'pet-photos'
+      // Clear any previous location history for this collar so newly registered pet starts fresh
+      if (collarText.isNotEmpty && collarText.toUpperCase() != 'N/A') {
+        try {
+          await _supabase
+              .from('collar_locations')
+              .delete()
+              .eq('collar_id', collarText);
+        } catch (_) {}
+      }
       final timestamp = DateTime.now().millisecondsSinceEpoch;
       final randomSuffix = Random().nextInt(999999).toString().padLeft(6, '0');
 

@@ -212,16 +212,28 @@ Future<String?> showPairCollarDialog({
                                     });
 
                                     try {
-                                      // Delete all location history for this collar first,
-                                      // then clear the pet's collar_id.
-                                      await Supabase.instance.client
-                                          .from('collar_locations')
-                                          .delete()
-                                          .eq('collar_id', currentCollarId);
+                                      final idToClean = currentCollarId.trim();
 
+                                      // 1. Delete all location history for this collar from collar_locations
+                                      try {
+                                        await Supabase.instance.client
+                                            .from('collar_locations')
+                                            .delete()
+                                            .eq('collar_id', idToClean);
+                                      } catch (locErr) {
+                                        debugPrint('[CollarUnpair] Notice deleting collar locations: $locErr');
+                                      }
+
+                                      // 2. Clear collar_id and all cached location coordinates from the pet's row
                                       await Supabase.instance.client
                                           .from('pets')
-                                          .update({'collar_id': null})
+                                          .update({
+                                            'collar_id': null,
+                                            'last_seen_address': null,
+                                            'last_seen_lat': null,
+                                            'last_seen_lon': null,
+                                            'last_seen_at': null,
+                                          })
                                           .eq('pet_id', petId);
 
                                       if (context.mounted) {
@@ -320,10 +332,26 @@ Future<String?> showPairCollarDialog({
                                         return;
                                       }
 
-                                      // 2. Update pet row in Supabase
+                                      // 2. Purge any stale location history for this collar so the newly paired pet starts fresh
+                                      try {
+                                        await Supabase.instance.client
+                                            .from('collar_locations')
+                                            .delete()
+                                            .eq('collar_id', enteredId);
+                                      } catch (locErr) {
+                                        debugPrint('[CollarPair] Notice clearing old collar locations: $locErr');
+                                      }
+
+                                      // 3. Update pet row in Supabase and reset any stale location coordinates
                                       await Supabase.instance.client
                                           .from('pets')
-                                          .update({'collar_id': enteredId})
+                                          .update({
+                                            'collar_id': enteredId,
+                                            'last_seen_address': null,
+                                            'last_seen_lat': null,
+                                            'last_seen_lon': null,
+                                            'last_seen_at': null,
+                                          })
                                           .eq('pet_id', petId);
 
                                       if (context.mounted) {

@@ -55,10 +55,17 @@ class _ReportLostPetScreenState extends State<ReportLostPetScreen> {
   }
 
   Future<void> _fetchLastKnownLocation() async {
-    final collarId = _pet?['collar_id']?.toString();
+    final collarId = _pet?['collar_id']?.toString().trim();
     if (collarId == null ||
         collarId.isEmpty ||
-        collarId.toUpperCase() == 'N/A') {
+        collarId.toUpperCase() == 'N/A' ||
+        collarId.toUpperCase() == 'NONE') {
+      if (mounted) {
+        setState(() {
+          _hasCollarGps = false;
+          _isLoadingGps = false;
+        });
+      }
       return;
     }
 
@@ -143,19 +150,26 @@ class _ReportLostPetScreenState extends State<ReportLostPetScreen> {
       final petId = pet['pet_id'];
       if (petId == null) throw Exception('Pet ID is missing.');
 
-      // 1. Update status and color in 'pets' table
+      final barangay = pet['barangay']?.toString() ?? 'Santa Ana';
+      final String lastSeenAddress;
+      if (_hasCollarGps) {
+        final coordString =
+            'Lat: ${_lastLat.toStringAsFixed(5)}, Lng: ${_lastLon.toStringAsFixed(5)}';
+        lastSeenAddress = '$barangay ($coordString)';
+      } else {
+        lastSeenAddress = barangay;
+      }
+
+      // 1. Update status, color, and last_seen_address in 'pets' table
       await Supabase.instance.client.from('pets').update({
         'status': 'lost',
         'color': _colorCtrl.text.trim(),
+        'last_seen_address': lastSeenAddress,
+        'last_seen_at': DateTime.now().toIso8601String(),
       }).eq('pet_id', petId);
 
       final currentUserId = Supabase.instance.client.auth.currentUser?.id;
       final ownerId = currentUserId ?? pet['owner_id'];
-
-      final barangay = pet['barangay']?.toString() ?? 'Santa Ana';
-      final coordString =
-          'Lat: ${_lastLat.toStringAsFixed(5)}, Lng: ${_lastLon.toStringAsFixed(5)}';
-      final lastSeenAddress = '$barangay ($coordString)';
 
       // 2. Insert lost report in 'lost_reports' table
       final reportRes = await Supabase.instance.client
@@ -435,9 +449,7 @@ class _ReportLostPetScreenState extends State<ReportLostPetScreen> {
             contentPadding: const EdgeInsets.all(16),
           ),
         ),
-        const SizedBox(height: 18),
-
-        // Map section
+        const SizedBox(height: 18),        // Map / GPS section
         Row(
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
           crossAxisAlignment: CrossAxisAlignment.end,
@@ -448,112 +460,223 @@ class _ReportLostPetScreenState extends State<ReportLostPetScreen> {
               decoration: BoxDecoration(
                   color: _hasCollarGps
                       ? const Color(0xFFE8F5E9)
-                      : const Color(0xFFEFF6FF),
-                  borderRadius: BorderRadius.circular(999)),
-              child: Row(children: [
-                Icon(
-                  _hasCollarGps ? Icons.check_circle : Icons.gps_fixed,
-                  size: 14,
-                  color: _hasCollarGps
-                      ? const Color(0xFF2E7D32)
-                      : AppColors.primary,
-                ),
-                const SizedBox(width: 4),
-                Text(
-                  _hasCollarGps
-                      ? 'GPS COLLAR DETECTED'
-                      : 'TAP MAP TO SET LOCATION',
-                  style: GoogleFonts.inter(
-                    fontSize: 9,
-                    fontWeight: FontWeight.w700,
+                      : const Color(0xFFFEF2F2),
+                  borderRadius: BorderRadius.circular(999),
+                  border: Border.all(
+                    color: _hasCollarGps
+                        ? const Color(0xFFA5D6A7)
+                        : const Color(0xFFFECACA),
+                  )),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(
+                    _hasCollarGps
+                        ? Icons.check_circle
+                        : Icons.gps_off_rounded,
+                    size: 13,
                     color: _hasCollarGps
                         ? const Color(0xFF2E7D32)
-                        : AppColors.primary,
+                        : const Color(0xFFDC2626),
                   ),
-                ),
-              ]),
+                  const SizedBox(width: 4),
+                  Text(
+                    _hasCollarGps
+                        ? 'GPS COLLAR DETECTED'
+                        : 'NO GPS CONNECTED',
+                    style: GoogleFonts.inter(
+                      fontSize: 9,
+                      fontWeight: FontWeight.w700,
+                      color: _hasCollarGps
+                          ? const Color(0xFF2E7D32)
+                          : const Color(0xFFDC2626),
+                    ),
+                  ),
+                ],
+              ),
             ),
           ],
         ),
         const SizedBox(height: 10),
-        ClipRRect(
-          borderRadius: BorderRadius.circular(16),
-          child: Container(
-            height: 200,
-            decoration: BoxDecoration(
-              borderRadius: BorderRadius.circular(16),
-              border:
-                  Border.all(color: AppColors.outlineVariant.withOpacity(0.3)),
-            ),
-            child: Stack(
-              children: [
-                FlutterMap(
-                  mapController: _mapController,
-                  options: MapOptions(
-                    initialCenter: ll.LatLng(_lastLat, _lastLon),
-                    initialZoom: 15.5,
-                    onTap: (_, point) {
-                      setState(() {
-                        _lastLat = point.latitude;
-                        _lastLon = point.longitude;
-                      });
-                    },
-                  ),
+        if (_isLoadingGps)
+          ClipRRect(
+            borderRadius: BorderRadius.circular(16),
+            child: Container(
+              height: 180,
+              width: double.infinity,
+              decoration: BoxDecoration(
+                color: const Color(0xFFF8FAFC),
+                borderRadius: BorderRadius.circular(16),
+                border: Border.all(
+                    color: AppColors.outlineVariant.withOpacity(0.3)),
+              ),
+              child: Center(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
                   children: [
-                    TileLayer(
-                      urlTemplate:
-                          'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
-                      userAgentPackageName: 'com.pettrace.app',
+                    const SizedBox(
+                      width: 28,
+                      height: 28,
+                      child: CircularProgressIndicator(
+                        strokeWidth: 2.5,
+                        color: AppColors.primary,
+                      ),
                     ),
-                    MarkerLayer(
-                      markers: [
-                        Marker(
-                          point: ll.LatLng(_lastLat, _lastLon),
-                          width: 140,
-                          height: 70,
-                          alignment: Alignment.center,
-                          child: _buildPinMarker(petName),
-                        ),
-                      ],
+                    const SizedBox(height: 12),
+                    Text(
+                      'Checking for GPS collar connection...',
+                      style: GoogleFonts.inter(
+                        fontSize: 12,
+                        color: AppColors.onSurfaceVariant,
+                      ),
                     ),
                   ],
                 ),
-                if (_isLoadingGps)
-                  Container(
-                    color: Colors.black.withOpacity(0.15),
-                    child: const Center(
-                      child:
-                          CircularProgressIndicator(color: AppColors.primary),
+              ),
+            ),
+          )
+        else if (_hasCollarGps)
+          Column(
+            children: [
+              ClipRRect(
+                borderRadius: BorderRadius.circular(16),
+                child: Container(
+                  height: 200,
+                  decoration: BoxDecoration(
+                    borderRadius: BorderRadius.circular(16),
+                    border: Border.all(
+                        color: AppColors.outlineVariant.withOpacity(0.3)),
+                  ),
+                  child: FlutterMap(
+                    mapController: _mapController,
+                    options: MapOptions(
+                      initialCenter: ll.LatLng(_lastLat, _lastLon),
+                      initialZoom: 15.5,
+                      interactionOptions: const InteractionOptions(
+                        flags: InteractiveFlag.none,
+                      ),
+                    ),
+                    children: [
+                      TileLayer(
+                        urlTemplate:
+                            'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
+                        userAgentPackageName: 'com.pettrace.app',
+                      ),
+                      MarkerLayer(
+                        markers: [
+                          Marker(
+                            point: ll.LatLng(_lastLat, _lastLon),
+                            width: 140,
+                            height: 70,
+                            alignment: Alignment.center,
+                            child: _buildPinMarker(petName),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+              const SizedBox(height: 8),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Text(
+                    'GPS: ${_lastLat.toStringAsFixed(5)}, ${_lastLon.toStringAsFixed(5)}',
+                    style: GoogleFonts.inter(
+                      fontSize: 11,
+                      fontWeight: FontWeight.w600,
+                      color: AppColors.onSurfaceVariant,
                     ),
                   ),
-              ],
-            ),
+                  if (_lastRecordedAt != null)
+                    Text(
+                      'Last ping: ${_formatLastPing(_lastRecordedAt)}',
+                      style: GoogleFonts.inter(
+                        fontSize: 11,
+                        color: AppColors.onSurfaceVariant.withOpacity(0.8),
+                      ),
+                    ),
+                ],
+              ),
+            ],
+          )
+        else
+          Column(
+            children: [
+              ClipRRect(
+                borderRadius: BorderRadius.circular(16),
+                child: Container(
+                  height: 180,
+                  width: double.infinity,
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFF8FAFC),
+                    borderRadius: BorderRadius.circular(16),
+                    border: Border.all(
+                        color: AppColors.outlineVariant.withOpacity(0.35)),
+                  ),
+                  child: Center(
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 24),
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Container(
+                            padding: const EdgeInsets.all(12),
+                            decoration: const BoxDecoration(
+                              color: Color(0xFFF1F5F9),
+                              shape: BoxShape.circle,
+                            ),
+                            child: const Icon(
+                              Icons.gps_off_rounded,
+                              size: 26,
+                              color: Color(0xFF94A3B8),
+                            ),
+                          ),
+                          const SizedBox(height: 12),
+                          Text(
+                            'No GPS Connected',
+                            style: GoogleFonts.montserrat(
+                              fontSize: 15,
+                              fontWeight: FontWeight.w700,
+                              color: AppColors.onSurface,
+                            ),
+                          ),
+                          const SizedBox(height: 4),
+                          Text(
+                            'This pet does not have an active GPS collar paired.\nLocation will be reported using the registered barangay.',
+                            textAlign: TextAlign.center,
+                            style: GoogleFonts.inter(
+                              fontSize: 12,
+                              color: AppColors.onSurfaceVariant,
+                              height: 1.4,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 8),
+              Row(
+                children: [
+                  const Icon(Icons.location_on_outlined,
+                      size: 14, color: AppColors.onSurfaceVariant),
+                  const SizedBox(width: 4),
+                  Expanded(
+                    child: Text(
+                      'Registered area: ${_pet?['barangay']?.toString() ?? 'San Andres, Catanduanes'}',
+                      style: GoogleFonts.inter(
+                        fontSize: 11,
+                        color: AppColors.onSurfaceVariant,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ],
           ),
-        ),
-        const SizedBox(height: 8),
-        Row(
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-          children: [
-            Text(
-              'Coords: ${_lastLat.toStringAsFixed(5)}, ${_lastLon.toStringAsFixed(5)}',
-              style: GoogleFonts.inter(
-                fontSize: 11,
-                fontWeight: FontWeight.w600,
-                color: AppColors.onSurfaceVariant,
-              ),
-            ),
-            Text(
-              _lastRecordedAt != null
-                  ? 'Last ping: ${_formatLastPing(_lastRecordedAt)}'
-                  : 'Tap map to adjust pin',
-              style: GoogleFonts.inter(
-                fontSize: 11,
-                fontStyle: FontStyle.italic,
-                color: AppColors.onSurfaceVariant.withOpacity(0.8),
-              ),
-            ),
-          ],
-        ),
       ],
     );
   }

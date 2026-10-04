@@ -407,47 +407,56 @@ class _UserManagementScreenState extends State<UserManagementScreen> {
                     ),
                   ),
                   const SizedBox(height: 12),
-                  Theme(
-                    data: Theme.of(context).copyWith(
-                      cardColor: Colors.white,
-                      dividerColor: Colors.grey.shade200,
-                    ),
-                    child: PaginatedDataTable(
-                      header: Row(
-                        children: [
-                          Text(
-                            'Registered Users (${_filteredCitizens.length})',
-                            style: GoogleFonts.montserrat(
-                              fontSize: 16,
-                              fontWeight: FontWeight.bold,
-                              color: AppColors.onSurface,
-                            ),
+                  LayoutBuilder(
+                    builder: (context, tableConstraints) {
+                      final availableWidth = tableConstraints.maxWidth - 48;
+                      final dynamicSpacing =
+                          ((availableWidth - 800) / 7).clamp(24.0, 220.0);
+                      return Theme(
+                        data: Theme.of(context).copyWith(
+                          cardColor: Colors.white,
+                          dividerColor: Colors.grey.shade200,
+                        ),
+                        child: PaginatedDataTable(
+                          columnSpacing: dynamicSpacing,
+                          horizontalMargin: 24,
+                          header: Row(
+                            children: [
+                              Text(
+                                'Registered Users (${_filteredCitizens.length})',
+                                style: GoogleFonts.montserrat(
+                                  fontSize: 16,
+                                  fontWeight: FontWeight.bold,
+                                  color: AppColors.onSurface,
+                                ),
+                              ),
+                              const Spacer(),
+                              IconButton(
+                                icon: const Icon(Icons.refresh),
+                                tooltip: 'Refresh',
+                                onPressed: _fetchUsers,
+                              ),
+                            ],
                           ),
-                          const Spacer(),
-                          IconButton(
-                            icon: const Icon(Icons.refresh),
-                            tooltip: 'Refresh',
-                            onPressed: _fetchUsers,
+                          rowsPerPage: 10,
+                          showFirstLastButtons: true,
+                          columns: const [
+                            DataColumn(label: Text('Avatar')),
+                            DataColumn(label: Text('Name')),
+                            DataColumn(label: Text('Email')),
+                            DataColumn(label: Text('Phone')),
+                            DataColumn(label: Text('Barangay')),
+                            DataColumn(label: Text('Role')),
+                            DataColumn(label: Text('Status')),
+                            DataColumn(label: Text('Actions')),
+                          ],
+                          source: _UsersDataTableSource(
+                            _filteredCitizens,
+                            onAction: _handleUserAction,
                           ),
-                        ],
-                      ),
-                      rowsPerPage: 10,
-                      showFirstLastButtons: true,
-                      columns: const [
-                        DataColumn(label: Text('Avatar')),
-                        DataColumn(label: Text('Name')),
-                        DataColumn(label: Text('Email')),
-                        DataColumn(label: Text('Phone')),
-                        DataColumn(label: Text('Barangay')),
-                        DataColumn(label: Text('Role')),
-                        DataColumn(label: Text('Status')),
-                        DataColumn(label: Text('Actions')),
-                      ],
-                      source: _UsersDataTableSource(
-                        _filteredCitizens,
-                        onAction: _handleUserAction,
-                      ),
-                    ),
+                        ),
+                      );
+                    },
                   ),
                 ],
               ),
@@ -479,83 +488,92 @@ class _UserManagementScreenState extends State<UserManagementScreen> {
                     ),
                   ),
                   const SizedBox(height: 12),
-                  Theme(
-                    data: Theme.of(context).copyWith(
-                      cardColor: Colors.white,
-                      dividerColor: Colors.grey.shade200,
-                    ),
-                    child: PaginatedDataTable(
-                      header: Row(
-                        children: [
-                          Container(
-                            padding: const EdgeInsets.all(6),
-                            decoration: BoxDecoration(
-                              color: const Color(0xFF00796B).withOpacity(0.12),
-                              borderRadius: BorderRadius.circular(8),
-                            ),
-                            child: const Icon(
-                              Icons.shield_rounded,
-                              color: Color(0xFF00796B),
-                              size: 18,
-                            ),
-                          ),
-                          const SizedBox(width: 10),
-                          Text(
-                            'Barangay Administrators (${_filteredAdmins.length})',
-                            style: GoogleFonts.montserrat(
-                              fontSize: 16,
-                              fontWeight: FontWeight.bold,
-                              color: AppColors.onSurface,
-                            ),
-                          ),
-                          const Spacer(),
-                          ElevatedButton.icon(
-                            onPressed: _showAddAdminModal,
-                            icon: const Icon(Icons.add, size: 16),
-                            label: Text(
-                              'Add Admin',
-                              style: GoogleFonts.inter(
-                                fontWeight: FontWeight.bold,
-                                fontSize: 13,
+                  LayoutBuilder(
+                    builder: (context, tableConstraints) {
+                      final availableWidth = tableConstraints.maxWidth - 48;
+                      final dynamicSpacing =
+                          ((availableWidth - 800) / 7).clamp(24.0, 220.0);
+                      return Theme(
+                        data: Theme.of(context).copyWith(
+                          cardColor: Colors.white,
+                          dividerColor: Colors.grey.shade200,
+                        ),
+                        child: PaginatedDataTable(
+                          columnSpacing: dynamicSpacing,
+                          horizontalMargin: 24,
+                          header: Row(
+                            children: [
+                              Container(
+                                padding: const EdgeInsets.all(6),
+                                decoration: BoxDecoration(
+                                  color: const Color(0xFF00796B).withOpacity(0.12),
+                                  borderRadius: BorderRadius.circular(8),
+                                ),
+                                child: const Icon(
+                                  Icons.shield_rounded,
+                                  color: Color(0xFF00796B),
+                                  size: 18,
+                                ),
                               ),
-                            ),
-                            style: ElevatedButton.styleFrom(
-                              backgroundColor: const Color(0xFF00796B),
-                              foregroundColor: Colors.white,
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 16,
-                                vertical: 10,
+                              const SizedBox(width: 10),
+                              Text(
+                                'Barangay Administrators (${_filteredAdmins.length})',
+                                style: GoogleFonts.montserrat(
+                                  fontSize: 16,
+                                  fontWeight: FontWeight.bold,
+                                  color: AppColors.onSurface,
+                                ),
                               ),
-                              shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(8),
+                              const Spacer(),
+                              ElevatedButton.icon(
+                                onPressed: _showAddAdminModal,
+                                icon: const Icon(Icons.add, size: 16),
+                                label: Text(
+                                  'Add Admin',
+                                  style: GoogleFonts.inter(
+                                    fontWeight: FontWeight.bold,
+                                    fontSize: 13,
+                                  ),
+                                ),
+                                style: ElevatedButton.styleFrom(
+                                  backgroundColor: const Color(0xFF00796B),
+                                  foregroundColor: Colors.white,
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 16,
+                                    vertical: 10,
+                                  ),
+                                  shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(8),
+                                  ),
+                                ),
                               ),
-                            ),
+                              const SizedBox(width: 8),
+                              IconButton(
+                                icon: const Icon(Icons.refresh),
+                                tooltip: 'Refresh',
+                                onPressed: _fetchUsers,
+                              ),
+                            ],
                           ),
-                          const SizedBox(width: 8),
-                          IconButton(
-                            icon: const Icon(Icons.refresh),
-                            tooltip: 'Refresh',
-                            onPressed: _fetchUsers,
+                          rowsPerPage: 10,
+                          showFirstLastButtons: true,
+                          columns: const [
+                            DataColumn(label: Text('Avatar')),
+                            DataColumn(label: Text('Name')),
+                            DataColumn(label: Text('Email')),
+                            DataColumn(label: Text('Phone')),
+                            DataColumn(label: Text('Barangay')),
+                            DataColumn(label: Text('Role')),
+                            DataColumn(label: Text('Status')),
+                            DataColumn(label: Text('Actions')),
+                          ],
+                          source: _UsersDataTableSource(
+                            _filteredAdmins,
+                            onAction: _handleUserAction,
                           ),
-                        ],
-                      ),
-                      rowsPerPage: 10,
-                      showFirstLastButtons: true,
-                      columns: const [
-                        DataColumn(label: Text('Avatar')),
-                        DataColumn(label: Text('Name')),
-                        DataColumn(label: Text('Email')),
-                        DataColumn(label: Text('Phone')),
-                        DataColumn(label: Text('Barangay')),
-                        DataColumn(label: Text('Role')),
-                        DataColumn(label: Text('Status')),
-                        DataColumn(label: Text('Actions')),
-                      ],
-                      source: _UsersDataTableSource(
-                        _filteredAdmins,
-                        onAction: _handleUserAction,
-                      ),
-                    ),
+                        ),
+                      );
+                    },
                   ),
                 ],
               ),
@@ -1338,7 +1356,7 @@ class _UserManagementScreenState extends State<UserManagementScreen> {
                   fontSize: 12,
                   fontWeight: FontWeight.w600,
                   color: active
-                      ? activeColor
+                      ? Colors.black
                       : AppColors.onSurfaceVariant,
                 ),
               ),
@@ -1885,6 +1903,7 @@ class _UsersDataTableSource extends DataTableSource {
                   : (role == 'super_admin'
                       ? 'SUPER ADMIN'
                       : 'USER'),
+              softWrap: false,
               style: GoogleFonts.inter(
                 fontSize: 10,
                 fontWeight: FontWeight.bold,
@@ -1934,6 +1953,7 @@ class _UsersDataTableSource extends DataTableSource {
               ),
               child: Text(
                 label,
+                softWrap: false,
                 style: GoogleFonts.inter(
                   fontSize: 10,
                   fontWeight: FontWeight.bold,

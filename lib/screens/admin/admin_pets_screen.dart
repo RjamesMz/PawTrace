@@ -13,6 +13,7 @@ import '../../widgets/admin_content_wrapper.dart';
 import '../../widgets/admin_layout.dart';
 import 'admin_pet_detail_screen.dart';
 import 'web/admin_web_layout.dart';
+import '../../widgets/pet_location_map_dialog.dart';
 
 /// Admin Pets screen – fetches and displays ALL pets from Supabase
 /// regardless of owner. Includes search, filter chips, and summary stats.
@@ -65,8 +66,10 @@ class _AdminPetsScreenState extends State<AdminPetsScreen> {
     super.dispose();
   }
 
-  Future<void> fetchAllPets() async {
-    setState(() => isLoading = true);
+  Future<void> fetchAllPets({bool isRefresh = false}) async {
+    if (!isRefresh) {
+      setState(() => isLoading = true);
+    }
     try {
       var query = _supabase.from('pets').select(
           '*, users(first_name, middle_name, surname, suffix, email, phone, barangay)');
@@ -88,7 +91,7 @@ class _AdminPetsScreenState extends State<AdminPetsScreen> {
       if (!mounted) return;
       AppToast.error(context, 'Error loading pets: $e');
     } finally {
-      if (mounted) setState(() => isLoading = false);
+      if (mounted && !isRefresh) setState(() => isLoading = false);
     }
   }
 
@@ -208,81 +211,7 @@ class _AdminPetsScreenState extends State<AdminPetsScreen> {
   }
 
   Future<void> _showLocationDialog(Map<String, dynamic> pet) async {
-    final petName = pet['name']?.toString() ?? 'Pet';
-    String location = pet['barangay']?.toString() ??
-        pet['users']?['barangay']?.toString() ??
-        'Catanduanes';
-    String note = '';
-
-    try {
-      final petId = pet['pet_id'] ?? pet['id'];
-      if (petId != null) {
-        final reports = await _supabase
-            .from('lost_reports')
-            .select('*')
-            .eq('pet_id', petId)
-            .order('reported_at', ascending: false)
-            .limit(1);
-        if (reports.isNotEmpty) {
-          final r = reports.first;
-          if (r['last_seen_address'] != null &&
-              r['last_seen_address'].toString().isNotEmpty) {
-            location = r['last_seen_address'].toString();
-          } else if (r['barangay'] != null &&
-              r['barangay'].toString().isNotEmpty) {
-            location = r['barangay'].toString();
-          }
-          note = (r['description'] ?? r['notes'] ?? '').toString();
-        }
-      }
-    } catch (_) {}
-
-    if (!mounted) return;
-    showDialog(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-        title: Row(
-          children: [
-            const Icon(Icons.map_rounded, color: AppColors.primary),
-            const SizedBox(width: 10),
-            Text('Last Known Location',
-                style: GoogleFonts.montserrat(fontWeight: FontWeight.bold)),
-          ],
-        ),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text('Pet: $petName',
-                style: GoogleFonts.inter(fontWeight: FontWeight.w600)),
-            const SizedBox(height: 8),
-            Row(
-              children: [
-                const Icon(Icons.location_on,
-                    size: 16, color: AppColors.primary),
-                const SizedBox(width: 4),
-                Expanded(
-                  child: Text(location, style: GoogleFonts.inter()),
-                ),
-              ],
-            ),
-            if (note.isNotEmpty) ...[
-              const SizedBox(height: 10),
-              Text('Notes: $note',
-                  style: GoogleFonts.inter(
-                      fontSize: 12, color: AppColors.onSurfaceVariant)),
-            ],
-          ],
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx),
-            child: const Text('Close'),
-          ),
-        ],
-      ),
-    );
+    showPetLocationMapDialog(context, pet);
   }
 
   Future<void> _repostPetToNews(Map<String, dynamic> pet) async {
@@ -856,98 +785,42 @@ class _AdminPetsScreenState extends State<AdminPetsScreen> {
   Widget _buildNarrowContent() {
     return AdminContentWrapper(
       maxWidth: 1100,
-      child: ListView(
-        padding: const EdgeInsets.fromLTRB(20, 16, 20, 20),
-        children: [
-          _buildBarangayChip(),
-          const SizedBox(height: 12),
-          _buildSummaryRow(),
-          const SizedBox(height: 14),
-          _buildSearchBar(),
-          const SizedBox(height: 14),
-          Row(
-            children: [
-              Expanded(child: _buildFilterChips()),
-              const SizedBox(width: 8),
-              IconButton.filled(
-                onPressed: filteredPets.isEmpty ? null : _exportToExcel,
-                icon: const Icon(Icons.table_chart_outlined, size: 18),
-                tooltip: 'Export to Excel',
-                style: IconButton.styleFrom(
-                  backgroundColor: const Color(0xFF1D6F42),
-                  foregroundColor: Colors.white,
-                  disabledBackgroundColor: Colors.grey.shade300,
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 16),
-          ...filteredPets.map((p) => Padding(
-                padding: const EdgeInsets.only(bottom: 12),
-                child: _buildPetCard(p),
-              )),
-          if (filteredPets.isEmpty)
-            Padding(
-              padding: const EdgeInsets.only(top: 40),
-              child: Center(
-                child: Text('No pets found',
-                    style: GoogleFonts.inter(
-                        fontSize: 15, color: AppColors.onSurfaceVariant)),
-              ),
-            ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildWideContent() {
-    return AdminContentWrapper(
-      maxWidth: 1100,
-      child: CustomScrollView(
-        slivers: [
-          SliverToBoxAdapter(
-            child: Padding(
-              padding: const EdgeInsets.fromLTRB(20, 16, 20, 0),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  _buildBarangayChip(),
-                  const SizedBox(height: 12),
-                  _buildSummaryRow(),
-                  const SizedBox(height: 14),
-                  _buildSearchBar(),
-                  const SizedBox(height: 14),
-                  Row(
-                    children: [
-                      Expanded(child: _buildFilterChips()),
-                      const SizedBox(width: 12),
-                      ElevatedButton.icon(
-                        onPressed: filteredPets.isEmpty ? null : _exportToExcel,
-                        icon: const Icon(Icons.table_chart_outlined, size: 18),
-                        label: Text('Export to Excel',
-                            style: GoogleFonts.inter(
-                                fontSize: 13, fontWeight: FontWeight.w600)),
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: const Color(0xFF1D6F42),
-                          foregroundColor: Colors.white,
-                          disabledBackgroundColor: Colors.grey.shade300,
-                          padding: const EdgeInsets.symmetric(
-                              horizontal: 16, vertical: 12),
-                          shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(10)),
-                          elevation: 0,
-                        ),
-                      ),
-                    ],
+      child: RefreshIndicator(
+        onRefresh: () => fetchAllPets(isRefresh: true),
+        color: AppColors.primary,
+        child: ListView(
+          physics: const AlwaysScrollableScrollPhysics(),
+          padding: const EdgeInsets.fromLTRB(20, 16, 20, 20),
+          children: [
+            _buildBarangayChip(),
+            const SizedBox(height: 12),
+            _buildSummaryRow(),
+            const SizedBox(height: 14),
+            _buildSearchBar(),
+            const SizedBox(height: 14),
+            Row(
+              children: [
+                Expanded(child: _buildFilterChips()),
+                const SizedBox(width: 8),
+                IconButton.filled(
+                  onPressed: filteredPets.isEmpty ? null : _exportToExcel,
+                  icon: const Icon(Icons.table_chart_outlined, size: 18),
+                  tooltip: 'Export to Excel',
+                  style: IconButton.styleFrom(
+                    backgroundColor: const Color(0xFF1D6F42),
+                    foregroundColor: Colors.white,
+                    disabledBackgroundColor: Colors.grey.shade300,
                   ),
-                  const SizedBox(height: 16),
-                ],
-              ),
+                ),
+              ],
             ),
-          ),
-          if (filteredPets.isEmpty)
-            SliverToBoxAdapter(
-              child: Padding(
+            const SizedBox(height: 16),
+            ...filteredPets.map((p) => Padding(
+                  padding: const EdgeInsets.only(bottom: 12),
+                  child: _buildPetCard(p),
+                )),
+            if (filteredPets.isEmpty)
+              Padding(
                 padding: const EdgeInsets.only(top: 40),
                 child: Center(
                   child: Text('No pets found',
@@ -955,24 +828,90 @@ class _AdminPetsScreenState extends State<AdminPetsScreen> {
                           fontSize: 15, color: AppColors.onSurfaceVariant)),
                 ),
               ),
-            )
-          else
-            SliverPadding(
-              padding: const EdgeInsets.fromLTRB(20, 0, 20, 20),
-              sliver: SliverGrid(
-                gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                  crossAxisCount: 2,
-                  mainAxisSpacing: 12,
-                  crossAxisSpacing: 12,
-                  childAspectRatio: 2.5,
-                ),
-                delegate: SliverChildBuilderDelegate(
-                  (context, index) => _buildPetCard(filteredPets[index]),
-                  childCount: filteredPets.length,
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildWideContent() {
+    return AdminContentWrapper(
+      maxWidth: 1100,
+      child: RefreshIndicator(
+        onRefresh: () => fetchAllPets(isRefresh: true),
+        color: AppColors.primary,
+        child: CustomScrollView(
+          physics: const AlwaysScrollableScrollPhysics(),
+          slivers: [
+            SliverToBoxAdapter(
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(20, 16, 20, 0),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    _buildBarangayChip(),
+                    const SizedBox(height: 12),
+                    _buildSummaryRow(),
+                    const SizedBox(height: 14),
+                    _buildSearchBar(),
+                    const SizedBox(height: 14),
+                    Row(
+                      children: [
+                        Expanded(child: _buildFilterChips()),
+                        const SizedBox(width: 12),
+                        ElevatedButton.icon(
+                          onPressed: filteredPets.isEmpty ? null : _exportToExcel,
+                          icon: const Icon(Icons.table_chart_outlined, size: 18),
+                          label: Text('Export to Excel',
+                              style: GoogleFonts.inter(
+                                  fontSize: 13, fontWeight: FontWeight.w600)),
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: const Color(0xFF1D6F42),
+                            foregroundColor: Colors.white,
+                            disabledBackgroundColor: Colors.grey.shade300,
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 16, vertical: 12),
+                            shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(10)),
+                            elevation: 0,
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 16),
+                  ],
                 ),
               ),
             ),
-        ],
+            if (filteredPets.isEmpty)
+              SliverToBoxAdapter(
+                child: Padding(
+                  padding: const EdgeInsets.only(top: 40),
+                  child: Center(
+                    child: Text('No pets found',
+                        style: GoogleFonts.inter(
+                            fontSize: 15, color: AppColors.onSurfaceVariant)),
+                  ),
+                ),
+              )
+            else
+              SliverPadding(
+                padding: const EdgeInsets.fromLTRB(20, 0, 20, 20),
+                sliver: SliverGrid(
+                  gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                    crossAxisCount: 2,
+                    mainAxisSpacing: 12,
+                    crossAxisSpacing: 12,
+                    childAspectRatio: 2.5,
+                  ),
+                  delegate: SliverChildBuilderDelegate(
+                    (context, index) => _buildPetCard(filteredPets[index]),
+                    childCount: filteredPets.length,
+                  ),
+                ),
+              ),
+          ],
+        ),
       ),
     );
   }

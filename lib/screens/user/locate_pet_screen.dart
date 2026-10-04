@@ -156,7 +156,10 @@ class _LocatePetScreenState extends State<LocatePetScreen> {
       setState(() {
         currentCollarId = null;
         widget.pet['collar_id'] = null;
-        widget.pet['barangay'] = null; // clear stale location pill
+        widget.pet['last_seen_address'] = null;
+        widget.pet['last_seen_lat'] = null;
+        widget.pet['last_seen_lon'] = null;
+        widget.pet['last_seen_at'] = null;
         isOnline = false;
         battery = 0;
         lastUpdated = '';
@@ -175,6 +178,15 @@ class _LocatePetScreenState extends State<LocatePetScreen> {
       setState(() {
         currentCollarId = result;
         widget.pet['collar_id'] = result;
+        widget.pet['last_seen_address'] = null;
+        widget.pet['last_seen_lat'] = null;
+        widget.pet['last_seen_lon'] = null;
+        widget.pet['last_seen_at'] = null;
+        lat = null;
+        lon = null;
+        lastUpdated = '';
+        isOnline = false;
+        battery = 0;
         isLoading = true;
       });
       if (mounted) {

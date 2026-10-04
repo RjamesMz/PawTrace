@@ -5,7 +5,6 @@ import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:image_picker/image_picker.dart';
 import '../../core/app_colors.dart';
-import '../../core/app_constants.dart';
 import '../../core/app_toast.dart';
 import '../../services/pet_embedding_service.dart';
 import '../../services/pet_match_service.dart';

@@ -100,6 +100,17 @@ class _PetProfileDetailScreenState extends State<PetProfileDetailScreen> {
       final petId = pet['pet_id'];
       if (petId == null) throw Exception('Pet ID is missing.');
 
+      // Purge collar locations for this collar so it is completely fresh when reused
+      final collarId = pet['collar_id']?.toString().trim();
+      if (collarId != null && collarId.isNotEmpty && collarId.toUpperCase() != 'N/A') {
+        try {
+          await Supabase.instance.client
+              .from('collar_locations')
+              .delete()
+              .eq('collar_id', collarId);
+        } catch (_) {}
+      }
+
       // Soft delete: Update status to 'archived' in Supabase
       // Preserves photo, medical/biometric records, and audit history
       try {
@@ -108,6 +119,10 @@ class _PetProfileDetailScreenState extends State<PetProfileDetailScreen> {
             .update({
               'status': 'archived',
               'collar_id': null, // Unpair collar so it can be reused
+              'last_seen_address': null,
+              'last_seen_lat': null,
+              'last_seen_lon': null,
+              'last_seen_at': null,
               'archive_reason': reason,
             })
             .eq('pet_id', petId);
@@ -118,6 +133,10 @@ class _PetProfileDetailScreenState extends State<PetProfileDetailScreen> {
             .update({
               'status': 'archived',
               'collar_id': null,
+              'last_seen_address': null,
+              'last_seen_lat': null,
+              'last_seen_lon': null,
+              'last_seen_at': null,
             })
             .eq('pet_id', petId);
       }
@@ -392,61 +411,66 @@ class _PetProfileDetailScreenState extends State<PetProfileDetailScreen> {
               bottom: false,
               child: Container(
                 color: AppColors.background,
-                child: CustomScrollView(
-                  slivers: [
-                SliverAppBar(
-                  expandedHeight: 360,
-                  toolbarHeight: 76,
-                  pinned: true,
-                  backgroundColor: AppColors.surface,
-                  leading: Padding(
-                    padding: const EdgeInsets.only(left: 8, top: 12, right: 8, bottom: 8),
-                    child: GestureDetector(
-                      onTap: () => handleSafeBack(context),
-                      child: Container(
-                        padding: const EdgeInsets.all(6),
-                        decoration: BoxDecoration(color: Colors.white.withOpacity(0.25), borderRadius: BorderRadius.circular(999)),
-                        child: const Icon(Icons.arrow_back, color: Colors.white, size: 20),
+                child: RefreshIndicator(
+                  onRefresh: _reloadPet,
+                  color: AppColors.primary,
+                  child: CustomScrollView(
+                    physics: const AlwaysScrollableScrollPhysics(),
+                    slivers: [
+                      SliverAppBar(
+                        expandedHeight: 360,
+                        toolbarHeight: 76,
+                        pinned: true,
+                        backgroundColor: AppColors.surface,
+                        leading: Padding(
+                          padding: const EdgeInsets.only(left: 8, top: 12, right: 8, bottom: 8),
+                          child: GestureDetector(
+                            onTap: () => handleSafeBack(context),
+                            child: Container(
+                              padding: const EdgeInsets.all(6),
+                              decoration: BoxDecoration(color: Colors.white.withOpacity(0.25), borderRadius: BorderRadius.circular(999)),
+                              child: const Icon(Icons.arrow_back, color: Colors.white, size: 20),
+                            ),
+                          ),
+                        ),
+                        // Removed PawTrace logo, share and edit icons per user request
+                        flexibleSpace: FlexibleSpaceBar(
+                          background: Stack(
+                            fit: StackFit.expand,
+                            children: [
+                              photoUrl.isNotEmpty
+                                  ? Image.network(
+                                      photoUrl,
+                                      fit: BoxFit.cover,
+                                      errorBuilder: (_, __, ___) => _fallbackImage(),
+                                    )
+                                  : _fallbackImage(),
+                              const DecoratedBox(decoration: BoxDecoration(gradient: LinearGradient(begin: Alignment.topCenter, end: Alignment.bottomCenter, colors: [Colors.transparent, Colors.black38]))),
+                            ],
+                          ),
+                        ),
                       ),
-                    ),
-                  ),
-                  // Removed PawTrace logo, share and edit icons per user request
-                  flexibleSpace: FlexibleSpaceBar(
-                    background: Stack(
-                      fit: StackFit.expand,
-                      children: [
-                        photoUrl.isNotEmpty
-                            ? Image.network(
-                                photoUrl,
-                                fit: BoxFit.cover,
-                                errorBuilder: (_, __, ___) => _fallbackImage(),
-                              )
-                            : _fallbackImage(),
-                        const DecoratedBox(decoration: BoxDecoration(gradient: LinearGradient(begin: Alignment.topCenter, end: Alignment.bottomCenter, colors: [Colors.transparent, Colors.black38]))),
-                      ],
-                    ),
-                  ),
-                ),
-                SliverToBoxAdapter(
-                  child: Padding(
-                    padding: const EdgeInsets.fromLTRB(20, 20, 20, 120),
-                    child: Column(
-                      children: [
-                        _buildIdentityHeader(name, breed, species, status),
-                        const SizedBox(height: 16),
-                        _buildInfoGrid(pet),
-                        const SizedBox(height: 20),
-                        _buildActionButtons(context, pet),
-                        const SizedBox(height: 24),
-                        _buildSecondaryActions(pet),
-                      ],
-                    ),
+                      SliverToBoxAdapter(
+                        child: Padding(
+                          padding: const EdgeInsets.fromLTRB(20, 20, 20, 120),
+                          child: Column(
+                            children: [
+                              _buildIdentityHeader(name, breed, species, status),
+                              const SizedBox(height: 16),
+                              _buildInfoGrid(pet),
+                              const SizedBox(height: 20),
+                              _buildActionButtons(context, pet),
+                              const SizedBox(height: 24),
+                              _buildSecondaryActions(pet),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ],
                   ),
                 ),
-              ],
+              ),
             ),
-          ),
-        ),
       bottomNavigationBar: const BottomNavBar(currentIndex: 4),
     );
   }

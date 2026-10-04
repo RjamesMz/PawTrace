@@ -6,6 +6,7 @@ import '../../core/app_toast.dart';
 import '../../core/navigation_helpers.dart';
 import '../../services/alert_service.dart';
 import '../../widgets/admin_content_wrapper.dart';
+import '../../widgets/pet_location_map_dialog.dart';
 
 /// Admin Pet Detail screen – displays full pet details with admin actions
 /// (Mark as Lost, Remove Pet). Receives a pet Map via constructor.
@@ -397,81 +398,7 @@ class _AdminPetDetailScreenState extends State<AdminPetDetailScreen> {
   }
 
   Future<void> _showLocationDialog() async {
-    final petName = pet['name']?.toString() ?? 'Pet';
-    String location = pet['barangay']?.toString() ??
-        pet['users']?['barangay']?.toString() ??
-        'Catanduanes';
-    String note = '';
-
-    try {
-      final petId = pet['pet_id'] ?? pet['id'];
-      if (petId != null) {
-        final reports = await _supabase
-            .from('lost_reports')
-            .select('*')
-            .eq('pet_id', petId)
-            .order('reported_at', ascending: false)
-            .limit(1);
-        if (reports.isNotEmpty) {
-          final r = reports.first;
-          if (r['last_seen_address'] != null &&
-              r['last_seen_address'].toString().isNotEmpty) {
-            location = r['last_seen_address'].toString();
-          } else if (r['barangay'] != null &&
-              r['barangay'].toString().isNotEmpty) {
-            location = r['barangay'].toString();
-          }
-          note = (r['description'] ?? r['notes'] ?? '').toString();
-        }
-      }
-    } catch (_) {}
-
-    if (!mounted) return;
-    showDialog(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-        title: Row(
-          children: [
-            const Icon(Icons.map_rounded, color: AppColors.primary),
-            const SizedBox(width: 10),
-            Text('Last Known Location',
-                style: GoogleFonts.montserrat(fontWeight: FontWeight.bold)),
-          ],
-        ),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text('Pet: $petName',
-                style: GoogleFonts.inter(fontWeight: FontWeight.w600)),
-            const SizedBox(height: 8),
-            Row(
-              children: [
-                const Icon(Icons.location_on,
-                    size: 16, color: AppColors.primary),
-                const SizedBox(width: 4),
-                Expanded(
-                  child: Text(location, style: GoogleFonts.inter()),
-                ),
-              ],
-            ),
-            if (note.isNotEmpty) ...[
-              const SizedBox(height: 10),
-              Text('Notes: $note',
-                  style: GoogleFonts.inter(
-                      fontSize: 12, color: AppColors.onSurfaceVariant)),
-            ],
-          ],
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx),
-            child: const Text('Close'),
-          ),
-        ],
-      ),
-    );
+    showPetLocationMapDialog(context, pet);
   }
 
   @override
@@ -532,16 +459,35 @@ class _AdminPetDetailScreenState extends State<AdminPetDetailScreen> {
       body: _isUpdating
           ? const Center(
               child: CircularProgressIndicator(color: AppColors.primary))
-          : SingleChildScrollView(
-              padding: const EdgeInsets.fromLTRB(20, 0, 20, 40),
-              child: AdminContentWrapper(
-                maxWidth: 800,
-                child: LayoutBuilder(
-                  builder: (context, constraints) {
-                    final isWide = constraints.maxWidth >= 700 ||
-                        MediaQuery.of(context).size.width >= 900;
-                    if (isWide) {
-                      return _buildWideDetailLayout(
+          : RefreshIndicator(
+              color: AppColors.primary,
+              onRefresh: _fetchLatestPet,
+              child: SingleChildScrollView(
+                physics: const AlwaysScrollableScrollPhysics(),
+                padding: const EdgeInsets.fromLTRB(20, 0, 20, 40),
+                child: AdminContentWrapper(
+                  maxWidth: 800,
+                  child: LayoutBuilder(
+                    builder: (context, constraints) {
+                      final isWide = constraints.maxWidth >= 700 ||
+                          MediaQuery.of(context).size.width >= 900;
+                      if (isWide) {
+                        return _buildWideDetailLayout(
+                          photoUrl: photoUrl.toString(),
+                          name: name,
+                          breed: breed,
+                          species: species,
+                          status: rawStatus,
+                          dobDisplay: dobDisplay,
+                          weight: weight,
+                          color: color,
+                          collarId: collarId,
+                          ownerName: ownerName,
+                          ownerEmail: ownerEmail,
+                          ownerPhone: ownerPhone,
+                        );
+                      }
+                      return _buildNarrowDetailLayout(
                         photoUrl: photoUrl.toString(),
                         name: name,
                         breed: breed,
@@ -555,22 +501,8 @@ class _AdminPetDetailScreenState extends State<AdminPetDetailScreen> {
                         ownerEmail: ownerEmail,
                         ownerPhone: ownerPhone,
                       );
-                    }
-                    return _buildNarrowDetailLayout(
-                      photoUrl: photoUrl.toString(),
-                      name: name,
-                      breed: breed,
-                      species: species,
-                      status: rawStatus,
-                      dobDisplay: dobDisplay,
-                      weight: weight,
-                      color: color,
-                      collarId: collarId,
-                      ownerName: ownerName,
-                      ownerEmail: ownerEmail,
-                      ownerPhone: ownerPhone,
-                    );
-                  },
+                    },
+                  ),
                 ),
               ),
             ),

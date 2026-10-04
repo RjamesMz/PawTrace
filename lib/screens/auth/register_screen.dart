@@ -200,12 +200,12 @@ class _RegisterScreenState extends State<RegisterScreen> {
                           flex: 3,
                           child: _formField(
                             controller: _regSurnameCtrl,
-                            hint: 'Surname',
+                            hint: 'Last name',
                             icon: Icons.person_outline_rounded,
                             keyboardType: TextInputType.name,
                             textCapitalization: TextCapitalization.words,
                             validator: (v) =>
-                                AuthService.validateName(v, fieldName: 'Surname'),
+                                AuthService.validateName(v, fieldName: 'Last name'),
                           ),
                         ),
                         const SizedBox(width: 10),
