@@ -96,8 +96,25 @@ class _RegisterScreenState extends State<RegisterScreen> {
         phone: phone,
         barangay: _selectedBarangay,
       );
+      // Ensure the user signs out so they must verify their email before accessing
+      await AuthService.instance.signOut();
       if (!mounted) return;
-      Navigator.of(context).pushNamedAndRemoveUntil('/', (_) => false);
+      Navigator.of(context).pushNamedAndRemoveUntil(
+        AppRoutes.login,
+        (_) => false,
+        arguments: {
+          'flashMessage':
+              'Registration successful! Please check your email and verify your account first before signing in.',
+          'flashEmail': email,
+        },
+      );
+      AppToast.show(
+        null,
+        'Please check your email and verify your account first before signing in.',
+        duration: const Duration(seconds: 5),
+        backgroundColor: const Color(0xFF1E293B),
+        icon: Icons.mark_email_unread_rounded,
+      );
     } on AuthException catch (e) {
       _showError(AuthService.friendlyError(e));
     } catch (e) {
@@ -351,7 +368,6 @@ class _RegisterScreenState extends State<RegisterScreen> {
       children: [
         AppConstants.buildLogoBadge(
           size: 64,
-          iconSize: 34,
         ),
         const SizedBox(height: 10),
         Text(

@@ -442,7 +442,8 @@ class _ProfilePetRegistrationScreenState
       return;
     }
     if (!RegExp(r"^[a-zA-Z0-9ñÑ\s\.\-']+$").hasMatch(petName)) {
-      _showError('Pet name can only contain letters, numbers, spaces, and hyphens.');
+      _showError(
+          'Pet name can only contain letters, numbers, spaces, and hyphens.');
       return;
     }
 
@@ -469,14 +470,6 @@ class _ProfilePetRegistrationScreenState
 
     if (_faceImage == null) {
       _showError('Please upload a Face / Front photo of your pet.');
-      return;
-    }
-    if (_leftBodyImage == null) {
-      _showError('Please upload a Left Body photo of your pet.');
-      return;
-    }
-    if (_rightBodyImage == null) {
-      _showError('Please upload a Right Body photo of your pet.');
       return;
     }
     if (_selectedSpecies == null ||
@@ -539,8 +532,12 @@ class _ProfilePetRegistrationScreenState
       }
 
       final photoUrl = await uploadPhoto(_faceImage!, 'face');
-      await uploadPhoto(_leftBodyImage!, 'left');
-      await uploadPhoto(_rightBodyImage!, 'right');
+      if (_leftBodyImage != null) {
+        await uploadPhoto(_leftBodyImage!, 'left');
+      }
+      if (_rightBodyImage != null) {
+        await uploadPhoto(_rightBodyImage!, 'right');
+      }
       if (_uniqueFeatureImage != null) {
         await uploadPhoto(_uniqueFeatureImage!, 'unique');
       }
@@ -584,10 +581,16 @@ class _ProfilePetRegistrationScreenState
           debugPrint('[PetTrace] Starting multi-angle embedding generation...');
           final faceEmb =
               await PetEmbeddingService.instance.extractEmbedding(_faceImage!);
-          final leftEmb = await PetEmbeddingService.instance
-              .extractEmbedding(_leftBodyImage!);
-          final rightEmb = await PetEmbeddingService.instance
-              .extractEmbedding(_rightBodyImage!);
+          List<double>? leftEmb;
+          if (_leftBodyImage != null) {
+            leftEmb = await PetEmbeddingService.instance
+                .extractEmbedding(_leftBodyImage!);
+          }
+          List<double>? rightEmb;
+          if (_rightBodyImage != null) {
+            rightEmb = await PetEmbeddingService.instance
+                .extractEmbedding(_rightBodyImage!);
+          }
           List<double>? uniqueEmb;
           if (_uniqueFeatureImage != null) {
             uniqueEmb = await PetEmbeddingService.instance
@@ -673,6 +676,8 @@ class _ProfilePetRegistrationScreenState
       color: AppColors.surface,
       child: Row(
         children: [
+          AppConstants.buildLogoGraphic(size: 26),
+          const SizedBox(width: 10),
           Text('Pet Registration',
               style: GoogleFonts.montserrat(
                   fontSize: 18,
@@ -700,11 +705,6 @@ class _ProfilePetRegistrationScreenState
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text('Pet Registration',
-              style: GoogleFonts.montserrat(
-                  fontSize: 18,
-                  fontWeight: FontWeight.w600,
-                  color: AppColors.onSurface)),
           const SizedBox(height: 20),
           // Biometric Photos Section
           Row(
@@ -715,8 +715,6 @@ class _ProfilePetRegistrationScreenState
                   color: AppColors.primaryContainer.withOpacity(0.4),
                   borderRadius: BorderRadius.circular(8),
                 ),
-                child: const Icon(Icons.camera_enhance_rounded,
-                    color: AppColors.primary, size: 18),
               ),
               const SizedBox(width: 8),
               Expanded(
@@ -733,7 +731,7 @@ class _ProfilePetRegistrationScreenState
           ),
           const SizedBox(height: 6),
           Text(
-            'Upload multiple angles to train the AI to recognize your pet from any perspective. Face, Left Body, and Right Body are required.',
+            'Upload a clear face photo (required). Side angles and distinctive markings are optional but recommended to boost AI recognition accuracy.',
             style: GoogleFonts.inter(
               fontSize: 12,
               color: AppColors.onSurfaceVariant,
@@ -756,15 +754,15 @@ class _ProfilePetRegistrationScreenState
           ),
           const SizedBox(height: 12),
 
-          // Slots 2 & 3: Left Body and Right Body
+          // Slots 2 & 3: Left Body and Right Body (Optional)
           Row(
             children: [
               Expanded(
                 child: _buildPhotoSlotCard(
-                  title: 'Left Body Profile',
-                  subtitle: 'Left side coat & pattern',
-                  badgeText: 'REQUIRED',
-                  isRequired: true,
+                  title: 'Left Side Profile',
+                  subtitle: 'Optional side angle',
+                  badgeText: 'OPTIONAL • AI BOOST',
+                  isRequired: false,
                   icon: Icons.pets_rounded,
                   imageFile: _leftBodyImage,
                   onTap: () => _pickImage(PetPhotoSlot.leftBody),
@@ -774,10 +772,10 @@ class _ProfilePetRegistrationScreenState
               const SizedBox(width: 12),
               Expanded(
                 child: _buildPhotoSlotCard(
-                  title: 'Right Body Profile',
-                  subtitle: 'Right side coat & pattern',
-                  badgeText: 'REQUIRED',
-                  isRequired: true,
+                  title: 'Right Side Profile',
+                  subtitle: 'Optional side angle',
+                  badgeText: 'OPTIONAL • AI BOOST',
+                  isRequired: false,
                   icon: Icons.pets_rounded,
                   imageFile: _rightBodyImage,
                   onTap: () => _pickImage(PetPhotoSlot.rightBody),
@@ -981,33 +979,30 @@ class _ProfilePetRegistrationScreenState
           ),
           const SizedBox(height: 12),
           // Collar ID
-          _formLabel('Link Collar ID'),
+          _formLabel('Link GPS ID'),
           const SizedBox(height: 6),
           TextField(
             controller: _collarCtrl,
             style: GoogleFonts.inter(fontSize: 14, color: AppColors.onSurface),
             decoration: InputDecoration(
-              hintText: 'Scan or enter ID (or N/A)',
-              hintStyle: GoogleFonts.inter(
-                  fontSize: 14,
-                  color: AppColors.onSurfaceVariant.withOpacity(0.5)),
-              filled: true,
-              fillColor: AppColors.secondaryContainer.withOpacity(0.3),
-              border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(16),
-                  borderSide: BorderSide.none),
-              focusedBorder: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(16),
-                  borderSide: const BorderSide(
-                      color: AppColors.primaryContainer, width: 2)),
-              contentPadding:
-                  const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-              suffixIcon:
-                  const Icon(Icons.qr_code_scanner, color: AppColors.primary),
-            ),
+                hintText: 'Scan or enter ID (or N/A)',
+                hintStyle: GoogleFonts.inter(
+                    fontSize: 14,
+                    color: AppColors.onSurfaceVariant.withOpacity(0.5)),
+                filled: true,
+                fillColor: AppColors.secondaryContainer.withOpacity(0.3),
+                border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(16),
+                    borderSide: BorderSide.none),
+                focusedBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(16),
+                    borderSide: const BorderSide(
+                        color: AppColors.primaryContainer, width: 2)),
+                contentPadding:
+                    const EdgeInsets.symmetric(horizontal: 16, vertical: 14)),
           ),
           const SizedBox(height: 6),
-          Text('This ID helps anyone who finds your pet contact you instantly.',
+          Text('This ID connects the GPS hardware to the System.',
               style: GoogleFonts.inter(
                   fontSize: 11,
                   color: AppColors.onSurfaceVariant.withOpacity(0.7))),

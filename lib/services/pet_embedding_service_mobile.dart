@@ -208,17 +208,28 @@ class PetEmbeddingService {
     return dot.clamp(-1.0, 1.0);
   }
 
-  /// Re-embeds every pet in the Supabase pets table using DINOv2 via the server.
+  /// Embeds pets in the Supabase pets table using DINOv2 via the server.
+  /// By default, only processes pets missing an embedding (`forceAll: false`).
   Future<int> reEmbedAllPets({
+    bool forceAll = false,
     void Function(int done, int total)? onProgress,
   }) async {
     final supabase = Supabase.instance.client;
-    final rows = await supabase
+    var query = supabase
         .from('pets')
-        .select('pet_id, photo_url')
-        .order('created_at', ascending: false);
+        .select('pet_id, photo_url, embedding');
+
+    if (!forceAll) {
+      query = query.filter('embedding', 'is', null);
+    }
+
+    final rows = await query.order('created_at', ascending: false);
 
     final pets = List<Map<String, dynamic>>.from(rows);
+    if (pets.isEmpty) {
+      debugPrint('[PetTrace] All pets already have embeddings. Skipping background sync.');
+      return 0;
+    }
     int done = 0;
 
     for (final pet in pets) {

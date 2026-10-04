@@ -5,6 +5,7 @@ import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:image_picker/image_picker.dart';
 import '../../core/app_colors.dart';
+import '../../core/app_constants.dart';
 import '../../core/app_toast.dart';
 import '../../services/pet_embedding_service.dart';
 import '../../services/pet_match_service.dart';
@@ -593,6 +594,8 @@ class _AiScanScreenState extends State<AiScanScreen>
       ),
       child: Row(
         children: [
+          AppConstants.buildLogoGraphic(size: 26),
+          const SizedBox(width: 10),
           Text(
             'Scan Close Match',
             style: GoogleFonts.montserrat(
@@ -891,9 +894,9 @@ class _AiScanScreenState extends State<AiScanScreen>
               _helpRow(Icons.photo_library_rounded,
                   'Pick a clear photo of the pet you found (dog or cat only).'),
               _helpRow(Icons.memory_rounded,
-                  'On-device AI verifies the species and analyzes visual features.'),
+                  'AI verifies the species and analyzes visual features.'),
               _helpRow(Icons.search_rounded,
-                  'Results are compared against registered pets in database.'),
+                  'Results are compared against lost pets in database.'),
               _helpRow(Icons.pets_rounded,
                   'Top matches are shown with a similarity score.'),
               const SizedBox(height: 8),

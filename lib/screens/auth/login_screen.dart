@@ -28,6 +28,23 @@ class _LoginScreenState extends State<LoginScreen> {
   final _emailCtrl = TextEditingController();
   final _passwordCtrl = TextEditingController();
   bool _obscurePwd = true;
+  String? _flashMessage;
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    if (_flashMessage == null) {
+      final args = ModalRoute.of(context)?.settings.arguments;
+      if (args is Map) {
+        if (args['flashMessage'] != null) {
+          _flashMessage = args['flashMessage'].toString();
+        }
+        if (args['flashEmail'] != null && _emailCtrl.text.isEmpty) {
+          _emailCtrl.text = args['flashEmail'].toString();
+        }
+      }
+    }
+  }
 
   @override
   void dispose() {
@@ -139,6 +156,80 @@ class _LoginScreenState extends State<LoginScreen> {
     }
   }
 
+  Widget _buildFlashMessageBanner(String message) {
+    return Container(
+      width: double.infinity,
+      margin: const EdgeInsets.only(bottom: 4),
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: const Color(0xFFEFF6FF),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: const Color(0xFFBFDBFE)),
+        boxShadow: [
+          BoxShadow(
+            color: const Color(0xFF3B82F6).withOpacity(0.08),
+            blurRadius: 10,
+            offset: const Offset(0, 4),
+          ),
+        ],
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Container(
+            padding: const EdgeInsets.all(8),
+            decoration: const BoxDecoration(
+              color: Color(0xFFDBEAFE),
+              shape: BoxShape.circle,
+            ),
+            child: const Icon(
+              Icons.mark_email_unread_rounded,
+              color: Color(0xFF1D4ED8),
+              size: 20,
+            ),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Verify Your Email',
+                  style: GoogleFonts.montserrat(
+                    fontWeight: FontWeight.w700,
+                    fontSize: 14,
+                    color: const Color(0xFF1E3A8A),
+                  ),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  message,
+                  style: GoogleFonts.inter(
+                    fontSize: 12.5,
+                    height: 1.4,
+                    color: const Color(0xFF1E40AF),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(width: 8),
+          GestureDetector(
+            onTap: () => setState(() => _flashMessage = null),
+            child: const Padding(
+              padding: EdgeInsets.all(2.0),
+              child: Icon(
+                Icons.close_rounded,
+                size: 18,
+                color: Color(0xFF6B7280),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   // ─── Build ────────────────────────────────────────────────────────────────
 
   @override
@@ -228,7 +319,12 @@ class _LoginScreenState extends State<LoginScreen> {
           textAlign: TextAlign.center,
           style: GoogleFonts.inter(fontSize: 14, color: AppColors.secondary),
         ),
-        const SizedBox(height: 28),
+        if (_flashMessage != null) ...[
+          const SizedBox(height: 20),
+          _buildFlashMessageBanner(_flashMessage!),
+        ] else ...[
+          const SizedBox(height: 28),
+        ],
 
         // ── Email field ──────────────────────────────────────────
         _formField(
@@ -351,7 +447,6 @@ class _LoginScreenState extends State<LoginScreen> {
       children: [
         AppConstants.buildLogoBadge(
           size: 64,
-          iconSize: 34,
         ),
         const SizedBox(height: 10),
         Row(

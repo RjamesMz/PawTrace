@@ -2,11 +2,13 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:responsive_framework/responsive_framework.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:excel/excel.dart' hide Border;
 import '../../core/app_colors.dart';
-import '../../core/app_routes.dart';
+import '../../core/app_constants.dart';
 import '../../core/app_toast.dart';
 import '../../services/alert_service.dart';
 import '../../services/auth_service.dart';
+import '../../services/file_export_service.dart';
 import '../../widgets/admin_content_wrapper.dart';
 import '../../widgets/admin_layout.dart';
 import 'admin_pet_detail_screen.dart';
@@ -33,12 +35,13 @@ class _AdminPetsScreenState extends State<AdminPetsScreen> {
   UserRole _currentUserRole = UserRole.admin;
   String _selectedBarangayFilter = 'All';
 
-  static const List<String> _chipLabels = ['All', 'Active', 'Lost', 'Dog', 'Cat', 'Archived'];
+  static const List<String> _chipLabels = ['All', 'Active', 'Lost', 'Archived'];
 
   List<String> get _availableBarangays {
     final set = <String>{'All'};
     for (final p in allPets) {
-      final b = (p['barangay'] ?? p['users']?['barangay'] ?? '').toString().trim();
+      final b =
+          (p['barangay'] ?? p['users']?['barangay'] ?? '').toString().trim();
       if (b.isNotEmpty) set.add(b);
     }
     return set.toList();
@@ -65,13 +68,13 @@ class _AdminPetsScreenState extends State<AdminPetsScreen> {
   Future<void> fetchAllPets() async {
     setState(() => isLoading = true);
     try {
-      var query = _supabase
-          .from('pets')
-          .select('*, users(first_name, middle_name, surname, suffix, email, phone, barangay)');
+      var query = _supabase.from('pets').select(
+          '*, users(first_name, middle_name, surname, suffix, email, phone, barangay)');
 
       // If barangay admin, strictly scope to their assigned barangay.
       // Super admin sees all pets across all barangays.
-      if (_currentUserRole != UserRole.superAdmin && _adminBarangay.isNotEmpty) {
+      if (_currentUserRole != UserRole.superAdmin &&
+          _adminBarangay.isNotEmpty) {
         query = query.eq('barangay', _adminBarangay);
       }
 
@@ -93,9 +96,12 @@ class _AdminPetsScreenState extends State<AdminPetsScreen> {
     List<Map<String, dynamic>> result = List.from(allPets);
 
     // Apply barangay filter for super admin
-    if (_currentUserRole == UserRole.superAdmin && _selectedBarangayFilter != 'All') {
+    if (_currentUserRole == UserRole.superAdmin &&
+        _selectedBarangayFilter != 'All') {
       result = result.where((p) {
-        final b = (p['barangay'] ?? p['users']?['barangay'] ?? '').toString().toLowerCase();
+        final b = (p['barangay'] ?? p['users']?['barangay'] ?? '')
+            .toString()
+            .toLowerCase();
         return b == _selectedBarangayFilter.toLowerCase();
       }).toList();
     }
@@ -103,19 +109,22 @@ class _AdminPetsScreenState extends State<AdminPetsScreen> {
     // Apply chip filter
     switch (_selectedChipIndex) {
       case 1: // Active
-        result = result.where((p) => (p['status'] ?? '').toString().toLowerCase() == 'active').toList();
+        result = result
+            .where(
+                (p) => (p['status'] ?? '').toString().toLowerCase() == 'active')
+            .toList();
         break;
       case 2: // Lost
-        result = result.where((p) => (p['status'] ?? '').toString().toLowerCase() == 'lost').toList();
+        result = result
+            .where(
+                (p) => (p['status'] ?? '').toString().toLowerCase() == 'lost')
+            .toList();
         break;
-      case 3: // Dog
-        result = result.where((p) => (p['species'] ?? '').toString().toLowerCase() == 'dog').toList();
-        break;
-      case 4: // Cat
-        result = result.where((p) => (p['species'] ?? '').toString().toLowerCase() == 'cat').toList();
-        break;
-      case 5: // Archived
-        result = result.where((p) => (p['status'] ?? '').toString().toLowerCase() == 'archived').toList();
+      case 3: // Archived
+        result = result
+            .where((p) =>
+                (p['status'] ?? '').toString().toLowerCase() == 'archived')
+            .toList();
         break;
     }
 
@@ -126,11 +135,16 @@ class _AdminPetsScreenState extends State<AdminPetsScreen> {
         final petName = (p['name'] ?? '').toString().toLowerCase();
         final breed = (p['breed'] ?? '').toString().toLowerCase();
         final species = (p['species'] ?? '').toString().toLowerCase();
-        final barangay = (p['barangay'] ?? p['users']?['barangay'] ?? '').toString().toLowerCase();
+        final barangay = (p['barangay'] ?? p['users']?['barangay'] ?? '')
+            .toString()
+            .toLowerCase();
         final collarId = (p['collar_id'] ?? '').toString().toLowerCase();
         final u = p['users'];
         final ownerName = u != null
-            ? [u['first_name'], u['middle_name'], u['surname'], u['suffix']].where((s) => s != null && s.toString().isNotEmpty).join(' ').toLowerCase()
+            ? [u['first_name'], u['middle_name'], u['surname'], u['suffix']]
+                .where((s) => s != null && s.toString().isNotEmpty)
+                .join(' ')
+                .toLowerCase()
             : '';
         return petName.contains(q) ||
             ownerName.contains(q) ||
@@ -147,9 +161,12 @@ class _AdminPetsScreenState extends State<AdminPetsScreen> {
   void _showContactDialog(Map<String, dynamic> pet) {
     final owner = pet['users'];
     final ownerName = owner is Map
-        ? [owner['first_name'], owner['middle_name'], owner['surname'], owner['suffix']]
-            .where((s) => s != null && s.toString().isNotEmpty)
-            .join(' ')
+        ? [
+            owner['first_name'],
+            owner['middle_name'],
+            owner['surname'],
+            owner['suffix']
+          ].where((s) => s != null && s.toString().isNotEmpty).join(' ')
         : 'Unknown Owner';
     final phone = owner is Map ? (owner['phone']?.toString() ?? '') : '';
     final email = owner is Map ? (owner['email']?.toString() ?? '') : '';
@@ -280,7 +297,8 @@ class _AdminPetsScreenState extends State<AdminPetsScreen> {
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
         title: Row(
           children: [
-            const Icon(Icons.campaign_rounded, color: AppColors.error, size: 24),
+            const Icon(Icons.campaign_rounded,
+                color: AppColors.error, size: 24),
             const SizedBox(width: 10),
             Text('Broadcast to News?',
                 style: GoogleFonts.montserrat(
@@ -340,8 +358,7 @@ class _AdminPetsScreenState extends State<AdminPetsScreen> {
       if ((pet['status'] ?? '').toString().toLowerCase() != 'lost') {
         await _supabase
             .from('pets')
-            .update({'status': 'lost'})
-            .eq('pet_id', petId);
+            .update({'status': 'lost'}).eq('pet_id', petId);
       }
 
       final postBarangay = (barangay.isNotEmpty && barangay != 'Catanduanes')
@@ -375,17 +392,21 @@ class _AdminPetsScreenState extends State<AdminPetsScreen> {
   }
 
   int get _totalCount => allPets.length;
-  int get _activeCount => allPets.where((p) => (p['status'] ?? '').toString().toLowerCase() == 'active').length;
-  int get _lostCount => allPets.where((p) => (p['status'] ?? '').toString().toLowerCase() == 'lost').length;
-  int get _archivedCount => allPets.where((p) => (p['status'] ?? '').toString().toLowerCase() == 'archived').length;
+  int get _activeCount => allPets
+      .where((p) => (p['status'] ?? '').toString().toLowerCase() == 'active')
+      .length;
+  int get _lostCount => allPets
+      .where((p) => (p['status'] ?? '').toString().toLowerCase() == 'lost')
+      .length;
+  int get _archivedCount => allPets
+      .where((p) => (p['status'] ?? '').toString().toLowerCase() == 'archived')
+      .length;
 
   int _sortColumnIndex = 1;
   bool _sortAscending = true;
 
-  void _sort<T>(
-      Comparable<T> Function(Map<String, dynamic> pet) getField,
-      int columnIndex,
-      bool ascending) {
+  void _sort<T>(Comparable<T> Function(Map<String, dynamic> pet) getField,
+      int columnIndex, bool ascending) {
     filteredPets.sort((a, b) {
       final aValue = getField(a);
       final bValue = getField(b);
@@ -397,6 +418,170 @@ class _AdminPetsScreenState extends State<AdminPetsScreen> {
       _sortColumnIndex = columnIndex;
       _sortAscending = ascending;
     });
+  }
+
+  /// Exports the currently filtered pets to an Excel (.xlsx) file.
+  /// On web: triggers a browser download. On mobile: opens the share sheet.
+  /// If status is archived, includes the specific reason.
+  Future<void> _exportToExcel() async {
+    try {
+      final excel = Excel.createExcel();
+      final sheet = excel['Pets Registry'];
+      excel.delete('Sheet1'); // Remove default sheet
+
+      // ── Header row ──────────────────────────────────────────────
+      const headers = [
+        'Pet Name',
+        'Species',
+        'Breed',
+        'Color',
+        'Weight (kg)',
+        'Owner Name',
+        'Owner Phone',
+        'Owner Email',
+        'Barangay',
+        'Collar ID',
+        'Status',
+        'Archive Reason',
+        'Date Registered',
+      ];
+      final headerStyle = CellStyle(
+        bold: true,
+        backgroundColorHex: ExcelColor.fromHexString('#1D6F42'),
+        fontColorHex: ExcelColor.fromHexString('#FFFFFF'),
+        horizontalAlign: HorizontalAlign.Center,
+      );
+      for (var c = 0; c < headers.length; c++) {
+        final cell = sheet
+            .cell(CellIndex.indexByColumnRow(columnIndex: c, rowIndex: 0));
+        cell.value = TextCellValue(headers[c]);
+        cell.cellStyle = headerStyle;
+        sheet.setColumnWidth(c, c == 11 ? 28 : (c == 0 ? 22 : 18));
+      }
+
+      // ── Data rows ────────────────────────────────────────────────
+      for (var r = 0; r < filteredPets.length; r++) {
+        final p = filteredPets[r];
+        final petName = (p['name'] ?? '').toString();
+        final species = (p['species'] ?? '').toString();
+        final breed = (p['breed'] ?? '').toString();
+        final color = (p['color'] ?? '').toString();
+        final weight = (p['weight'] ?? '').toString();
+
+        final u = p['users'];
+        final ownerName = u is Map
+            ? [u['first_name'], u['middle_name'], u['surname'], u['suffix']]
+                .where((s) => s != null && s.toString().isNotEmpty)
+                .join(' ')
+            : 'Unknown';
+        final phone = u is Map ? (u['phone']?.toString() ?? '') : '';
+        final email = u is Map ? (u['email']?.toString() ?? '') : '';
+        final barangay =
+            (p['barangay'] ?? (u is Map ? u['barangay'] : '') ?? '')
+                .toString();
+        final collarId = (p['collar_id'] ?? '-').toString();
+
+        final rawStatus = (p['status'] ?? 'active').toString().toLowerCase();
+        final statusDisplay = rawStatus.toUpperCase();
+
+        String archiveReason = 'N/A';
+        if (rawStatus == 'archived') {
+          final explicitReason = (p['archive_reason'] ??
+                  p['archived_reason'] ??
+                  p['reason'] ??
+                  p['removal_reason'])
+              ?.toString()
+              .trim();
+          if (explicitReason != null && explicitReason.isNotEmpty) {
+            archiveReason = explicitReason;
+          } else {
+            archiveReason = 'Unspecified';
+          }
+        }
+
+        String dateStr = '';
+        final rawDate = p['created_at']?.toString() ?? '';
+        if (rawDate.isNotEmpty) {
+          try {
+            final dt = DateTime.parse(rawDate).toLocal();
+            const months = [
+              'Jan',
+              'Feb',
+              'Mar',
+              'Apr',
+              'May',
+              'Jun',
+              'Jul',
+              'Aug',
+              'Sep',
+              'Oct',
+              'Nov',
+              'Dec'
+            ];
+            dateStr = '${months[dt.month - 1]} ${dt.day}, ${dt.year}';
+          } catch (_) {
+            dateStr = rawDate;
+          }
+        }
+
+        final rowData = [
+          petName,
+          species,
+          breed,
+          color,
+          weight,
+          ownerName,
+          phone,
+          email,
+          barangay,
+          collarId,
+          statusDisplay,
+          archiveReason,
+          dateStr,
+        ];
+
+        final rowStyle = CellStyle(
+          backgroundColorHex: r.isEven
+              ? ExcelColor.fromHexString('#FFFFFF')
+              : ExcelColor.fromHexString('#F0FDF4'),
+        );
+
+        for (var c = 0; c < rowData.length; c++) {
+          final cell = sheet
+              .cell(CellIndex.indexByColumnRow(columnIndex: c, rowIndex: r + 1));
+          cell.value = TextCellValue(rowData[c]);
+          cell.cellStyle = rowStyle;
+        }
+      }
+
+      final bytes = excel.encode()!;
+      final now = DateTime.now();
+      final filename =
+          'pets_registry_${now.year}${now.month.toString().padLeft(2, '0')}${now.day.toString().padLeft(2, '0')}.xlsx';
+
+      await saveAndShareFile(bytes, filename);
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text('Exported $filename successfully.',
+              style: GoogleFonts.inter()),
+          backgroundColor: const Color(0xFF1D6F42),
+          behavior: SnackBarBehavior.floating,
+          shape:
+              RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+        ));
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text('Export failed: $e', style: GoogleFonts.inter()),
+          backgroundColor: AppColors.error,
+          behavior: SnackBarBehavior.floating,
+          shape:
+              RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+        ));
+      }
+    }
   }
 
   @override
@@ -475,7 +660,8 @@ class _AdminPetsScreenState extends State<AdminPetsScreen> {
                     value: barangays.contains(_selectedBarangayFilter)
                         ? _selectedBarangayFilter
                         : 'All',
-                    icon: const Icon(Icons.arrow_drop_down, color: AppColors.primary),
+                    icon: const Icon(Icons.arrow_drop_down,
+                        color: AppColors.primary),
                     items: barangays.map((b) {
                       return DropdownMenuItem<String>(
                         value: b,
@@ -536,29 +722,20 @@ class _AdminPetsScreenState extends State<AdminPetsScreen> {
                   ),
                   const Spacer(),
                   ElevatedButton.icon(
-                    onPressed: () async {
-                      await Navigator.pushNamed(
-                          context, AppRoutes.profilePetRegistration);
-                      fetchAllPets();
-                    },
-                    icon: const Icon(Icons.add, size: 16),
-                    label: Text(
-                      'Add Pet',
-                      style: GoogleFonts.inter(
-                        fontWeight: FontWeight.bold,
-                        fontSize: 13,
-                      ),
-                    ),
+                    onPressed: filteredPets.isEmpty ? null : _exportToExcel,
+                    icon: const Icon(Icons.table_chart_outlined, size: 16),
+                    label: Text('Export to Excel',
+                        style: GoogleFonts.inter(
+                            fontSize: 13, fontWeight: FontWeight.w600)),
                     style: ElevatedButton.styleFrom(
-                      backgroundColor: AppColors.primary,
+                      backgroundColor: const Color(0xFF1D6F42),
                       foregroundColor: Colors.white,
+                      disabledBackgroundColor: Colors.grey.shade300,
                       padding: const EdgeInsets.symmetric(
-                        horizontal: 16,
-                        vertical: 10,
-                      ),
+                          horizontal: 14, vertical: 10),
                       shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(8),
-                      ),
+                          borderRadius: BorderRadius.circular(10)),
+                      elevation: 0,
                     ),
                   ),
                   const SizedBox(width: 8),
@@ -663,13 +840,12 @@ class _AdminPetsScreenState extends State<AdminPetsScreen> {
         _buildAppBar(context),
         Expanded(
           child: isLoading
-              ? const Center(child: CircularProgressIndicator(color: AppColors.primary))
+              ? const Center(
+                  child: CircularProgressIndicator(color: AppColors.primary))
               : LayoutBuilder(
                   builder: (context, constraints) {
                     final isWide = constraints.maxWidth >= 1200;
-                    return isWide
-                        ? _buildWideContent()
-                        : _buildNarrowContent();
+                    return isWide ? _buildWideContent() : _buildNarrowContent();
                   },
                 ),
         ),
@@ -689,7 +865,22 @@ class _AdminPetsScreenState extends State<AdminPetsScreen> {
           const SizedBox(height: 14),
           _buildSearchBar(),
           const SizedBox(height: 14),
-          _buildFilterChips(),
+          Row(
+            children: [
+              Expanded(child: _buildFilterChips()),
+              const SizedBox(width: 8),
+              IconButton.filled(
+                onPressed: filteredPets.isEmpty ? null : _exportToExcel,
+                icon: const Icon(Icons.table_chart_outlined, size: 18),
+                tooltip: 'Export to Excel',
+                style: IconButton.styleFrom(
+                  backgroundColor: const Color(0xFF1D6F42),
+                  foregroundColor: Colors.white,
+                  disabledBackgroundColor: Colors.grey.shade300,
+                ),
+              ),
+            ],
+          ),
           const SizedBox(height: 16),
           ...filteredPets.map((p) => Padding(
                 padding: const EdgeInsets.only(bottom: 12),
@@ -726,7 +917,29 @@ class _AdminPetsScreenState extends State<AdminPetsScreen> {
                   const SizedBox(height: 14),
                   _buildSearchBar(),
                   const SizedBox(height: 14),
-                  _buildFilterChips(),
+                  Row(
+                    children: [
+                      Expanded(child: _buildFilterChips()),
+                      const SizedBox(width: 12),
+                      ElevatedButton.icon(
+                        onPressed: filteredPets.isEmpty ? null : _exportToExcel,
+                        icon: const Icon(Icons.table_chart_outlined, size: 18),
+                        label: Text('Export to Excel',
+                            style: GoogleFonts.inter(
+                                fontSize: 13, fontWeight: FontWeight.w600)),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: const Color(0xFF1D6F42),
+                          foregroundColor: Colors.white,
+                          disabledBackgroundColor: Colors.grey.shade300,
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 16, vertical: 12),
+                          shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(10)),
+                          elevation: 0,
+                        ),
+                      ),
+                    ],
+                  ),
                   const SizedBox(height: 16),
                 ],
               ),
@@ -770,16 +983,26 @@ class _AdminPetsScreenState extends State<AdminPetsScreen> {
     if (screenWidth >= 800) return const SizedBox.shrink();
     return Container(
       height: 64 + MediaQuery.of(context).padding.top,
-      padding: EdgeInsets.fromLTRB(16, MediaQuery.of(context).padding.top, 16, 0),
+      padding:
+          EdgeInsets.fromLTRB(16, MediaQuery.of(context).padding.top, 16, 0),
       decoration: BoxDecoration(
         color: AppColors.surface,
-        boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.04), blurRadius: 8)],
+        boxShadow: [
+          BoxShadow(color: Colors.black.withOpacity(0.04), blurRadius: 8)
+        ],
       ),
       child: Row(
         children: [
-          Text('All Pets', style: GoogleFonts.montserrat(fontSize: 18, fontWeight: FontWeight.w700, color: AppColors.onSurface)),
+          AppConstants.buildLogoGraphic(size: 24),
+          const SizedBox(width: 8),
+          Text('All Pets',
+              style: GoogleFonts.montserrat(
+                  fontSize: 18,
+                  fontWeight: FontWeight.w700,
+                  color: AppColors.onSurface)),
           const Spacer(),
-          const Icon(Icons.admin_panel_settings, color: AppColors.primary, size: 24),
+          const Icon(Icons.admin_panel_settings,
+              color: AppColors.primary, size: 24),
         ],
       ),
     );
@@ -792,10 +1015,13 @@ class _AdminPetsScreenState extends State<AdminPetsScreen> {
         Container(
           padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
           decoration: BoxDecoration(
-            color: (isSuperAdmin ? const Color(0xFFFF6600) : AppColors.primary).withOpacity(0.1),
+            color: (isSuperAdmin ? const Color(0xFFFF6600) : AppColors.primary)
+                .withOpacity(0.1),
             borderRadius: BorderRadius.circular(999),
             border: Border.all(
-              color: (isSuperAdmin ? const Color(0xFFFF6600) : AppColors.primary).withOpacity(0.3),
+              color:
+                  (isSuperAdmin ? const Color(0xFFFF6600) : AppColors.primary)
+                      .withOpacity(0.3),
             ),
           ),
           child: Row(
@@ -804,7 +1030,8 @@ class _AdminPetsScreenState extends State<AdminPetsScreen> {
               Icon(
                 isSuperAdmin ? Icons.shield_rounded : Icons.location_on,
                 size: 14,
-                color: isSuperAdmin ? const Color(0xFFFF6600) : AppColors.primary,
+                color:
+                    isSuperAdmin ? const Color(0xFFFF6600) : AppColors.primary,
               ),
               const SizedBox(width: 6),
               Text(
@@ -818,7 +1045,9 @@ class _AdminPetsScreenState extends State<AdminPetsScreen> {
                 style: GoogleFonts.inter(
                   fontSize: 12,
                   fontWeight: FontWeight.w700,
-                  color: isSuperAdmin ? const Color(0xFFFF6600) : AppColors.primary,
+                  color: isSuperAdmin
+                      ? const Color(0xFFFF6600)
+                      : AppColors.primary,
                 ),
               ),
             ],
@@ -855,7 +1084,8 @@ class _AdminPetsScreenState extends State<AdminPetsScreen> {
       ),
       child: Text(
         text,
-        style: GoogleFonts.inter(fontSize: 12, fontWeight: FontWeight.w700, color: color),
+        style: GoogleFonts.inter(
+            fontSize: 12, fontWeight: FontWeight.w700, color: color),
       ),
     );
   }
@@ -867,11 +1097,14 @@ class _AdminPetsScreenState extends State<AdminPetsScreen> {
       style: GoogleFonts.inter(fontSize: 15, color: AppColors.onSurface),
       decoration: InputDecoration(
         prefixIcon: const Icon(Icons.search, color: AppColors.onSurfaceVariant),
-        hintText: 'Search by pet or owner name...',
-        hintStyle: GoogleFonts.inter(fontSize: 15, color: AppColors.onSurfaceVariant.withOpacity(0.5)),
+        hintText: 'Search by pet name, species, breed, owner...',
+        hintStyle: GoogleFonts.inter(
+            fontSize: 15, color: AppColors.onSurfaceVariant.withOpacity(0.5)),
         filled: true,
         fillColor: AppColors.surfaceContainerLow,
-        border: OutlineInputBorder(borderRadius: BorderRadius.circular(14), borderSide: BorderSide.none),
+        border: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(14),
+            borderSide: BorderSide.none),
         contentPadding: const EdgeInsets.symmetric(vertical: 14),
       ),
     );
@@ -891,13 +1124,19 @@ class _AdminPetsScreenState extends State<AdminPetsScreen> {
               labelStyle: GoogleFonts.inter(
                 fontSize: 12,
                 fontWeight: FontWeight.w600,
-                color: isSelected ? AppColors.onPrimaryContainer : AppColors.onSurfaceVariant,
+                color: isSelected
+                    ? AppColors.onPrimaryContainer
+                    : AppColors.onSurfaceVariant,
               ),
               selectedColor: AppColors.primaryContainer,
               backgroundColor: AppColors.surfaceContainerHighest,
               checkmarkColor: AppColors.onPrimaryContainer,
-              side: BorderSide(color: isSelected ? Colors.transparent : AppColors.outlineVariant.withOpacity(0.3)),
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(999)),
+              side: BorderSide(
+                  color: isSelected
+                      ? Colors.transparent
+                      : AppColors.outlineVariant.withOpacity(0.3)),
+              shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(999)),
               onSelected: (_) {
                 setState(() {
                   _selectedChipIndex = i;
@@ -922,7 +1161,9 @@ class _AdminPetsScreenState extends State<AdminPetsScreen> {
     final photoUrl = pet['photo_url'] ?? '';
     final u = pet['users'];
     final ownerName = u != null
-        ? [u['first_name'], u['middle_name'], u['surname'], u['suffix']].where((s) => s != null && s.toString().isNotEmpty).join(' ')
+        ? [u['first_name'], u['middle_name'], u['surname'], u['suffix']]
+            .where((s) => s != null && s.toString().isNotEmpty)
+            .join(' ')
         : 'Unknown Owner';
 
     return GestureDetector(
@@ -939,125 +1180,151 @@ class _AdminPetsScreenState extends State<AdminPetsScreen> {
         decoration: BoxDecoration(
           color: AppColors.surfaceContainerLowest,
           borderRadius: BorderRadius.circular(14),
-          boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 20, offset: const Offset(0, 4))],
+          boxShadow: [
+            BoxShadow(
+                color: Colors.black.withOpacity(0.05),
+                blurRadius: 20,
+                offset: const Offset(0, 4))
+          ],
         ),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Row(
-          children: [
-            ClipRRect(
-              borderRadius: BorderRadius.circular(10),
-              child: SizedBox(
-                width: 72,
-                height: 72,
-                child: photoUrl.toString().isNotEmpty
-                    ? Image.network(
-                        photoUrl,
-                        fit: BoxFit.cover,
-                        errorBuilder: (_, __, ___) => _photoPlaceholder(),
-                      )
-                    : _photoPlaceholder(),
-              ),
-            ),
-            const SizedBox(width: 14),
-            Expanded(
-              child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                Text(name, style: GoogleFonts.montserrat(fontSize: 16, fontWeight: FontWeight.w600, color: AppColors.onSurface), overflow: TextOverflow.ellipsis),
-                Text('$breed • $species', style: GoogleFonts.inter(fontSize: 13, color: AppColors.onSurfaceVariant)),
-                const SizedBox(height: 2),
-                Text('Owner: $ownerName', style: GoogleFonts.inter(fontSize: 12, fontWeight: FontWeight.w500, color: AppColors.primary)),
-                if (barangay.toString().isNotEmpty)
-                  Text(barangay, style: GoogleFonts.inter(fontSize: 11, color: AppColors.onSurfaceVariant.withOpacity(0.7))),
-              ]),
-            ),
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-              decoration: BoxDecoration(
-                color: isArchived
-                    ? const Color(0xFFF1F5F9)
-                    : (isLost ? AppColors.errorContainer : const Color(0xFFD1FAE5)),
-                borderRadius: BorderRadius.circular(6),
-              ),
-              child: Text(
-                isArchived
-                    ? 'Archived'
-                    : (isLost ? 'Lost' : 'Active'),
-                style: GoogleFonts.inter(
-                  fontSize: 10,
-                  fontWeight: FontWeight.w700,
-                  color: isArchived
-                      ? const Color(0xFF64748B)
-                      : (isLost ? AppColors.error : const Color(0xFF065F46)),
+              children: [
+                ClipRRect(
+                  borderRadius: BorderRadius.circular(10),
+                  child: SizedBox(
+                    width: 72,
+                    height: 72,
+                    child: photoUrl.toString().isNotEmpty
+                        ? Image.network(
+                            photoUrl,
+                            fit: BoxFit.cover,
+                            errorBuilder: (_, __, ___) => _photoPlaceholder(),
+                          )
+                        : _photoPlaceholder(),
+                  ),
                 ),
-              ),
-            ),
+                const SizedBox(width: 14),
+                Expanded(
+                  child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(name,
+                            style: GoogleFonts.montserrat(
+                                fontSize: 16,
+                                fontWeight: FontWeight.w600,
+                                color: AppColors.onSurface),
+                            overflow: TextOverflow.ellipsis),
+                        Text('$breed • $species',
+                            style: GoogleFonts.inter(
+                                fontSize: 13,
+                                color: AppColors.onSurfaceVariant)),
+                        const SizedBox(height: 2),
+                        Text('Owner: $ownerName',
+                            style: GoogleFonts.inter(
+                                fontSize: 12,
+                                fontWeight: FontWeight.w500,
+                                color: AppColors.primary)),
+                        if (barangay.toString().isNotEmpty)
+                          Text(barangay,
+                              style: GoogleFonts.inter(
+                                  fontSize: 11,
+                                  color: AppColors.onSurfaceVariant
+                                      .withOpacity(0.7))),
+                      ]),
+                ),
+                Container(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                  decoration: BoxDecoration(
+                    color: isArchived
+                        ? const Color(0xFFF1F5F9)
+                        : (isLost
+                            ? AppColors.errorContainer
+                            : const Color(0xFFD1FAE5)),
+                    borderRadius: BorderRadius.circular(6),
+                  ),
+                  child: Text(
+                    isArchived ? 'Archived' : (isLost ? 'Lost' : 'Active'),
+                    style: GoogleFonts.inter(
+                      fontSize: 10,
+                      fontWeight: FontWeight.w700,
+                      color: isArchived
+                          ? const Color(0xFF64748B)
+                          : (isLost
+                              ? AppColors.error
+                              : const Color(0xFF065F46)),
+                    ),
+                  ),
+                ),
               ],
             ),
             const SizedBox(height: 10),
-        // Action row of pet (pill-type buttons)
-        SingleChildScrollView(
-          scrollDirection: Axis.horizontal,
-          child: Row(
-            children: [
-              OutlinedButton.icon(
-                onPressed: () => _showContactDialog(pet),
-                icon: const Icon(Icons.call, size: 13),
-                label: Text('Contact',
-                    style: GoogleFonts.inter(
-                        fontSize: 11, fontWeight: FontWeight.w600)),
-                style: OutlinedButton.styleFrom(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                  minimumSize: Size.zero,
-                  tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                  side: BorderSide(
-                      color: AppColors.primary.withOpacity(0.5)),
-                  foregroundColor: AppColors.primary,
-                  shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(999)),
-                ),
+            // Action row of pet (pill-type buttons)
+            SingleChildScrollView(
+              scrollDirection: Axis.horizontal,
+              child: Row(
+                children: [
+                  OutlinedButton.icon(
+                    onPressed: () => _showContactDialog(pet),
+                    icon: const Icon(Icons.call, size: 13),
+                    label: Text('Contact',
+                        style: GoogleFonts.inter(
+                            fontSize: 11, fontWeight: FontWeight.w600)),
+                    style: OutlinedButton.styleFrom(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 10, vertical: 6),
+                      minimumSize: Size.zero,
+                      tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                      side:
+                          BorderSide(color: AppColors.primary.withOpacity(0.5)),
+                      foregroundColor: AppColors.primary,
+                      shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(999)),
+                    ),
+                  ),
+                  const SizedBox(width: 6),
+                  ElevatedButton.icon(
+                    onPressed: () => _showLocationDialog(pet),
+                    icon: const Icon(Icons.map_outlined, size: 13),
+                    label: Text('View Map',
+                        style: GoogleFonts.inter(
+                            fontSize: 11, fontWeight: FontWeight.w600)),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: AppColors.primaryContainer,
+                      foregroundColor: AppColors.onPrimaryContainer,
+                      elevation: 0,
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 10, vertical: 6),
+                      minimumSize: Size.zero,
+                      tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                      shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(999)),
+                    ),
+                  ),
+                  const SizedBox(width: 6),
+                  ElevatedButton.icon(
+                    onPressed: () => _repostPetToNews(pet),
+                    icon: const Icon(Icons.campaign, size: 13),
+                    label: Text('Repost to News',
+                        style: GoogleFonts.inter(
+                            fontSize: 11, fontWeight: FontWeight.w600)),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: const Color(0xFFBA1A1A),
+                      foregroundColor: Colors.white,
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 10, vertical: 6),
+                      minimumSize: Size.zero,
+                      tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                      shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(999)),
+                    ),
+                  ),
+                ],
               ),
-              const SizedBox(width: 6),
-              ElevatedButton.icon(
-                onPressed: () => _showLocationDialog(pet),
-                icon: const Icon(Icons.map_outlined, size: 13),
-                label: Text('View Map',
-                    style: GoogleFonts.inter(
-                        fontSize: 11, fontWeight: FontWeight.w600)),
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: AppColors.primaryContainer,
-                  foregroundColor: AppColors.onPrimaryContainer,
-                  elevation: 0,
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                  minimumSize: Size.zero,
-                  tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                  shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(999)),
-                ),
-              ),
-              const SizedBox(width: 6),
-              ElevatedButton.icon(
-                onPressed: () => _repostPetToNews(pet),
-                icon: const Icon(Icons.campaign, size: 13),
-                label: Text('Repost to News',
-                    style: GoogleFonts.inter(
-                        fontSize: 11, fontWeight: FontWeight.w600)),
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: const Color(0xFFBA1A1A),
-                  foregroundColor: Colors.white,
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                  minimumSize: Size.zero,
-                  tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                  shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(999)),
-                ),
-              ),
-            ],
-          ),
-        ),
+            ),
           ],
         ),
       ),
@@ -1067,7 +1334,8 @@ class _AdminPetsScreenState extends State<AdminPetsScreen> {
   Widget _photoPlaceholder() {
     return Container(
       color: AppColors.primaryContainer.withOpacity(0.2),
-      child: const Center(child: Icon(Icons.pets, color: AppColors.primaryContainer, size: 32)),
+      child: const Center(
+          child: Icon(Icons.pets, color: AppColors.primaryContainer, size: 32)),
     );
   }
 }
@@ -1214,93 +1482,92 @@ class _PetsDataTableSource extends DataTableSource {
             scrollDirection: Axis.horizontal,
             child: Row(
               mainAxisSize: MainAxisSize.min,
-            children: [
-              ElevatedButton(
-                onPressed: () {
-                  Navigator.push(
-                    context,
-                    MaterialPageRoute(
-                      builder: (_) => AdminPetDetailScreen(pet: p),
+              children: [
+                ElevatedButton(
+                  onPressed: () {
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (_) => AdminPetDetailScreen(pet: p),
+                      ),
+                    );
+                  },
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: AppColors.primary,
+                    foregroundColor: Colors.white,
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                    minimumSize: Size.zero,
+                    tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(999),
                     ),
-                  );
-                },
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: AppColors.primary,
-                  foregroundColor: Colors.white,
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                  minimumSize: Size.zero,
-                  tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(999),
                   ),
-                ),
-                child: Text(
-                  'View',
-                  style: GoogleFonts.inter(
-                      fontSize: 11, fontWeight: FontWeight.w600),
-                ),
-              ),
-              const SizedBox(width: 6),
-              OutlinedButton.icon(
-                onPressed: () => onContact(p),
-                icon: const Icon(Icons.call, size: 13),
-                label: Text('Contact',
+                  child: Text(
+                    'View',
                     style: GoogleFonts.inter(
-                        fontSize: 11, fontWeight: FontWeight.w600)),
-                style: OutlinedButton.styleFrom(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                  minimumSize: Size.zero,
-                  tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                  side: BorderSide(
-                      color: AppColors.primary.withOpacity(0.5)),
-                  foregroundColor: AppColors.primary,
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(999),
+                        fontSize: 11, fontWeight: FontWeight.w600),
                   ),
                 ),
-              ),
-              const SizedBox(width: 6),
-              ElevatedButton.icon(
-                onPressed: () => onViewMap(p),
-                icon: const Icon(Icons.map_outlined, size: 13),
-                label: Text('View Map',
-                    style: GoogleFonts.inter(
-                        fontSize: 11, fontWeight: FontWeight.w600)),
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: AppColors.primaryContainer,
-                  foregroundColor: AppColors.onPrimaryContainer,
-                  elevation: 0,
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                  minimumSize: Size.zero,
-                  tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(999),
+                const SizedBox(width: 6),
+                OutlinedButton.icon(
+                  onPressed: () => onContact(p),
+                  icon: const Icon(Icons.call, size: 13),
+                  label: Text('Contact',
+                      style: GoogleFonts.inter(
+                          fontSize: 11, fontWeight: FontWeight.w600)),
+                  style: OutlinedButton.styleFrom(
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                    minimumSize: Size.zero,
+                    tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                    side: BorderSide(color: AppColors.primary.withOpacity(0.5)),
+                    foregroundColor: AppColors.primary,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(999),
+                    ),
                   ),
                 ),
-              ),
-              const SizedBox(width: 6),
-              ElevatedButton.icon(
-                onPressed: () => onRepost(p),
-                icon: const Icon(Icons.campaign, size: 13),
-                label: Text('Repost to News',
-                    style: GoogleFonts.inter(
-                        fontSize: 11, fontWeight: FontWeight.w600)),
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: const Color(0xFFBA1A1A),
-                  foregroundColor: Colors.white,
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                  minimumSize: Size.zero,
-                  tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(999),
+                const SizedBox(width: 6),
+                ElevatedButton.icon(
+                  onPressed: () => onViewMap(p),
+                  icon: const Icon(Icons.map_outlined, size: 13),
+                  label: Text('View Map',
+                      style: GoogleFonts.inter(
+                          fontSize: 11, fontWeight: FontWeight.w600)),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: AppColors.primaryContainer,
+                    foregroundColor: AppColors.onPrimaryContainer,
+                    elevation: 0,
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                    minimumSize: Size.zero,
+                    tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(999),
+                    ),
                   ),
                 ),
-              ),
-            ],
+                const SizedBox(width: 6),
+                ElevatedButton.icon(
+                  onPressed: () => onRepost(p),
+                  icon: const Icon(Icons.campaign, size: 13),
+                  label: Text('Repost to News',
+                      style: GoogleFonts.inter(
+                          fontSize: 11, fontWeight: FontWeight.w600)),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: const Color(0xFFBA1A1A),
+                    foregroundColor: Colors.white,
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                    minimumSize: Size.zero,
+                    tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(999),
+                    ),
+                  ),
+                ),
+              ],
             ),
           ),
         ),
@@ -1329,4 +1596,3 @@ class _PetsDataTableSource extends DataTableSource {
   @override
   int get selectedRowCount => 0;
 }
-

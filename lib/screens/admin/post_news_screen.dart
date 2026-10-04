@@ -347,6 +347,8 @@ class _PostNewsScreenState extends State<PostNewsScreen> {
       ),
       child: Row(
         children: [
+          AppConstants.buildLogoGraphic(size: 26),
+          const SizedBox(width: 10),
           Text(
             'News & Announcements',
             style: GoogleFonts.montserrat(

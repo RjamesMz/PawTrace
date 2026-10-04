@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../core/app_colors.dart';
+import '../core/app_constants.dart';
 import '../core/app_routes.dart';
 import '../services/auth_service.dart';
 import 'admin_sidebar.dart';
@@ -173,6 +174,8 @@ class _AdminLayoutState extends State<AdminLayout> {
       ),
       child: Row(
         children: [
+          AppConstants.buildLogoGraphic(size: 26),
+          const SizedBox(width: 10),
           // Page title
           Text(
             widget.pageTitle,

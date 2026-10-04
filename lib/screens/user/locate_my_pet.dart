@@ -46,7 +46,7 @@ class _LocateMyPetScreenState extends State<LocateMyPetScreen>
             child: Column(
               children: [
                 Expanded(flex: 60, child: _buildMap(context)),
-                Expanded(flex: 40, child: const SizedBox()),
+                const Expanded(flex: 40, child: SizedBox()),
               ],
             ),
           ),

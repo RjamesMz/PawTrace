@@ -328,13 +328,13 @@ class _LocatePetScreenState extends State<LocatePetScreen> {
                 : (lat == null || lon == null)
                     // No location available — show placeholder
                     ? Container(
-                        decoration: BoxDecoration(
+                        decoration: const BoxDecoration(
                           gradient: LinearGradient(
                             begin: Alignment.topCenter,
                             end: Alignment.bottomCenter,
                             colors: [
-                              const Color(0xFFE2E8F0),
-                              const Color(0xFFF1F5F9),
+                              Color(0xFFE2E8F0),
+                              Color(0xFFF1F5F9),
                             ],
                           ),
                         ),

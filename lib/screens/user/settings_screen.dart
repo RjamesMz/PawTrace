@@ -223,8 +223,11 @@ class _SettingsScreenState extends State<SettingsScreen> {
       context: context,
       builder: (ctx) => StatefulBuilder(
         builder: (ctx, setDlg) => AlertDialog(
+          backgroundColor: Colors.white,
           shape:
-              RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+              RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+          titlePadding: const EdgeInsets.fromLTRB(20, 20, 20, 12),
+          contentPadding: const EdgeInsets.symmetric(horizontal: 20),
           title: Row(
             children: [
               Container(
@@ -236,49 +239,170 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 child: const Icon(Icons.person_rounded,
                     color: AppColors.primary, size: 22),
               ),
-              const SizedBox(width: 14),
-              Text('Edit Profile',
-                  style: GoogleFonts.montserrat(
-                      fontWeight: FontWeight.w800, fontSize: 18)),
+              const SizedBox(width: 12),
+              Text(
+                'Edit Profile',
+                style: GoogleFonts.montserrat(
+                  fontWeight: FontWeight.w700,
+                  fontSize: 18,
+                  color: AppColors.onSurface,
+                ),
+              ),
             ],
           ),
           content: SingleChildScrollView(
             child: Column(
               mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                _dialogField(firstCtrl, 'First Name', Icons.badge_outlined,
-                    onChanged: (_) {
-                  if (errorText != null) setDlg(() => errorText = null);
-                }),
+                const SizedBox(height: 4),
+                Text(
+                  'Update your personal profile information.',
+                  style: GoogleFonts.inter(
+                    fontSize: 13,
+                    color: AppColors.onSurfaceVariant,
+                  ),
+                ),
+                const SizedBox(height: 16),
+                _dialogField(
+                  firstCtrl,
+                  'First Name',
+                  Icons.badge_outlined,
+                  hint: 'e.g. Juan',
+                  onChanged: (_) {
+                    if (errorText != null) setDlg(() => errorText = null);
+                  },
+                ),
                 const SizedBox(height: 12),
                 _dialogField(
-                    middleCtrl, 'Middle Name (optional)', Icons.badge_outlined),
-                const SizedBox(height: 12),
-                _dialogField(surnameCtrl, 'Surname', Icons.badge_outlined,
-                    onChanged: (_) {
-                  if (errorText != null) setDlg(() => errorText = null);
-                }),
+                  middleCtrl,
+                  'Middle Name (optional)',
+                  Icons.badge_outlined,
+                  hint: 'e.g. Santos',
+                  onChanged: (_) {
+                    if (errorText != null) setDlg(() => errorText = null);
+                  },
+                ),
                 const SizedBox(height: 12),
                 _dialogField(
-                    suffixCtrl, 'Suffix (e.g. Jr.)', Icons.badge_outlined),
+                  surnameCtrl,
+                  'Surname',
+                  Icons.badge_outlined,
+                  hint: 'e.g. Dela Cruz',
+                  onChanged: (_) {
+                    if (errorText != null) setDlg(() => errorText = null);
+                  },
+                ),
+                const SizedBox(height: 12),
+                _dialogField(
+                  suffixCtrl,
+                  'Suffix (optional)',
+                  Icons.badge_outlined,
+                  hint: 'e.g. Jr., III',
+                ),
+                const SizedBox(height: 14),
+                // ── Email Display & Change Email Button ──
+                Container(
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: AppColors.surfaceContainerLow,
+                    borderRadius: BorderRadius.circular(14),
+                    border: Border.all(
+                      color: AppColors.outlineVariant.withOpacity(0.3),
+                    ),
+                  ),
+                  child: Row(
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.all(8),
+                        decoration: BoxDecoration(
+                          color: AppColors.primary.withOpacity(0.1),
+                          shape: BoxShape.circle,
+                        ),
+                        child: const Icon(
+                          Icons.email_outlined,
+                          size: 18,
+                          color: AppColors.primary,
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              'Email Address',
+                              style: GoogleFonts.inter(
+                                fontSize: 11,
+                                fontWeight: FontWeight.w500,
+                                color: AppColors.onSurfaceVariant,
+                              ),
+                            ),
+                            const SizedBox(height: 2),
+                            Text(
+                              _email.trim().isNotEmpty
+                                  ? _email.trim()
+                                  : 'No email set',
+                              style: GoogleFonts.inter(
+                                fontSize: 13,
+                                fontWeight: FontWeight.w600,
+                                color: AppColors.onSurface,
+                              ),
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      TextButton.icon(
+                        onPressed: () {
+                          Navigator.pop(ctx, false);
+                          _showChangeEmailDialog();
+                        },
+                        icon: const Icon(Icons.edit_outlined, size: 14),
+                        label: Text(
+                          'Change',
+                          style: GoogleFonts.inter(
+                            fontSize: 12,
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
+                        style: TextButton.styleFrom(
+                          foregroundColor: AppColors.primary,
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 10, vertical: 6),
+                          visualDensity: VisualDensity.compact,
+                          tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
                 if (errorText != null) ...[
-                  const SizedBox(height: 10),
+                  const SizedBox(height: 12),
                   Row(
                     children: [
-                      const Icon(Icons.error_outline,
+                      const Icon(Icons.error_outline_rounded,
                           size: 15, color: AppColors.error),
                       const SizedBox(width: 6),
                       Expanded(
-                          child: Text(errorText!,
-                              style: GoogleFonts.inter(
-                                  fontSize: 12, color: AppColors.error))),
+                        child: Text(
+                          errorText!,
+                          style: GoogleFonts.inter(
+                            fontSize: 12,
+                            color: AppColors.error,
+                            fontWeight: FontWeight.w500,
+                          ),
+                        ),
+                      ),
                     ],
                   ),
                 ],
+                const SizedBox(height: 4),
               ],
             ),
           ),
-          actionsPadding: const EdgeInsets.fromLTRB(20, 0, 20, 20),
+          actionsPadding: const EdgeInsets.fromLTRB(20, 12, 20, 20),
           actions: [
             Row(
               children: [
@@ -286,9 +410,14 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   child: OutlinedButton(
                     onPressed: () => Navigator.pop(ctx, false),
                     style: OutlinedButton.styleFrom(
-                      padding: const EdgeInsets.symmetric(vertical: 14),
+                      padding: const EdgeInsets.symmetric(vertical: 13),
                       shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(14)),
+                        borderRadius: BorderRadius.circular(14),
+                      ),
+                      side: BorderSide(
+                        color: AppColors.outlineVariant.withOpacity(0.5),
+                      ),
+                      foregroundColor: AppColors.onSurfaceVariant,
                     ),
                     child: Text('Cancel',
                         style: GoogleFonts.inter(fontWeight: FontWeight.w600)),
@@ -324,11 +453,12 @@ class _SettingsScreenState extends State<SettingsScreen> {
                       backgroundColor: AppColors.primary,
                       foregroundColor: Colors.white,
                       elevation: 0,
-                      padding: const EdgeInsets.symmetric(vertical: 14),
+                      padding: const EdgeInsets.symmetric(vertical: 13),
                       shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(14)),
+                        borderRadius: BorderRadius.circular(14),
+                      ),
                     ),
-                    child: Text('Save',
+                    child: Text('Save Changes',
                         style: GoogleFonts.inter(fontWeight: FontWeight.w700)),
                   ),
                 ),
@@ -379,6 +509,307 @@ class _SettingsScreenState extends State<SettingsScreen> {
     }
   }
 
+  // ── Change Email ─────────────────────────────────────────────────────────
+  Future<void> _showChangeEmailDialog() async {
+    final newEmailCtrl = TextEditingController();
+    final confirmEmailCtrl = TextEditingController();
+    String? errorText;
+    bool isSubmitting = false;
+
+    await showDialog<void>(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setDlg) => AlertDialog(
+          backgroundColor: Colors.white,
+          shape:
+              RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+          titlePadding: const EdgeInsets.fromLTRB(20, 20, 20, 12),
+          contentPadding: const EdgeInsets.symmetric(horizontal: 20),
+          title: Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(10),
+                decoration: BoxDecoration(
+                  color: AppColors.primary.withOpacity(0.12),
+                  shape: BoxShape.circle,
+                ),
+                child: const Icon(Icons.alternate_email_rounded,
+                    color: AppColors.primary, size: 22),
+              ),
+              const SizedBox(width: 12),
+              Text(
+                'Change Email',
+                style: GoogleFonts.montserrat(
+                  fontWeight: FontWeight.w700,
+                  fontSize: 18,
+                  color: AppColors.onSurface,
+                ),
+              ),
+            ],
+          ),
+          content: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const SizedBox(height: 4),
+                Text(
+                  'Enter your new email address below. A confirmation link will be sent to verify the update.',
+                  style: GoogleFonts.inter(
+                    fontSize: 13,
+                    color: AppColors.onSurfaceVariant,
+                    height: 1.4,
+                  ),
+                ),
+                const SizedBox(height: 16),
+                Container(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                  decoration: BoxDecoration(
+                    color: AppColors.surfaceContainerLow,
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(
+                      color: AppColors.outlineVariant.withOpacity(0.3),
+                    ),
+                  ),
+                  child: Row(
+                    children: [
+                      const Icon(Icons.info_outline_rounded,
+                          size: 16, color: AppColors.onSurfaceVariant),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Text(
+                          'Current: ${_email.isNotEmpty ? _email : "Not set"}',
+                          style: GoogleFonts.inter(
+                            fontSize: 12,
+                            fontWeight: FontWeight.w500,
+                            color: AppColors.onSurfaceVariant,
+                          ),
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 14),
+                TextField(
+                  controller: newEmailCtrl,
+                  keyboardType: TextInputType.emailAddress,
+                  style: GoogleFonts.inter(fontSize: 14),
+                  decoration: InputDecoration(
+                    labelText: 'New Email Address',
+                    hintText: 'e.g. name@example.com',
+                    prefixIcon:
+                        const Icon(Icons.email_outlined, size: 20),
+                    filled: true,
+                    fillColor: AppColors.surfaceContainerLow,
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(14),
+                      borderSide: BorderSide.none,
+                    ),
+                    enabledBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(14),
+                      borderSide: BorderSide(
+                        color: AppColors.outlineVariant.withOpacity(0.3),
+                      ),
+                    ),
+                    focusedBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(14),
+                      borderSide: const BorderSide(
+                        color: AppColors.primary,
+                        width: 1.5,
+                      ),
+                    ),
+                  ),
+                  onChanged: (_) {
+                    if (errorText != null) setDlg(() => errorText = null);
+                  },
+                ),
+                const SizedBox(height: 12),
+                TextField(
+                  controller: confirmEmailCtrl,
+                  keyboardType: TextInputType.emailAddress,
+                  style: GoogleFonts.inter(fontSize: 14),
+                  decoration: InputDecoration(
+                    labelText: 'Confirm New Email',
+                    hintText: 'Re-enter new email address',
+                    prefixIcon: const Icon(Icons.mark_email_read_outlined,
+                        size: 20),
+                    filled: true,
+                    fillColor: AppColors.surfaceContainerLow,
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(14),
+                      borderSide: BorderSide.none,
+                    ),
+                    enabledBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(14),
+                      borderSide: BorderSide(
+                        color: AppColors.outlineVariant.withOpacity(0.3),
+                      ),
+                    ),
+                    focusedBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(14),
+                      borderSide: const BorderSide(
+                        color: AppColors.primary,
+                        width: 1.5,
+                      ),
+                    ),
+                  ),
+                  onChanged: (_) {
+                    if (errorText != null) setDlg(() => errorText = null);
+                  },
+                ),
+                if (errorText != null) ...[
+                  const SizedBox(height: 12),
+                  Row(
+                    children: [
+                      const Icon(Icons.error_outline_rounded,
+                          size: 15, color: AppColors.error),
+                      const SizedBox(width: 6),
+                      Expanded(
+                        child: Text(
+                          errorText!,
+                          style: GoogleFonts.inter(
+                            fontSize: 12,
+                            color: AppColors.error,
+                            fontWeight: FontWeight.w500,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+                const SizedBox(height: 4),
+              ],
+            ),
+          ),
+          actionsPadding: const EdgeInsets.fromLTRB(20, 12, 20, 20),
+          actions: [
+            Row(
+              children: [
+                Expanded(
+                  child: OutlinedButton(
+                    onPressed: isSubmitting ? null : () => Navigator.pop(ctx),
+                    style: OutlinedButton.styleFrom(
+                      padding: const EdgeInsets.symmetric(vertical: 13),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(14),
+                      ),
+                      side: BorderSide(
+                        color: AppColors.outlineVariant.withOpacity(0.5),
+                      ),
+                      foregroundColor: AppColors.onSurfaceVariant,
+                    ),
+                    child: Text('Cancel',
+                        style: GoogleFonts.inter(fontWeight: FontWeight.w600)),
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: ElevatedButton(
+                    onPressed: isSubmitting
+                        ? null
+                        : () async {
+                            final newEmail = newEmailCtrl.text.trim();
+                            final confirmEmail = confirmEmailCtrl.text.trim();
+
+                            final emailErr =
+                                AuthService.validateEmail(newEmail);
+                            if (emailErr != null) {
+                              setDlg(() => errorText = emailErr);
+                              return;
+                            }
+
+                            if (newEmail.toLowerCase() ==
+                                _email.trim().toLowerCase()) {
+                              setDlg(() => errorText =
+                                  'New email cannot be the same as your current email.');
+                              return;
+                            }
+
+                            if (newEmail.toLowerCase() !=
+                                confirmEmail.toLowerCase()) {
+                              setDlg(() =>
+                                  errorText = 'Email addresses do not match.');
+                              return;
+                            }
+
+                            final uid = Supabase
+                                .instance.client.auth.currentUser?.id;
+                            if (uid == null) return;
+
+                            setDlg(() {
+                              isSubmitting = true;
+                              errorText = null;
+                            });
+
+                            try {
+                              await Supabase.instance.client.auth.updateUser(
+                                UserAttributes(email: newEmail),
+                                emailRedirectTo:
+                                    'https://rjamesmz.github.io/PawTrace/web/verified.html',
+                              );
+
+                              try {
+                                await Supabase.instance.client
+                                    .from('users')
+                                    .update({'email': newEmail}).eq(
+                                        'user_id', uid);
+                              } catch (_) {}
+
+                              if (!mounted) return;
+                              setState(() {
+                                _email = newEmail;
+                              });
+                              AuthService.instance
+                                  .updateProfileData({'email': newEmail});
+                              if (ctx.mounted) Navigator.pop(ctx);
+                              AppToast.success(
+                                context,
+                                'Confirmation sent to $newEmail! Please check your inbox.',
+                              );
+                            } catch (e) {
+                              if (ctx.mounted) {
+                                setDlg(() {
+                                  isSubmitting = false;
+                                  errorText = AppErrors.format(e,
+                                      fallback:
+                                          'Failed to update email address.');
+                                });
+                              }
+                            }
+                          },
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: AppColors.primary,
+                      foregroundColor: Colors.white,
+                      elevation: 0,
+                      padding: const EdgeInsets.symmetric(vertical: 13),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(14),
+                      ),
+                    ),
+                    child: isSubmitting
+                        ? const SizedBox(
+                            width: 18,
+                            height: 18,
+                            child: CircularProgressIndicator(
+                              strokeWidth: 2,
+                              color: Colors.white,
+                            ),
+                          )
+                        : Text('Update Email',
+                            style:
+                                GoogleFonts.inter(fontWeight: FontWeight.w700)),
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   // ── Change Password ──────────────────────────────────────────────────────
   Future<void> _showChangePasswordDialog() async {
     final email = _email.trim().isNotEmpty
@@ -396,6 +827,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
     TextEditingController ctrl,
     String label,
     IconData icon, {
+    String? hint,
     void Function(String)? onChanged,
   }) {
     return TextField(
@@ -404,6 +836,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
       style: GoogleFonts.inter(fontSize: 14),
       decoration: InputDecoration(
         labelText: label,
+        hintText: hint,
         prefixIcon: Icon(icon, size: 20),
         filled: true,
         fillColor: AppColors.surfaceContainerLow,
@@ -425,38 +858,80 @@ class _SettingsScreenState extends State<SettingsScreen> {
   Future<void> _handleLogout() async {
     final confirm = await showDialog<bool>(
       context: context,
-      builder: (context) => AlertDialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        title: Text(
-          'Logout',
-          style: GoogleFonts.montserrat(
-              fontWeight: FontWeight.bold, color: AppColors.onSurface),
+      builder: (ctx) => AlertDialog(
+        backgroundColor: Colors.white,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        titlePadding: const EdgeInsets.fromLTRB(20, 20, 20, 12),
+        contentPadding: const EdgeInsets.fromLTRB(20, 0, 20, 12),
+        title: Row(
+          children: [
+            Container(
+              padding: const EdgeInsets.all(10),
+              decoration: BoxDecoration(
+                color: AppColors.error.withOpacity(0.1),
+                shape: BoxShape.circle,
+              ),
+              child: const Icon(Icons.logout_rounded,
+                  color: AppColors.error, size: 22),
+            ),
+            const SizedBox(width: 12),
+            Text(
+              'Log Out',
+              style: GoogleFonts.montserrat(
+                fontWeight: FontWeight.w700,
+                fontSize: 18,
+                color: AppColors.onSurface,
+              ),
+            ),
+          ],
         ),
         content: Text(
           'Are you sure you want to sign out of PetTrace?',
-          style: GoogleFonts.inter(color: AppColors.onSurfaceVariant),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context, false),
-            child: Text(
-              'Cancel',
-              style: GoogleFonts.inter(
-                  color: AppColors.secondary, fontWeight: FontWeight.w600),
-            ),
+          style: GoogleFonts.inter(
+            fontSize: 14,
+            color: AppColors.onSurfaceVariant,
+            height: 1.4,
           ),
-          ElevatedButton(
-            onPressed: () => Navigator.pop(context, true),
-            style: ElevatedButton.styleFrom(
-              backgroundColor: AppColors.error,
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-              elevation: 0,
-            ),
-            child: Text(
-              'Logout',
-              style: GoogleFonts.montserrat(
-                  fontWeight: FontWeight.bold, color: Colors.white),
-            ),
+        ),
+        actionsPadding: const EdgeInsets.fromLTRB(20, 12, 20, 20),
+        actions: [
+          Row(
+            children: [
+              Expanded(
+                child: OutlinedButton(
+                  onPressed: () => Navigator.pop(ctx, false),
+                  style: OutlinedButton.styleFrom(
+                    padding: const EdgeInsets.symmetric(vertical: 13),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(14),
+                    ),
+                    side: BorderSide(
+                      color: AppColors.outlineVariant.withOpacity(0.5),
+                    ),
+                    foregroundColor: AppColors.onSurfaceVariant,
+                  ),
+                  child: Text('Cancel',
+                      style: GoogleFonts.inter(fontWeight: FontWeight.w600)),
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: ElevatedButton(
+                  onPressed: () => Navigator.pop(ctx, true),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: AppColors.error,
+                    foregroundColor: Colors.white,
+                    elevation: 0,
+                    padding: const EdgeInsets.symmetric(vertical: 13),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(14),
+                    ),
+                  ),
+                  child: Text('Log Out',
+                      style: GoogleFonts.inter(fontWeight: FontWeight.w700)),
+                ),
+              ),
+            ],
           ),
         ],
       ),
@@ -670,8 +1145,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     child: ElevatedButton(
                       onPressed: () {
                         final addr = addressCtrl.text.trim();
-                        final validationErr =
-                            AuthService.validateAddress(addr);
+                        final validationErr = AuthService.validateAddress(addr);
                         if (validationErr != null) {
                           setDialogState(() => errorText = validationErr);
                           return;
@@ -800,6 +1274,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
         children: [
           Row(
             children: [
+              AppConstants.buildLogoGraphic(size: 26),
+              const SizedBox(width: 10),
               Text(
                 'My Profile',
                 style: GoogleFonts.montserrat(
@@ -924,16 +1400,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
             ),
           ),
         ),
-        const SizedBox(height: 8),
-        // Email
-        Text(
-          _email,
-          style: GoogleFonts.inter(
-            fontSize: 14,
-            fontWeight: FontWeight.w500,
-            color: AppColors.onSurfaceVariant.withOpacity(0.7),
-          ),
-        ),
       ],
     );
   }
@@ -1026,7 +1492,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
           const SizedBox(height: 8),
 
-          // DANGER ZONE SECTION
           Container(
             color: AppColors.error.withOpacity(0.05),
             padding: const EdgeInsets.only(bottom: 8),
@@ -1036,7 +1501,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 Padding(
                   padding: const EdgeInsets.fromLTRB(20, 16, 20, 8),
                   child: Text(
-                    'DANGER ZONE',
+                    'Log Out',
                     style: GoogleFonts.inter(
                       fontSize: 12,
                       fontWeight: FontWeight.w700,
@@ -1047,9 +1512,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 ),
                 _buildSettingsTile(
                   icon: Icons.logout_rounded,
-                  title: 'Logout',
-                  titleColor: AppColors.primary,
-                  iconColor: AppColors.primary,
+                  title: 'Log Out',
+                  titleColor: AppColors.error,
+                  iconColor: AppColors.error,
                   onTap: _handleLogout,
                   isDangerZone: true,
                 ),
@@ -1120,7 +1585,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
               Icon(
                 Icons.chevron_right_rounded,
                 color: isDangerZone
-                    ? AppColors.primary
+                    ? AppColors.error
                     : AppColors.onSurfaceVariant.withOpacity(0.3),
                 size: 24,
               ),

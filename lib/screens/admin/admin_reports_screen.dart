@@ -4,6 +4,7 @@ import 'package:responsive_framework/responsive_framework.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:excel/excel.dart' hide Border;
 import '../../core/app_colors.dart';
+import '../../core/app_constants.dart';
 import '../../services/auth_service.dart';
 import '../../services/file_export_service.dart';
 import '../../widgets/admin_content_wrapper.dart';
@@ -33,10 +34,9 @@ class _AdminReportsScreenState extends State<AdminReportsScreen> {
   static const List<String> _filterLabels = [
     'All',
     'Active',
+    'Found',
     'Archived',
     'Recent',
-    'Dog',
-    'Cat'
   ];
 
   @override
@@ -84,19 +84,43 @@ class _AdminReportsScreenState extends State<AdminReportsScreen> {
   List<Map<String, dynamic>> get _filtered {
     List<Map<String, dynamic>> list = List.from(_reports);
     switch (_filterIndex) {
-      case 1: // Active
+      case 1: // Active (currently lost)
         list = list.where((r) {
+          final repType = (r['report_type'] ?? '').toString().toUpperCase();
           final status = (r['status'] ?? 'active').toString().toLowerCase();
-          return status == 'active';
+          final petData = r['pets'] as Map<String, dynamic>?;
+          final petStatus = (petData?['status'] ?? '').toString().toLowerCase();
+          final isFound = repType == 'FOUND' ||
+              status == 'resolved' ||
+              status == 'found' ||
+              r['is_found'] == true ||
+              r['found_at'] != null ||
+              petStatus == 'found';
+          return status == 'active' && !isFound;
         }).toList();
         break;
-      case 2: // Archived / Resolved
+      case 2: // Found
+        list = list.where((r) {
+          final repType = (r['report_type'] ?? '').toString().toUpperCase();
+          final status = (r['status'] ?? '').toString().toLowerCase();
+          final petData = r['pets'] as Map<String, dynamic>?;
+          final petStatus = (petData?['status'] ?? '').toString().toLowerCase();
+          final isFound = repType == 'FOUND' ||
+              status == 'resolved' ||
+              status == 'found' ||
+              r['is_found'] == true ||
+              r['found_at'] != null ||
+              petStatus == 'found';
+          return isFound;
+        }).toList();
+        break;
+      case 3: // Archived
         list = list.where((r) {
           final status = (r['status'] ?? '').toString().toLowerCase();
-          return status == 'archived' || status == 'resolved';
+          return status == 'archived';
         }).toList();
         break;
-      case 3: // Recent — last 7 days
+      case 4: // Recent — last 7 days
         final weekAgo = DateTime.now().subtract(const Duration(days: 7));
         list = list.where((r) {
           final ts = r['reported_at']?.toString() ?? '';
@@ -108,22 +132,6 @@ class _AdminReportsScreenState extends State<AdminReportsScreen> {
           }
         }).toList();
         break;
-      case 4: // Dog
-        list = list.where((r) {
-          final pet = r['pets'];
-          final petSpecies = pet is Map ? (pet['species'] ?? '').toString().trim().toLowerCase() : '';
-          final rSpecies = (r['species'] ?? '').toString().trim().toLowerCase();
-          return petSpecies == 'dog' || rSpecies == 'dog';
-        }).toList();
-        break;
-      case 5: // Cat
-        list = list.where((r) {
-          final pet = r['pets'];
-          final petSpecies = pet is Map ? (pet['species'] ?? '').toString().trim().toLowerCase() : '';
-          final rSpecies = (r['species'] ?? '').toString().trim().toLowerCase();
-          return petSpecies == 'cat' || rSpecies == 'cat';
-        }).toList();
-        break;
     }
 
     // Apply search filter
@@ -133,7 +141,8 @@ class _AdminReportsScreenState extends State<AdminReportsScreen> {
         final pet = r['pets'];
         final petName = pet is Map ? (pet['name'] ?? '').toString().toLowerCase() : '';
         final breed = pet is Map ? (pet['breed'] ?? '').toString().toLowerCase() : '';
-        final species = pet is Map ? (pet['species'] ?? '').toString().toLowerCase() : '';
+        final petSpecies = pet is Map ? (pet['species'] ?? '').toString().toLowerCase() : '';
+        final rSpecies = (r['species'] ?? '').toString().toLowerCase();
         final location = (r['last_seen_address'] ?? r['barangay'] ?? '').toString().toLowerCase();
         final owner = r['owner_id'];
         final ownerName = owner is Map
@@ -145,7 +154,8 @@ class _AdminReportsScreenState extends State<AdminReportsScreen> {
         return petName.contains(q) ||
             ownerName.contains(q) ||
             breed.contains(q) ||
-            species.contains(q) ||
+            petSpecies.contains(q) ||
+            rSpecies.contains(q) ||
             location.contains(q);
       }).toList();
     }
@@ -315,7 +325,17 @@ class _AdminReportsScreenState extends State<AdminReportsScreen> {
       style: GoogleFonts.inter(fontSize: 15, color: AppColors.onSurface),
       decoration: InputDecoration(
         prefixIcon: const Icon(Icons.search, color: AppColors.onSurfaceVariant),
-        hintText: 'Search by pet name, owner, location...',
+        suffixIcon: _searchCtrl.text.isNotEmpty
+            ? IconButton(
+                icon: const Icon(Icons.clear_rounded,
+                    size: 18, color: AppColors.onSurfaceVariant),
+                onPressed: () {
+                  _searchCtrl.clear();
+                  setState(() {});
+                },
+              )
+            : null,
+        hintText: 'Search by pet name, species, breed, location...',
         hintStyle: GoogleFonts.inter(fontSize: 15, color: AppColors.onSurfaceVariant.withOpacity(0.5)),
         filled: true,
         fillColor: AppColors.surfaceContainerLow,
@@ -489,6 +509,8 @@ class _AdminReportsScreenState extends State<AdminReportsScreen> {
       ),
       child: Row(
         children: [
+          AppConstants.buildLogoGraphic(size: 24),
+          const SizedBox(width: 8),
           Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             mainAxisAlignment: MainAxisAlignment.center,

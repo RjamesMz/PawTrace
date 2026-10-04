@@ -2,6 +2,10 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'app_colors.dart';
 
+/// Global key for ScaffoldMessenger so toasts can be shown even across route transitions.
+final GlobalKey<ScaffoldMessengerState> rootScaffoldMessengerKey =
+    GlobalKey<ScaffoldMessengerState>();
+
 /// Centralized utility for crisp, quick toast notifications in PawTrace.
 /// Disappears quickly (1.8s by default) instead of lingering for 4+ seconds.
 class AppToast {
@@ -10,7 +14,7 @@ class AppToast {
 
   /// Shows a general toast notification with auto-dismiss and previous-toast cleanup.
   static void show(
-    BuildContext context,
+    BuildContext? context,
     String message, {
     Duration duration = defaultDuration,
     Color? backgroundColor,
@@ -18,7 +22,9 @@ class AppToast {
     IconData? icon,
     SnackBarAction? action,
   }) {
-    final messenger = ScaffoldMessenger.of(context);
+    final messenger = (context != null ? ScaffoldMessenger.maybeOf(context) : null) ??
+        rootScaffoldMessengerKey.currentState;
+    if (messenger == null) return;
     messenger.clearSnackBars();
 
     messenger.showSnackBar(

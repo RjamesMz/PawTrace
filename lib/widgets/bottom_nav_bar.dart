@@ -17,12 +17,13 @@ import '../services/auth_service.dart';
 class BottomNavBar extends StatefulWidget {
   /// Index of the currently active tab (0–4).
   final int currentIndex;
-  
+
   /// Optional callback for tab selection. If provided, BottomNavBar will NOT
   /// perform navigation, and will instead just call this function.
   final void Function(int)? onTabSelected;
 
-  const BottomNavBar({super.key, required this.currentIndex, this.onTabSelected});
+  const BottomNavBar(
+      {super.key, required this.currentIndex, this.onTabSelected});
 
   @override
   State<BottomNavBar> createState() => _BottomNavBarState();
@@ -37,7 +38,7 @@ class _BottomNavBarState extends State<BottomNavBar> {
     _NavItem(icon: Icons.home_rounded, label: 'Home', route: AppRoutes.home),
     _NavItem(
         icon: Icons.search_rounded,
-        label: 'Lost',
+        label: 'Lost Pets',
         route: AppRoutes.lostPetScreen),
     _NavItem(
         icon: Icons.camera_alt_rounded, label: 'Scan', route: AppRoutes.aiScan),
@@ -104,7 +105,7 @@ class _BottomNavBarState extends State<BottomNavBar> {
 
   void _onTap(BuildContext context, int index, int activeIndex) {
     if (index == activeIndex) return;
-    
+
     if (widget.onTabSelected != null) {
       widget.onTabSelected!(index);
       return;

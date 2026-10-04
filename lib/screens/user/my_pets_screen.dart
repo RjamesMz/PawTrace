@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../core/app_colors.dart';
+import '../../core/app_constants.dart';
 import '../../core/app_routes.dart';
 import '../../core/app_toast.dart';
 import '../../widgets/bottom_nav_bar.dart';
@@ -76,6 +77,8 @@ class _MyPetsScreenState extends State<MyPetsScreen> {
           // Title row
           Row(
             children: [
+              AppConstants.buildLogoGraphic(size: 26),
+              const SizedBox(width: 8),
               Text('My Pets',
                   style: GoogleFonts.montserrat(
                       fontSize: 22,
@@ -107,8 +110,7 @@ class _MyPetsScreenState extends State<MyPetsScreen> {
             },
             child: Container(
               width: double.infinity,
-              padding:
-                  const EdgeInsets.symmetric(horizontal: 18, vertical: 14),
+              padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 14),
               decoration: BoxDecoration(
                 gradient: const LinearGradient(
                   colors: [AppColors.primary, AppColors.primaryContainer],
@@ -131,8 +133,8 @@ class _MyPetsScreenState extends State<MyPetsScreen> {
                       color: Colors.white.withOpacity(0.18),
                       borderRadius: BorderRadius.circular(12),
                     ),
-                    child: const Icon(Icons.pets,
-                        color: Colors.white, size: 26),
+                    child:
+                        const Icon(Icons.pets, color: Colors.white, size: 26),
                   ),
                   const SizedBox(width: 14),
                   Expanded(
@@ -187,8 +189,7 @@ class _MyPetsScreenState extends State<MyPetsScreen> {
                 color: AppColors.primaryContainer.withOpacity(0.15),
                 shape: BoxShape.circle,
               ),
-              child:
-                  const Icon(Icons.pets, size: 60, color: AppColors.primary),
+              child: const Icon(Icons.pets, size: 60, color: AppColors.primary),
             ),
             const SizedBox(height: 20),
             Text('No pets registered yet',
@@ -282,8 +283,7 @@ class _MyPetsScreenState extends State<MyPetsScreen> {
                       const SizedBox(height: 2),
                       Text('$breed • $species',
                           style: GoogleFonts.inter(
-                              fontSize: 13,
-                              color: AppColors.onSurfaceVariant)),
+                              fontSize: 13, color: AppColors.onSurfaceVariant)),
                       if (barangay.toString().isNotEmpty) ...[
                         const SizedBox(height: 2),
                         Text(barangay,
@@ -309,9 +309,7 @@ class _MyPetsScreenState extends State<MyPetsScreen> {
                     style: GoogleFonts.inter(
                       fontSize: 10,
                       fontWeight: FontWeight.w700,
-                      color: isLost
-                          ? AppColors.error
-                          : const Color(0xFF065F46),
+                      color: isLost ? AppColors.error : const Color(0xFF065F46),
                     ),
                   ),
                 ),
@@ -330,8 +328,7 @@ class _MyPetsScreenState extends State<MyPetsScreen> {
     return Container(
       color: AppColors.primaryContainer.withOpacity(0.2),
       child: const Center(
-          child: Icon(Icons.pets,
-              color: AppColors.primaryContainer, size: 32)),
+          child: Icon(Icons.pets, color: AppColors.primaryContainer, size: 32)),
     );
   }
 }

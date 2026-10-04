@@ -3,6 +3,7 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:responsive_framework/responsive_framework.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../core/app_colors.dart';
+import '../../core/app_routes.dart';
 import '../../core/app_toast.dart';
 import '../../services/auth_service.dart';
 import '../../widgets/admin_content_wrapper.dart';
@@ -520,6 +521,13 @@ class _SuperAdminScreenState extends State<SuperAdminScreen> {
                   icon: Icons.people_rounded,
                   color: const Color(0xFF4E7AC7),
                   isLoading: _isLoading,
+                  onTap: () {
+                    Navigator.pushNamed(
+                      context,
+                      AppRoutes.userManagement,
+                      arguments: {'tab': 0},
+                    );
+                  },
                 ),
               ),
             ),
@@ -546,6 +554,13 @@ class _SuperAdminScreenState extends State<SuperAdminScreen> {
                   icon: Icons.shield_rounded,
                   color: const Color(0xFF00796B),
                   isLoading: _isLoading,
+                  onTap: () {
+                    Navigator.pushNamed(
+                      context,
+                      AppRoutes.userManagement,
+                      arguments: {'tab': 1},
+                    );
+                  },
                 ),
               ),
             ),
@@ -654,7 +669,11 @@ class _SuperAdminScreenState extends State<SuperAdminScreen> {
                           ),
                           TextButton(
                             onPressed: () {
-                              setState(() => _webTabIndex = 5);
+                              Navigator.pushNamed(
+                                context,
+                                AppRoutes.userManagement,
+                                arguments: {'tab': 1},
+                              );
                             },
                             child: Text(
                               'Manage All',
@@ -918,6 +937,13 @@ class _SuperAdminScreenState extends State<SuperAdminScreen> {
                     icon: Icons.people_rounded,
                     color: const Color(0xFF4E7AC7),
                     isLoading: _isLoading,
+                    onTap: () {
+                      Navigator.pushNamed(
+                        context,
+                        AppRoutes.userManagement,
+                        arguments: {'tab': 0},
+                      );
+                    },
                   ),
                   StatCard(
                     label: 'Active Reports',
@@ -932,6 +958,13 @@ class _SuperAdminScreenState extends State<SuperAdminScreen> {
                     icon: Icons.shield_rounded,
                     color: const Color(0xFF00796B),
                     isLoading: _isLoading,
+                    onTap: () {
+                      Navigator.pushNamed(
+                        context,
+                        AppRoutes.userManagement,
+                        arguments: {'tab': 1},
+                      );
+                    },
                   ),
                 ],
               );
@@ -1120,18 +1153,39 @@ class _SuperAdminScreenState extends State<SuperAdminScreen> {
                   letterSpacing: 1.2,
                 ),
               ),
-              TextButton.icon(
-                onPressed: _showAddAdminSheet,
-                icon: const Icon(Icons.add_circle_outline,
-                    size: 16, color: AppColors.primary),
-                label: Text(
-                  'Add Admin',
-                  style: GoogleFonts.inter(
-                    fontSize: 12,
-                    fontWeight: FontWeight.w600,
-                    color: AppColors.primary,
+              Row(
+                children: [
+                  TextButton(
+                    onPressed: () {
+                      Navigator.pushNamed(
+                        context,
+                        AppRoutes.userManagement,
+                        arguments: {'tab': 1},
+                      );
+                    },
+                    child: Text(
+                      'Manage All',
+                      style: GoogleFonts.inter(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w600,
+                        color: AppColors.primary,
+                      ),
+                    ),
                   ),
-                ),
+                  TextButton.icon(
+                    onPressed: _showAddAdminSheet,
+                    icon: const Icon(Icons.add_circle_outline,
+                        size: 16, color: AppColors.primary),
+                    label: Text(
+                      'Add Admin',
+                      style: GoogleFonts.inter(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w600,
+                        color: AppColors.primary,
+                      ),
+                    ),
+                  ),
+                ],
               ),
             ],
           ),

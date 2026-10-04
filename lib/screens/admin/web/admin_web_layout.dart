@@ -372,6 +372,8 @@ class _AdminWebLayoutState extends State<AdminWebLayout> {
                     ),
                     child: Row(
                       children: [
+                        AppConstants.buildLogoGraphic(size: 26),
+                        const SizedBox(width: 10),
                         // Current page title in Montserrat bold 20sp
                         Text(
                           _resolveTitle(),

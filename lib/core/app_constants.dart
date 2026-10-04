@@ -71,14 +71,29 @@ class AppConstants {
     EdgeInsetsGeometry? padding,
     bool applyColorToAsset = false,
   }) {
-    final effectiveIconSize = iconSize ?? (size * 0.55);
+    // If the asset is an image and the default background was primary orange,
+    // use a crisp white background so the orange paw logo stands out vividly.
+    final effectiveBg = (logoAsset.isNotEmpty && backgroundColor == AppColors.primary)
+        ? Colors.white
+        : backgroundColor;
+    final effectiveIconSize = iconSize ?? (size * (logoAsset.isNotEmpty ? 0.78 : 0.55));
+
     return Container(
       width: size,
       height: size,
       padding: padding,
       decoration: BoxDecoration(
-        color: backgroundColor,
+        color: effectiveBg,
         shape: shape,
+        boxShadow: (effectiveBg == Colors.white)
+            ? [
+                BoxShadow(
+                  color: Colors.black.withOpacity(0.08),
+                  blurRadius: 10,
+                  offset: const Offset(0, 3),
+                ),
+              ]
+            : null,
         borderRadius: shape == BoxShape.circle
             ? null
             : (borderRadius ?? BorderRadius.circular(12)),

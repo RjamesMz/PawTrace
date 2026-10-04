@@ -6,6 +6,7 @@ import 'package:flutter_map/flutter_map.dart';
 import 'package:latlong2/latlong.dart' as ll;
 import 'package:intl/intl.dart';
 import '../../core/app_colors.dart';
+import '../../core/app_constants.dart';
 import '../../core/app_toast.dart';
 import '../../core/navigation_helpers.dart';
 import '../../services/alert_service.dart';
@@ -240,15 +241,17 @@ class _ReportLostPetScreenState extends State<ReportLostPetScreen> {
               onPressed: () => handleSafeBack(context),
               color: AppColors.onSurfaceVariant),
           Expanded(
-            child: Center(
-              child: FittedBox(
-                fit: BoxFit.scaleDown,
-                child: Text('Report Lost Pet',
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                AppConstants.buildLogoGraphic(size: 22),
+                const SizedBox(width: 8),
+                Text('Report Lost Pet',
                     style: GoogleFonts.montserrat(
                         fontSize: 18,
                         fontWeight: FontWeight.w600,
                         color: AppColors.onSurface)),
-              ),
+              ],
             ),
           ),
           const SizedBox(width: 48),

@@ -17,7 +17,8 @@ import 'web/admin_web_layout.dart';
 /// - Bottom part (Super Admin only): Barangay Administrators list.
 /// - Barangay Admins only see citizen users of their own barangay (no admins visible).
 class UserManagementScreen extends StatefulWidget {
-  const UserManagementScreen({super.key});
+  final int initialTab;
+  const UserManagementScreen({super.key, this.initialTab = 0});
 
   @override
   State<UserManagementScreen> createState() => _UserManagementScreenState();
@@ -34,12 +35,29 @@ class _UserManagementScreenState extends State<UserManagementScreen> {
   String _adminBarangay = '';
   UserRole _currentUserRole = UserRole.user;
 
-  final List<String> _filters = ['All Users', 'Active', 'Unverified', 'Deactivated'];
+
+  int _selectedUserTypeTab = 0; // 0 = Citizen Users, 1 = Barangay Admins
+  bool _tabFromArgsInitialized = false;
 
   @override
   void initState() {
     super.initState();
+    _selectedUserTypeTab = widget.initialTab;
     _init();
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    if (!_tabFromArgsInitialized) {
+      final args = ModalRoute.of(context)?.settings.arguments;
+      if (args is Map && args['tab'] is int) {
+        _selectedUserTypeTab = args['tab'] as int;
+      } else if (args is int) {
+        _selectedUserTypeTab = args;
+      }
+      _tabFromArgsInitialized = true;
+    }
   }
 
   Future<void> _init() async {
@@ -233,88 +251,137 @@ class _UserManagementScreenState extends State<UserManagementScreen> {
     );
   }
 
+  Widget _buildRoleSegmentedSwitcher() {
+    if (_currentUserRole != UserRole.superAdmin) return const SizedBox.shrink();
+
+    return Container(
+      margin: const EdgeInsets.only(bottom: 16),
+      padding: const EdgeInsets.all(4),
+      decoration: BoxDecoration(
+        color: AppColors.surfaceContainerHigh.withOpacity(0.6),
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: AppColors.outlineVariant.withOpacity(0.3)),
+      ),
+      child: Row(
+        children: [
+          Expanded(
+            child: _buildRoleSegmentButton(
+              index: 0,
+              title: 'Citizen Users',
+              count: _citizenUsers.length,
+              icon: Icons.people_alt_rounded,
+              activeColor: AppColors.primary,
+            ),
+          ),
+          const SizedBox(width: 6),
+          Expanded(
+            child: _buildRoleSegmentButton(
+              index: 1,
+              title: 'Barangay Admins',
+              count: _barangayAdmins.length,
+              icon: Icons.shield_rounded,
+              activeColor: const Color(0xFF00796B),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildRoleSegmentButton({
+    required int index,
+    required String title,
+    required int count,
+    required IconData icon,
+    required Color activeColor,
+  }) {
+    final isSelected = _selectedUserTypeTab == index;
+
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: () {
+          if (_selectedUserTypeTab != index) {
+            setState(() {
+              _selectedUserTypeTab = index;
+              _searchCtrl.clear();
+              _filterIndex = 0;
+            });
+          }
+        },
+        borderRadius: BorderRadius.circular(10),
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 200),
+          curve: Curves.easeInOut,
+          padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 12),
+          decoration: BoxDecoration(
+            color: isSelected ? Colors.white : Colors.transparent,
+            borderRadius: BorderRadius.circular(10),
+            boxShadow: isSelected
+                ? [
+                    BoxShadow(
+                      color: Colors.black.withOpacity(0.06),
+                      blurRadius: 6,
+                      offset: const Offset(0, 2),
+                    ),
+                  ]
+                : [],
+          ),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(
+                icon,
+                size: 18,
+                color: isSelected ? activeColor : AppColors.onSurfaceVariant,
+              ),
+              const SizedBox(width: 8),
+              Flexible(
+                child: Text(
+                  title,
+                  style: GoogleFonts.montserrat(
+                    fontSize: 13,
+                    fontWeight: isSelected ? FontWeight.bold : FontWeight.w500,
+                    color: isSelected ? activeColor : AppColors.onSurfaceVariant,
+                  ),
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+              const SizedBox(width: 8),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
+                decoration: BoxDecoration(
+                  color: isSelected
+                      ? activeColor.withOpacity(0.12)
+                      : AppColors.surfaceContainerHighest,
+                  borderRadius: BorderRadius.circular(999),
+                ),
+                child: Text(
+                  '$count',
+                  style: GoogleFonts.inter(
+                    fontSize: 11,
+                    fontWeight: FontWeight.bold,
+                    color: isSelected ? activeColor : AppColors.onSurfaceVariant,
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
   Widget _buildDesktopContent() {
-    final showAdmins = _currentUserRole == UserRole.superAdmin;
+    final isSuperAdmin = _currentUserRole == UserRole.superAdmin;
+    final showAdmins = isSuperAdmin && _selectedUserTypeTab == 1;
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        // ── 1. Registered Users Section Card ──
-        Card(
-          elevation: 0,
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(16),
-            side: BorderSide(color: Colors.grey.shade200),
-          ),
-          color: Colors.white,
-          clipBehavior: Clip.antiAlias,
-          child: Padding(
-            padding: const EdgeInsets.only(top: 16),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                // Search bar and filter chips in header area
-                Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 20),
-                  child: Row(
-                    children: [
-                      Expanded(child: _buildSearchBar()),
-                      const SizedBox(width: 16),
-                      _buildFilterPills(),
-                    ],
-                  ),
-                ),
-                const SizedBox(height: 12),
-                Theme(
-                  data: Theme.of(context).copyWith(
-                    cardColor: Colors.white,
-                    dividerColor: Colors.grey.shade200,
-                  ),
-                  child: PaginatedDataTable(
-                    header: Row(
-                      children: [
-                        Text(
-                          'Registered Users (${_filteredCitizens.length})',
-                          style: GoogleFonts.montserrat(
-                            fontSize: 16,
-                            fontWeight: FontWeight.bold,
-                            color: AppColors.onSurface,
-                          ),
-                        ),
-                        const Spacer(),
-                        IconButton(
-                          icon: const Icon(Icons.refresh),
-                          tooltip: 'Refresh',
-                          onPressed: _fetchUsers,
-                        ),
-                      ],
-                    ),
-                    rowsPerPage: 10,
-                    showFirstLastButtons: true,
-                    columns: const [
-                      DataColumn(label: Text('Avatar')),
-                      DataColumn(label: Text('Name')),
-                      DataColumn(label: Text('Email')),
-                      DataColumn(label: Text('Phone')),
-                      DataColumn(label: Text('Barangay')),
-                      DataColumn(label: Text('Role')),
-                      DataColumn(label: Text('Status')),
-                      DataColumn(label: Text('Actions')),
-                    ],
-                    source: _UsersDataTableSource(
-                      _filteredCitizens,
-                      onAction: _handleUserAction,
-                    ),
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ),
-
-        // ── 2. Barangay Administrators Section Card (Super Admin only) ──
-        if (showAdmins) ...[
-          const SizedBox(height: 24),
+        if (isSuperAdmin) _buildRoleSegmentedSwitcher(),
+        if (!showAdmins)
+          // ── 1. Registered Users Section Card ──
           Card(
             elevation: 0,
             shape: RoundedRectangleBorder(
@@ -325,87 +392,175 @@ class _UserManagementScreenState extends State<UserManagementScreen> {
             clipBehavior: Clip.antiAlias,
             child: Padding(
               padding: const EdgeInsets.only(top: 16),
-              child: Theme(
-                data: Theme.of(context).copyWith(
-                  cardColor: Colors.white,
-                  dividerColor: Colors.grey.shade200,
-                ),
-                child: PaginatedDataTable(
-                  header: Row(
-                    children: [
-                      Container(
-                        padding: const EdgeInsets.all(6),
-                        decoration: BoxDecoration(
-                          color: const Color(0xFF00796B).withOpacity(0.12),
-                          borderRadius: BorderRadius.circular(8),
-                        ),
-                        child: const Icon(
-                          Icons.shield_rounded,
-                          color: Color(0xFF00796B),
-                          size: 18,
-                        ),
-                      ),
-                      const SizedBox(width: 10),
-                      Text(
-                        'Barangay Administrators (${_filteredAdmins.length})',
-                        style: GoogleFonts.montserrat(
-                          fontSize: 16,
-                          fontWeight: FontWeight.bold,
-                          color: AppColors.onSurface,
-                        ),
-                      ),
-                      const Spacer(),
-                      ElevatedButton.icon(
-                        onPressed: _showAddAdminModal,
-                        icon: const Icon(Icons.add, size: 16),
-                        label: Text(
-                          'Add Admin',
-                          style: GoogleFonts.inter(
-                            fontWeight: FontWeight.bold,
-                            fontSize: 13,
-                          ),
-                        ),
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: const Color(0xFF00796B),
-                          foregroundColor: Colors.white,
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 16,
-                            vertical: 10,
-                          ),
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(8),
-                          ),
-                        ),
-                      ),
-                      const SizedBox(width: 8),
-                      IconButton(
-                        icon: const Icon(Icons.refresh),
-                        tooltip: 'Refresh',
-                        onPressed: _fetchUsers,
-                      ),
-                    ],
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  // Search bar and filter chips in header area
+                  Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 20),
+                    child: Row(
+                      children: [
+                        Expanded(child: _buildSearchBar()),
+                        const SizedBox(width: 16),
+                        _buildFilterPills(),
+                      ],
+                    ),
                   ),
-                  rowsPerPage: 10,
-                  showFirstLastButtons: true,
-                  columns: const [
-                    DataColumn(label: Text('Avatar')),
-                    DataColumn(label: Text('Name')),
-                    DataColumn(label: Text('Email')),
-                    DataColumn(label: Text('Phone')),
-                    DataColumn(label: Text('Barangay')),
-                    DataColumn(label: Text('Role')),
-                    DataColumn(label: Text('Status')),
-                    DataColumn(label: Text('Actions')),
-                  ],
-                  source: _UsersDataTableSource(
-                    _filteredAdmins,
-                    onAction: _handleUserAction,
+                  const SizedBox(height: 12),
+                  Theme(
+                    data: Theme.of(context).copyWith(
+                      cardColor: Colors.white,
+                      dividerColor: Colors.grey.shade200,
+                    ),
+                    child: PaginatedDataTable(
+                      header: Row(
+                        children: [
+                          Text(
+                            'Registered Users (${_filteredCitizens.length})',
+                            style: GoogleFonts.montserrat(
+                              fontSize: 16,
+                              fontWeight: FontWeight.bold,
+                              color: AppColors.onSurface,
+                            ),
+                          ),
+                          const Spacer(),
+                          IconButton(
+                            icon: const Icon(Icons.refresh),
+                            tooltip: 'Refresh',
+                            onPressed: _fetchUsers,
+                          ),
+                        ],
+                      ),
+                      rowsPerPage: 10,
+                      showFirstLastButtons: true,
+                      columns: const [
+                        DataColumn(label: Text('Avatar')),
+                        DataColumn(label: Text('Name')),
+                        DataColumn(label: Text('Email')),
+                        DataColumn(label: Text('Phone')),
+                        DataColumn(label: Text('Barangay')),
+                        DataColumn(label: Text('Role')),
+                        DataColumn(label: Text('Status')),
+                        DataColumn(label: Text('Actions')),
+                      ],
+                      source: _UsersDataTableSource(
+                        _filteredCitizens,
+                        onAction: _handleUserAction,
+                      ),
+                    ),
                   ),
-                ),
+                ],
+              ),
+            ),
+          )
+        else
+          // ── 2. Barangay Administrators Section Card (Super Admin only) ──
+          Card(
+            elevation: 0,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(16),
+              side: BorderSide(color: Colors.grey.shade200),
+            ),
+            color: Colors.white,
+            clipBehavior: Clip.antiAlias,
+            child: Padding(
+              padding: const EdgeInsets.only(top: 16),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 20),
+                    child: Row(
+                      children: [
+                        Expanded(child: _buildSearchBar()),
+                        const SizedBox(width: 16),
+                        _buildFilterPills(),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  Theme(
+                    data: Theme.of(context).copyWith(
+                      cardColor: Colors.white,
+                      dividerColor: Colors.grey.shade200,
+                    ),
+                    child: PaginatedDataTable(
+                      header: Row(
+                        children: [
+                          Container(
+                            padding: const EdgeInsets.all(6),
+                            decoration: BoxDecoration(
+                              color: const Color(0xFF00796B).withOpacity(0.12),
+                              borderRadius: BorderRadius.circular(8),
+                            ),
+                            child: const Icon(
+                              Icons.shield_rounded,
+                              color: Color(0xFF00796B),
+                              size: 18,
+                            ),
+                          ),
+                          const SizedBox(width: 10),
+                          Text(
+                            'Barangay Administrators (${_filteredAdmins.length})',
+                            style: GoogleFonts.montserrat(
+                              fontSize: 16,
+                              fontWeight: FontWeight.bold,
+                              color: AppColors.onSurface,
+                            ),
+                          ),
+                          const Spacer(),
+                          ElevatedButton.icon(
+                            onPressed: _showAddAdminModal,
+                            icon: const Icon(Icons.add, size: 16),
+                            label: Text(
+                              'Add Admin',
+                              style: GoogleFonts.inter(
+                                fontWeight: FontWeight.bold,
+                                fontSize: 13,
+                              ),
+                            ),
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: const Color(0xFF00796B),
+                              foregroundColor: Colors.white,
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 16,
+                                vertical: 10,
+                              ),
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(8),
+                              ),
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          IconButton(
+                            icon: const Icon(Icons.refresh),
+                            tooltip: 'Refresh',
+                            onPressed: _fetchUsers,
+                          ),
+                        ],
+                      ),
+                      rowsPerPage: 10,
+                      showFirstLastButtons: true,
+                      columns: const [
+                        DataColumn(label: Text('Avatar')),
+                        DataColumn(label: Text('Name')),
+                        DataColumn(label: Text('Email')),
+                        DataColumn(label: Text('Phone')),
+                        DataColumn(label: Text('Barangay')),
+                        DataColumn(label: Text('Role')),
+                        DataColumn(label: Text('Status')),
+                        DataColumn(label: Text('Actions')),
+                      ],
+                      source: _UsersDataTableSource(
+                        _filteredAdmins,
+                        onAction: _handleUserAction,
+                      ),
+                    ),
+                  ),
+                ],
               ),
             ),
           ),
-        ],
       ],
     );
   }
@@ -804,58 +959,67 @@ class _UserManagementScreenState extends State<UserManagementScreen> {
   // ─── NARROW / MOBILE LAYOUT ────────────────────────────────────────────────
 
   Widget _buildNarrowLayout() {
-    final showAdmins =
-        _currentUserRole == UserRole.superAdmin && _barangayAdmins.isNotEmpty;
+    final isSuperAdmin = _currentUserRole == UserRole.superAdmin;
+    final showAdmins = isSuperAdmin && _selectedUserTypeTab == 1;
 
     return ListView(
       padding: const EdgeInsets.fromLTRB(20, 16, 20, 100),
       children: [
-        // ── TOP PART: Registered Users ──
-        _buildUsersSectionHeader(),
-        const SizedBox(height: 14),
-        _buildSearchBar(),
-        const SizedBox(height: 12),
-        _buildFilterPills(),
-        const SizedBox(height: 16),
-        if (_filteredCitizens.isEmpty)
-          Padding(
-            padding: const EdgeInsets.symmetric(vertical: 32),
-            child: Center(
-              child: Column(
-                children: [
-                  Icon(Icons.people_outline_rounded,
-                      size: 48, color: Colors.grey.shade300),
-                  const SizedBox(height: 12),
-                  Text(
-                    'No users found.',
-                    style: GoogleFonts.inter(
-                        color: AppColors.onSurfaceVariant.withOpacity(0.5)),
-                  ),
-                ],
+        if (isSuperAdmin) _buildRoleSegmentedSwitcher(),
+        if (!showAdmins) ...[
+          // ── Registered Citizen Users ──
+          _buildUsersSectionHeader(),
+          const SizedBox(height: 14),
+          _buildSearchBar(),
+          const SizedBox(height: 12),
+          _buildFilterPills(),
+          const SizedBox(height: 16),
+          if (_filteredCitizens.isEmpty)
+            Padding(
+              padding: const EdgeInsets.symmetric(vertical: 32),
+              child: Center(
+                child: Column(
+                  children: [
+                    Icon(Icons.people_outline_rounded,
+                        size: 48, color: Colors.grey.shade300),
+                    const SizedBox(height: 12),
+                    Text(
+                      'No users found.',
+                      style: GoogleFonts.inter(
+                          color: AppColors.onSurfaceVariant.withOpacity(0.5)),
+                    ),
+                  ],
+                ),
               ),
-            ),
-          )
-        else
-          ..._filteredCitizens.map((u) => Padding(
-                padding: const EdgeInsets.only(bottom: 10),
-                child: _buildUserCard(u, isCompact: false),
-              )),
-
-        // ── BOTTOM PART: Barangay Admins (Super Admin Only) ──
-        if (showAdmins) ...[
-          const SizedBox(height: 32),
-          const Divider(height: 1, color: AppColors.surfaceContainer),
-          const SizedBox(height: 24),
+            )
+          else
+            ..._filteredCitizens.map((u) => Padding(
+                  padding: const EdgeInsets.only(bottom: 10),
+                  child: _buildUserCard(u, isCompact: false),
+                )),
+        ] else ...[
+          // ── Barangay Administrators ──
           _buildAdminsSectionHeader(),
+          const SizedBox(height: 14),
+          _buildSearchBar(),
+          const SizedBox(height: 12),
+          _buildFilterPills(),
           const SizedBox(height: 16),
           if (_filteredAdmins.isEmpty)
             Padding(
-              padding: const EdgeInsets.symmetric(vertical: 24),
+              padding: const EdgeInsets.symmetric(vertical: 32),
               child: Center(
-                child: Text(
-                  'No administrators found.',
-                  style: GoogleFonts.inter(
-                      color: AppColors.onSurfaceVariant.withOpacity(0.5)),
+                child: Column(
+                  children: [
+                    Icon(Icons.shield_outlined,
+                        size: 48, color: Colors.grey.shade300),
+                    const SizedBox(height: 12),
+                    Text(
+                      'No administrators found.',
+                      style: GoogleFonts.inter(
+                          color: AppColors.onSurfaceVariant.withOpacity(0.5)),
+                    ),
+                  ],
                 ),
               ),
             )
@@ -872,66 +1036,79 @@ class _UserManagementScreenState extends State<UserManagementScreen> {
   // ─── WIDE / DESKTOP LAYOUT ─────────────────────────────────────────────────
 
   Widget _buildWideLayout() {
-    final showAdmins =
-        _currentUserRole == UserRole.superAdmin && _barangayAdmins.isNotEmpty;
+    final isSuperAdmin = _currentUserRole == UserRole.superAdmin;
+    final showAdmins = isSuperAdmin && _selectedUserTypeTab == 1;
 
     return SingleChildScrollView(
       padding: const EdgeInsets.fromLTRB(20, 20, 20, 40),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // ── TOP PART: Registered Users ──
-          _buildUsersSectionHeader(),
-          const SizedBox(height: 16),
-          Row(
-            children: [
-              Expanded(child: _buildSearchBar()),
-              const SizedBox(width: 16),
-              _buildFilterPills(),
-            ],
-          ),
-          const SizedBox(height: 16),
-          if (_filteredCitizens.isEmpty)
-            Padding(
-              padding: const EdgeInsets.symmetric(vertical: 40),
-              child: Center(
-                child: Column(
-                  children: [
-                    Icon(Icons.people_outline_rounded,
-                        size: 52, color: Colors.grey.shade300),
-                    const SizedBox(height: 12),
-                    Text(
-                      'No users found matching your query.',
-                      style: GoogleFonts.inter(
-                          fontSize: 14,
-                          color: AppColors.onSurfaceVariant.withOpacity(0.5)),
-                    ),
-                  ],
+          if (isSuperAdmin) _buildRoleSegmentedSwitcher(),
+          if (!showAdmins) ...[
+            // ── Registered Citizen Users ──
+            _buildUsersSectionHeader(),
+            const SizedBox(height: 16),
+            Row(
+              children: [
+                Expanded(child: _buildSearchBar()),
+                const SizedBox(width: 16),
+                _buildFilterPills(),
+              ],
+            ),
+            const SizedBox(height: 16),
+            if (_filteredCitizens.isEmpty)
+              Padding(
+                padding: const EdgeInsets.symmetric(vertical: 40),
+                child: Center(
+                  child: Column(
+                    children: [
+                      Icon(Icons.people_outline_rounded,
+                          size: 52, color: Colors.grey.shade300),
+                      const SizedBox(height: 12),
+                      Text(
+                        'No users found matching your query.',
+                        style: GoogleFonts.inter(
+                            fontSize: 14,
+                            color: AppColors.onSurfaceVariant.withOpacity(0.5)),
+                      ),
+                    ],
+                  ),
                 ),
-              ),
-            )
-          else
-            ..._filteredCitizens.map((u) => Padding(
-                  padding: const EdgeInsets.only(bottom: 10),
-                  child: _buildUserCard(u, isCompact: true),
-                )),
-
-          // ── BOTTOM PART: Barangay Admins (Super Admin Only) ──
-          if (showAdmins) ...[
-            const SizedBox(height: 40),
-            const Divider(height: 1, color: AppColors.surfaceContainer),
-            const SizedBox(height: 28),
+              )
+            else
+              ..._filteredCitizens.map((u) => Padding(
+                    padding: const EdgeInsets.only(bottom: 10),
+                    child: _buildUserCard(u, isCompact: true),
+                  )),
+          ] else ...[
+            // ── Barangay Administrators ──
             _buildAdminsSectionHeader(),
+            const SizedBox(height: 16),
+            Row(
+              children: [
+                Expanded(child: _buildSearchBar()),
+                const SizedBox(width: 16),
+                _buildFilterPills(),
+              ],
+            ),
             const SizedBox(height: 16),
             if (_filteredAdmins.isEmpty)
               Padding(
-                padding: const EdgeInsets.symmetric(vertical: 32),
+                padding: const EdgeInsets.symmetric(vertical: 40),
                 child: Center(
-                  child: Text(
-                    'No administrators found matching your search.',
-                    style: GoogleFonts.inter(
-                        fontSize: 14,
-                        color: AppColors.onSurfaceVariant.withOpacity(0.5)),
+                  child: Column(
+                    children: [
+                      Icon(Icons.shield_outlined,
+                          size: 52, color: Colors.grey.shade300),
+                      const SizedBox(height: 12),
+                      Text(
+                        'No administrators found matching your search.',
+                        style: GoogleFonts.inter(
+                            fontSize: 14,
+                            color: AppColors.onSurfaceVariant.withOpacity(0.5)),
+                      ),
+                    ],
                   ),
                 ),
               )
@@ -1042,6 +1219,31 @@ class _UserManagementScreenState extends State<UserManagementScreen> {
           ),
         ),
         const SizedBox(width: 8),
+        ElevatedButton.icon(
+          onPressed: _showAddAdminModal,
+          icon: const Icon(Icons.add, size: 14),
+          label: Text(
+            'Add Admin',
+            style: GoogleFonts.inter(
+              fontWeight: FontWeight.w600,
+              fontSize: 12,
+            ),
+          ),
+          style: ElevatedButton.styleFrom(
+            backgroundColor: const Color(0xFF00796B),
+            foregroundColor: Colors.white,
+            padding: const EdgeInsets.symmetric(
+              horizontal: 12,
+              vertical: 8,
+            ),
+            minimumSize: Size.zero,
+            tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(8),
+            ),
+          ),
+        ),
+        const SizedBox(width: 8),
         Container(
           padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
           decoration: BoxDecoration(
@@ -1069,7 +1271,9 @@ class _UserManagementScreenState extends State<UserManagementScreen> {
       style: GoogleFonts.inter(fontSize: 14, color: AppColors.onSurface),
       decoration: InputDecoration(
         prefixIcon: const Icon(Icons.search, color: AppColors.outline),
-        hintText: 'Search by name, email, or barangay...',
+        hintText: _selectedUserTypeTab == 1
+            ? 'Search admins by name, email, or barangay...'
+            : 'Search users by name, email, or barangay...',
         hintStyle: GoogleFonts.inter(
             fontSize: 14, color: AppColors.onSurfaceVariant.withOpacity(0.5)),
         filled: true,
@@ -1083,15 +1287,29 @@ class _UserManagementScreenState extends State<UserManagementScreen> {
   }
 
   Widget _buildFilterPills() {
+    final filters = [
+      _selectedUserTypeTab == 1 ? 'All Admins' : 'All Users',
+      'Active',
+      'Unverified',
+      'Deactivated',
+    ];
+
     return SizedBox(
       height: 38,
       child: ListView.separated(
         scrollDirection: Axis.horizontal,
         shrinkWrap: true,
-        itemCount: _filters.length,
+        itemCount: filters.length,
         separatorBuilder: (_, __) => const SizedBox(width: 8),
         itemBuilder: (_, i) {
           final active = i == _filterIndex;
+          final activeColor = _selectedUserTypeTab == 1
+              ? const Color(0xFF00796B)
+              : AppColors.primary;
+          final activeContainer = _selectedUserTypeTab == 1
+              ? const Color(0xFF00796B).withOpacity(0.15)
+              : AppColors.primaryContainer;
+
           return GestureDetector(
             onTap: () => setState(() => _filterIndex = i),
             child: AnimatedContainer(
@@ -1099,7 +1317,7 @@ class _UserManagementScreenState extends State<UserManagementScreen> {
               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
               decoration: BoxDecoration(
                 color: active
-                    ? AppColors.primaryContainer
+                    ? activeContainer
                     : AppColors.surfaceContainerHigh,
                 borderRadius: BorderRadius.circular(999),
                 border: Border.all(
@@ -1109,18 +1327,18 @@ class _UserManagementScreenState extends State<UserManagementScreen> {
                 boxShadow: active
                     ? [
                         BoxShadow(
-                            color: AppColors.primaryContainer.withOpacity(0.25),
+                            color: activeColor.withOpacity(0.25),
                             blurRadius: 8)
                       ]
                     : [],
               ),
               child: Text(
-                _filters[i],
+                filters[i],
                 style: GoogleFonts.inter(
                   fontSize: 12,
                   fontWeight: FontWeight.w600,
                   color: active
-                      ? AppColors.onPrimaryContainer
+                      ? activeColor
                       : AppColors.onSurfaceVariant,
                 ),
               ),
@@ -1526,6 +1744,8 @@ class _UserManagementScreenState extends State<UserManagementScreen> {
       ),
       child: Row(
         children: [
+          AppConstants.buildLogoGraphic(size: 24),
+          const SizedBox(width: 8),
           Text(
             'User Management',
             style: GoogleFonts.montserrat(

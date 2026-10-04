@@ -71,6 +71,7 @@ class PetEmbeddingService {
 
   /// Web stub — re-embedding is not available on web (TFLite unavailable).
   Future<int> reEmbedAllPets({
+    bool forceAll = false,
     void Function(int done, int total)? onProgress,
   }) async {
     debugPrint('[PetTrace] reEmbedAllPets: not available on web.');

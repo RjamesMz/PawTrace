@@ -7,6 +7,7 @@ import 'package:flutter_map/flutter_map.dart';
 import 'package:latlong2/latlong.dart' as ll;
 
 import '../../core/app_colors.dart';
+import '../../core/app_constants.dart';
 import '../../core/app_toast.dart';
 import 'lost_pet_detail_screen.dart';
 
@@ -21,61 +22,97 @@ class LostPetScreen extends StatefulWidget {
 class _LostPetScreenState extends State<LostPetScreen> {
   List<Map<String, dynamic>> _lostPetsList = [];
   bool _isLoading = true;
+  final TextEditingController _searchCtrl = TextEditingController();
 
-  // 0 = Recent (last 48h), 1 = This Week, 2 = This Month
+  // 0 = Recent (last 48h), 1 = This Week, 2 = This Month, 3 = Archived
   int _filterIndex = 0;
 
-  static const List<String> _filterLabels = ['Recent', 'This Week', 'This Month', 'Dog', 'Cat', 'Archived'];
+  static const List<String> _filterLabels = [
+    'Recent',
+    'This Week',
+    'This Month',
+    'Archived',
+  ];
+
+  @override
+  void dispose() {
+    _searchCtrl.dispose();
+    super.dispose();
+  }
 
   List<Map<String, dynamic>> get _filtered {
-    if (_filterIndex == 5) {
+    List<Map<String, dynamic>> list;
+    if (_filterIndex == 3) {
       // Archived reports
-      return _lostPetsList.where((r) {
+      list = _lostPetsList.where((r) {
         final st = (r['status'] ?? '').toString().toLowerCase();
         return st == 'archived' || st == 'resolved';
       }).toList();
-    }
+    } else {
+      // Active reports for emergency feeds:
+      final activeList = _lostPetsList.where((r) {
+        final st = (r['status'] ?? 'active').toString().toLowerCase();
+        return st == 'active';
+      }).toList();
 
-    // Active reports for emergency feeds:
-    final activeList = _lostPetsList.where((r) {
-      final st = (r['status'] ?? 'active').toString().toLowerCase();
-      return st == 'active';
-    }).toList();
-
-    final now = DateTime.now();
-    DateTime cutoff;
-    switch (_filterIndex) {
-      case 1: // This Week — last 7 days
-        cutoff = now.subtract(const Duration(days: 7));
-        break;
-      case 2: // This Month — last 30 days
-        cutoff = now.subtract(const Duration(days: 30));
-        break;
-      case 3: // Dog
-        return activeList.where((r) {
-          final pet = r['pets'];
-          final petSpecies = pet is Map ? (pet['species'] ?? '').toString().trim().toLowerCase() : '';
-          final rSpecies = (r['species'] ?? '').toString().trim().toLowerCase();
-          return petSpecies == 'dog' || rSpecies == 'dog';
-        }).toList();
-      case 4: // Cat
-        return activeList.where((r) {
-          final pet = r['pets'];
-          final petSpecies = pet is Map ? (pet['species'] ?? '').toString().trim().toLowerCase() : '';
-          final rSpecies = (r['species'] ?? '').toString().trim().toLowerCase();
-          return petSpecies == 'cat' || rSpecies == 'cat';
-        }).toList();
-      default: // Recent — last 48 hours
-        cutoff = now.subtract(const Duration(hours: 48));
-    }
-    return activeList.where((r) {
-      final ts = r['reported_at']?.toString() ?? '';
-      if (ts.isEmpty) return true;
-      try {
-        return DateTime.parse(ts).isAfter(cutoff);
-      } catch (_) {
-        return true;
+      final now = DateTime.now();
+      DateTime cutoff;
+      switch (_filterIndex) {
+        case 1: // This Week — last 7 days
+          cutoff = now.subtract(const Duration(days: 7));
+          break;
+        case 2: // This Month — last 30 days
+          cutoff = now.subtract(const Duration(days: 30));
+          break;
+        default: // Recent — last 48 hours
+          cutoff = now.subtract(const Duration(hours: 48));
       }
+      list = activeList.where((r) {
+        final ts = r['reported_at']?.toString() ?? '';
+        if (ts.isEmpty) return true;
+        try {
+          return DateTime.parse(ts).isAfter(cutoff);
+        } catch (_) {
+          return true;
+        }
+      }).toList();
+    }
+
+    final query = _searchCtrl.text.trim().toLowerCase();
+    if (query.isEmpty) return list;
+
+    return list.where((r) {
+      final pet = r['pets'];
+      final petMap = pet is Map ? pet : null;
+
+      final name =
+          (petMap?['name'] ?? r['pet_name'] ?? '').toString().toLowerCase();
+      final species =
+          (petMap?['species'] ?? r['species'] ?? '').toString().toLowerCase();
+      final breed =
+          (petMap?['breed'] ?? r['breed'] ?? '').toString().toLowerCase();
+      final address = (r['last_seen_address'] ?? r['barangay'] ?? '')
+          .toString()
+          .toLowerCase();
+      final desc =
+          (r['description'] ?? petMap?['description'] ?? '').toString().toLowerCase();
+
+      final owner = r['owner_id'] is Map
+          ? r['owner_id'] as Map
+          : (r['users'] is Map ? r['users'] as Map : null);
+      final ownerName = owner != null
+          ? [owner['first_name'], owner['surname']]
+              .where((s) => s != null)
+              .join(' ')
+              .toLowerCase()
+          : '';
+
+      return name.contains(query) ||
+          species.contains(query) ||
+          breed.contains(query) ||
+          address.contains(query) ||
+          desc.contains(query) ||
+          ownerName.contains(query);
     }).toList();
   }
 
@@ -123,10 +160,18 @@ class _LostPetScreenState extends State<LostPetScreen> {
               child: CustomScrollView(
                 slivers: [
 
-          // ── Time-filter pill row ────────────────────────────────────────
+          // ── Search Bar on top of pills ──────────────────────────────────
           SliverToBoxAdapter(
             child: Padding(
               padding: const EdgeInsets.fromLTRB(20, 16, 20, 4),
+              child: _buildSearchBar(),
+            ),
+          ),
+
+          // ── Time-filter pill row ────────────────────────────────────────
+          SliverToBoxAdapter(
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(20, 12, 20, 4),
               child: SizedBox(
                 height: 38,
                 child: ListView.separated(
@@ -196,9 +241,12 @@ class _LostPetScreenState extends State<LostPetScreen> {
                       Icon(Icons.search_off_rounded, size: 48, color: AppColors.onSurfaceVariant.withOpacity(0.3)),
                       const SizedBox(height: 12),
                       Text(
-                        'No reports for this period.',
+                        _searchCtrl.text.trim().isNotEmpty
+                            ? 'No lost pets found matching "${_searchCtrl.text.trim()}".'
+                            : 'No reports for this period.',
+                        textAlign: TextAlign.center,
                         style: GoogleFonts.inter(
-                          color: AppColors.onSurfaceVariant.withOpacity(0.5),
+                          color: AppColors.onSurfaceVariant.withOpacity(0.6),
                           fontSize: 14,
                         ),
                       ),
@@ -229,6 +277,68 @@ class _LostPetScreenState extends State<LostPetScreen> {
     );
   }
 
+  Widget _buildSearchBar() {
+    return Container(
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(16),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.04),
+            blurRadius: 10,
+            offset: const Offset(0, 2),
+          ),
+        ],
+      ),
+      child: TextField(
+        controller: _searchCtrl,
+        onChanged: (_) => setState(() {}),
+        style: GoogleFonts.inter(fontSize: 14, color: AppColors.onSurface),
+        decoration: InputDecoration(
+          prefixIcon: const Icon(Icons.search_rounded,
+              color: AppColors.primaryContainer, size: 22),
+          suffixIcon: _searchCtrl.text.isNotEmpty
+              ? IconButton(
+                  icon: const Icon(Icons.clear_rounded,
+                      size: 18, color: AppColors.onSurfaceVariant),
+                  onPressed: () {
+                    _searchCtrl.clear();
+                    setState(() {});
+                  },
+                )
+              : null,
+          hintText: 'Search by name, species, breed, location...',
+          hintStyle: GoogleFonts.inter(
+              fontSize: 13,
+              color: AppColors.onSurfaceVariant.withOpacity(0.55)),
+          filled: true,
+          fillColor: Colors.white,
+          border: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(16),
+            borderSide: BorderSide(
+              color: AppColors.outlineVariant.withOpacity(0.2),
+            ),
+          ),
+          enabledBorder: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(16),
+            borderSide: BorderSide(
+              color: AppColors.outlineVariant.withOpacity(0.2),
+            ),
+          ),
+          focusedBorder: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(16),
+            borderSide: const BorderSide(
+              color: AppColors.primaryContainer,
+              width: 1.5,
+            ),
+          ),
+          contentPadding:
+              const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+        ),
+      ),
+    );
+  }
+
   Widget _buildHeader(BuildContext context) {
     return Container(
       height: 64 + MediaQuery.of(context).padding.top,
@@ -239,6 +349,8 @@ class _LostPetScreenState extends State<LostPetScreen> {
       ),
       child: Row(
         children: [
+          AppConstants.buildLogoGraphic(size: 26),
+          const SizedBox(width: 10),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,

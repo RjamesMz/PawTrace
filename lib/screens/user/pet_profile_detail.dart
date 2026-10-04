@@ -102,13 +102,25 @@ class _PetProfileDetailScreenState extends State<PetProfileDetailScreen> {
 
       // Soft delete: Update status to 'archived' in Supabase
       // Preserves photo, medical/biometric records, and audit history
-      await Supabase.instance.client
-          .from('pets')
-          .update({
-            'status': 'archived',
-            'collar_id': null, // Unpair collar so it can be reused
-          })
-          .eq('pet_id', petId);
+      try {
+        await Supabase.instance.client
+            .from('pets')
+            .update({
+              'status': 'archived',
+              'collar_id': null, // Unpair collar so it can be reused
+              'archive_reason': reason,
+            })
+            .eq('pet_id', petId);
+      } catch (_) {
+        // Fallback if archive_reason column doesn't exist yet
+        await Supabase.instance.client
+            .from('pets')
+            .update({
+              'status': 'archived',
+              'collar_id': null,
+            })
+            .eq('pet_id', petId);
+      }
 
       // Soft-archive any active lost reports for this pet (preserve data history)
       await Supabase.instance.client
@@ -448,6 +460,29 @@ class _PetProfileDetailScreenState extends State<PetProfileDetailScreen> {
 
 
   Widget _buildIdentityHeader(String name, String breed, String species, String status) {
+    final upperStatus = status.toUpperCase().trim();
+    Color bg;
+    Color fg;
+    switch (upperStatus) {
+      case 'ARCHIVED':
+        bg = const Color(0xFFF1F5F9);
+        fg = const Color(0xFF64748B);
+        break;
+      case 'LOST':
+        bg = AppColors.errorContainer;
+        fg = AppColors.error;
+        break;
+      case 'FOUND':
+        bg = const Color(0xFFE0F2FE);
+        fg = const Color(0xFF0369A1);
+        break;
+      case 'ACTIVE':
+      default:
+        bg = const Color(0xFFD1FAE5);
+        fg = const Color(0xFF065F46);
+        break;
+    }
+
     return Row(
       mainAxisAlignment: MainAxisAlignment.spaceBetween,
       children: [
@@ -461,15 +496,16 @@ class _PetProfileDetailScreenState extends State<PetProfileDetailScreen> {
         Container(
           padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 5),
           decoration: BoxDecoration(
-            color: status == 'LOST' ? AppColors.errorContainer : AppColors.primaryContainer,
+            color: bg,
             borderRadius: BorderRadius.circular(999),
+            border: Border.all(color: fg.withOpacity(0.25)),
           ),
           child: Text(
-            status,
+            upperStatus.isNotEmpty ? upperStatus : 'ACTIVE',
             style: GoogleFonts.inter(
               fontSize: 11,
               fontWeight: FontWeight.w700,
-              color: status == 'LOST' ? AppColors.error : AppColors.onPrimaryContainer,
+              color: fg,
               letterSpacing: 0.5,
             ),
           ),
@@ -590,7 +626,62 @@ class _PetProfileDetailScreenState extends State<PetProfileDetailScreen> {
   }
 
   Widget _buildActionButtons(BuildContext context, Map<String, dynamic> pet) {
-    final isLost = (pet['status'] ?? '').toString().toLowerCase() == 'lost';
+    final status = (pet['status'] ?? '').toString().toLowerCase();
+    final isLost = status == 'lost';
+    final isArchived = status == 'archived';
+
+    if (isArchived) {
+      final reason = (pet['archive_reason'] ?? pet['reason'] ?? '').toString().trim();
+      return Container(
+        width: double.infinity,
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          color: const Color(0xFFF8FAFC),
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(color: const Color(0xFFE2E8F0)),
+        ),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Container(
+              padding: const EdgeInsets.all(8),
+              decoration: BoxDecoration(
+                color: const Color(0xFFE2E8F0),
+                borderRadius: BorderRadius.circular(10),
+              ),
+              child: const Icon(Icons.archive_outlined, color: Color(0xFF475569), size: 20),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'Archived Pet Profile',
+                    style: GoogleFonts.montserrat(
+                      fontSize: 14,
+                      fontWeight: FontWeight.w700,
+                      color: const Color(0xFF334155),
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    reason.isNotEmpty
+                        ? 'Reason: $reason\nThis pet profile has been archived. Biometric records and medical history are safely preserved.'
+                        : 'This pet profile has been archived and removed from active pets. Historical records and biometrics remain preserved.',
+                    style: GoogleFonts.inter(
+                      fontSize: 12,
+                      color: const Color(0xFF64748B),
+                      height: 1.4,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      );
+    }
 
     return Column(
       children: [
@@ -671,6 +762,9 @@ class _PetProfileDetailScreenState extends State<PetProfileDetailScreen> {
   }
 
   Widget _buildSecondaryActions(Map<String, dynamic> pet) {
+    final isArchived = (pet['status'] ?? '').toString().toLowerCase() == 'archived';
+    if (isArchived) return const SizedBox.shrink();
+
     return Column(
       children: [
         const Divider(color: Color(0xFFDDC1AE), thickness: 0.5),

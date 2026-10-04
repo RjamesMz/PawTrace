@@ -6,6 +6,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 
 import 'core/app_constants.dart';
 import 'core/app_routes.dart';
+import 'core/app_toast.dart';
 import 'widgets/main_app_layout.dart';
 import 'core/app_theme.dart';
 import 'core/supabase_config.dart';
@@ -39,6 +40,10 @@ void main() async {
     anonKey: supabaseAnonKey,
   );
 
+  // Clear image cache so updated logos/assets reload cleanly on hot restart
+  PaintingBinding.instance.imageCache.clear();
+  PaintingBinding.instance.imageCache.clearLiveImages();
+
   // Lock portrait orientation for mobile-first experience (not on web)
   if (!kIsWeb) {
     await SystemChrome.setPreferredOrientations([
@@ -71,6 +76,7 @@ class PetTraceApp extends StatelessWidget {
   Widget build(BuildContext context) {
     return MaterialApp(
       navigatorKey: rootNavigatorKey,
+      scaffoldMessengerKey: rootScaffoldMessengerKey,
       title: AppConstants.appName,
       debugShowCheckedModeBanner: false,
       theme: AppTheme.light,
