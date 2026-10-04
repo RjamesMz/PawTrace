@@ -229,11 +229,8 @@ class _SplashLoader extends StatelessWidget {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            AppConstants.buildLogoBadge(
-              size: 80,
-              iconSize: 40,
-              backgroundColor: AppColors.primaryContainer,
-              iconColor: AppColors.onPrimaryContainer,
+            AppConstants.buildLogoGraphic(
+              size: 96,
             ),
             const SizedBox(height: 24),
             const CircularProgressIndicator(color: AppColors.primary, strokeWidth: 2.5),

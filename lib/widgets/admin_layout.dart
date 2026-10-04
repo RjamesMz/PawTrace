@@ -95,8 +95,18 @@ class _AdminLayoutState extends State<AdminLayout> {
   String _formattedDate() {
     final now = DateTime.now();
     const months = [
-      'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
-      'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'
+      'Jan',
+      'Feb',
+      'Mar',
+      'Apr',
+      'May',
+      'Jun',
+      'Jul',
+      'Aug',
+      'Sep',
+      'Oct',
+      'Nov',
+      'Dec'
     ];
     const weekdays = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
     final wd = weekdays[now.weekday - 1];
@@ -201,7 +211,8 @@ class _AdminLayoutState extends State<AdminLayout> {
           InkWell(
             onTap: () {
               if (widget.currentIndex != 5) {
-                Navigator.pushReplacementNamed(context, AppRoutes.adminSettings);
+                Navigator.pushReplacementNamed(
+                    context, AppRoutes.adminSettings);
               }
             },
             borderRadius: BorderRadius.circular(20),

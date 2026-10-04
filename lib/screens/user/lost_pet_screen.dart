@@ -94,8 +94,9 @@ class _LostPetScreenState extends State<LostPetScreen> {
       final address = (r['last_seen_address'] ?? r['barangay'] ?? '')
           .toString()
           .toLowerCase();
-      final desc =
-          (r['description'] ?? petMap?['description'] ?? '').toString().toLowerCase();
+      final desc = (r['description'] ?? petMap?['description'] ?? '')
+          .toString()
+          .toLowerCase();
 
       final owner = r['owner_id'] is Map
           ? r['owner_id'] as Map
@@ -159,115 +160,125 @@ class _LostPetScreenState extends State<LostPetScreen> {
             Expanded(
               child: CustomScrollView(
                 slivers: [
-
-          // ── Search Bar on top of pills ──────────────────────────────────
-          SliverToBoxAdapter(
-            child: Padding(
-              padding: const EdgeInsets.fromLTRB(20, 16, 20, 4),
-              child: _buildSearchBar(),
-            ),
-          ),
-
-          // ── Time-filter pill row ────────────────────────────────────────
-          SliverToBoxAdapter(
-            child: Padding(
-              padding: const EdgeInsets.fromLTRB(20, 12, 20, 4),
-              child: SizedBox(
-                height: 38,
-                child: ListView.separated(
-                  scrollDirection: Axis.horizontal,
-                  itemCount: _filterLabels.length,
-                  separatorBuilder: (_, __) => const SizedBox(width: 8),
-                  itemBuilder: (_, i) {
-                    final active = i == _filterIndex;
-                    return GestureDetector(
-                      onTap: () => setState(() => _filterIndex = i),
-                      child: AnimatedContainer(
-                        duration: const Duration(milliseconds: 200),
-                        padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 8),
-                        decoration: BoxDecoration(
-                          color: active
-                              ? AppColors.primaryContainer
-                              : AppColors.surfaceContainerHighest,
-                          borderRadius: BorderRadius.circular(999),
-                          border: Border.all(
-                            color: active
-                                ? Colors.transparent
-                                : AppColors.outlineVariant.withOpacity(0.2),
-                          ),
-                          boxShadow: active
-                              ? [
-                                  BoxShadow(
-                                    color: AppColors.primaryContainer.withOpacity(0.30),
-                                    blurRadius: 8,
-                                    offset: const Offset(0, 3),
-                                  )
-                                ]
-                              : [],
-                        ),
-                        child: Text(
-                          _filterLabels[i],
-                          style: GoogleFonts.inter(
-                            fontSize: 12,
-                            fontWeight: FontWeight.w700,
-                            color: active
-                                ? AppColors.onPrimaryContainer
-                                : AppColors.onSurfaceVariant,
-                          ),
-                        ),
-                      ),
-                    );
-                  },
-                ),
-              ),
-            ),
-          ),
-
-          // ── Content ────────────────────────────────────────────────────
-          if (_isLoading)
-            const SliverToBoxAdapter(
-              child: Padding(
-                padding: EdgeInsets.all(40),
-                child: Center(child: CircularProgressIndicator(color: AppColors.primaryContainer)),
-              ),
-            )
-          else if (displayList.isEmpty)
-            SliverToBoxAdapter(
-              child: Padding(
-                padding: const EdgeInsets.symmetric(vertical: 60, horizontal: 40),
-                child: Center(
-                  child: Column(
-                    children: [
-                      Icon(Icons.search_off_rounded, size: 48, color: AppColors.onSurfaceVariant.withOpacity(0.3)),
-                      const SizedBox(height: 12),
-                      Text(
-                        _searchCtrl.text.trim().isNotEmpty
-                            ? 'No lost pets found matching "${_searchCtrl.text.trim()}".'
-                            : 'No reports for this period.',
-                        textAlign: TextAlign.center,
-                        style: GoogleFonts.inter(
-                          color: AppColors.onSurfaceVariant.withOpacity(0.6),
-                          fontSize: 14,
-                        ),
-                      ),
-                    ],
+                  // ── Search Bar on top of pills ──────────────────────────────────
+                  SliverToBoxAdapter(
+                    child: Padding(
+                      padding: const EdgeInsets.fromLTRB(20, 16, 20, 4),
+                      child: _buildSearchBar(),
+                    ),
                   ),
-                ),
-              ),
-            )
-          else
-            SliverList(
-              delegate: SliverChildBuilderDelegate(
-                (context, index) {
-                  final pet = displayList[index];
-                  return Padding(
-                    padding: EdgeInsets.fromLTRB(20, 0, 20, index == displayList.length - 1 ? 120 : 16),
-                    child: _LostPetCard(pet: pet),
-                  );
-                },
-                childCount: displayList.length,
-              ),
-            ),
+
+                  // ── Time-filter pill row ────────────────────────────────────────
+                  SliverToBoxAdapter(
+                    child: Padding(
+                      padding: const EdgeInsets.fromLTRB(20, 12, 20, 4),
+                      child: SizedBox(
+                        height: 38,
+                        child: ListView.separated(
+                          scrollDirection: Axis.horizontal,
+                          itemCount: _filterLabels.length,
+                          separatorBuilder: (_, __) => const SizedBox(width: 8),
+                          itemBuilder: (_, i) {
+                            final active = i == _filterIndex;
+                            return GestureDetector(
+                              onTap: () => setState(() => _filterIndex = i),
+                              child: AnimatedContainer(
+                                duration: const Duration(milliseconds: 200),
+                                padding: const EdgeInsets.symmetric(
+                                    horizontal: 18, vertical: 8),
+                                decoration: BoxDecoration(
+                                  color: active
+                                      ? AppColors.primaryContainer
+                                      : AppColors.surfaceContainerHighest,
+                                  borderRadius: BorderRadius.circular(999),
+                                  border: Border.all(
+                                    color: active
+                                        ? Colors.transparent
+                                        : AppColors.outlineVariant
+                                            .withOpacity(0.2),
+                                  ),
+                                  boxShadow: active
+                                      ? [
+                                          BoxShadow(
+                                            color: AppColors.primaryContainer
+                                                .withOpacity(0.30),
+                                            blurRadius: 8,
+                                            offset: const Offset(0, 3),
+                                          )
+                                        ]
+                                      : [],
+                                ),
+                                child: Text(
+                                  _filterLabels[i],
+                                  style: GoogleFonts.inter(
+                                    fontSize: 12,
+                                    fontWeight: FontWeight.w700,
+                                    color: active
+                                        ? AppColors.onPrimaryContainer
+                                        : AppColors.onSurfaceVariant,
+                                  ),
+                                ),
+                              ),
+                            );
+                          },
+                        ),
+                      ),
+                    ),
+                  ),
+
+                  // ── Content ────────────────────────────────────────────────────
+                  if (_isLoading)
+                    const SliverToBoxAdapter(
+                      child: Padding(
+                        padding: EdgeInsets.all(40),
+                        child: Center(
+                            child: CircularProgressIndicator(
+                                color: AppColors.primaryContainer)),
+                      ),
+                    )
+                  else if (displayList.isEmpty)
+                    SliverToBoxAdapter(
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(
+                            vertical: 60, horizontal: 40),
+                        child: Center(
+                          child: Column(
+                            children: [
+                              Icon(Icons.search_off_rounded,
+                                  size: 48,
+                                  color: AppColors.onSurfaceVariant
+                                      .withOpacity(0.3)),
+                              const SizedBox(height: 12),
+                              Text(
+                                _searchCtrl.text.trim().isNotEmpty
+                                    ? 'No lost pets found matching "${_searchCtrl.text.trim()}".'
+                                    : 'No reports for this period.',
+                                textAlign: TextAlign.center,
+                                style: GoogleFonts.inter(
+                                  color: AppColors.onSurfaceVariant
+                                      .withOpacity(0.6),
+                                  fontSize: 14,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    )
+                  else
+                    SliverList(
+                      delegate: SliverChildBuilderDelegate(
+                        (context, index) {
+                          final pet = displayList[index];
+                          return Padding(
+                            padding: EdgeInsets.fromLTRB(20, 0, 20,
+                                index == displayList.length - 1 ? 120 : 16),
+                            child: _LostPetCard(pet: pet),
+                          );
+                        },
+                        childCount: displayList.length,
+                      ),
+                    ),
                 ],
               ),
             ),
@@ -342,26 +353,36 @@ class _LostPetScreenState extends State<LostPetScreen> {
   Widget _buildHeader(BuildContext context) {
     return Container(
       height: 64 + MediaQuery.of(context).padding.top,
-      padding: EdgeInsets.fromLTRB(20, MediaQuery.of(context).padding.top, 20, 0),
+      padding:
+          EdgeInsets.fromLTRB(20, MediaQuery.of(context).padding.top, 20, 0),
       decoration: BoxDecoration(
         color: Colors.white,
-        boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.04), blurRadius: 8, offset: const Offset(0, 2))],
+        boxShadow: [
+          BoxShadow(
+              color: Colors.black.withOpacity(0.04),
+              blurRadius: 8,
+              offset: const Offset(0, 2))
+        ],
       ),
       child: Row(
         children: [
-          AppConstants.buildLogoGraphic(size: 26),
-          const SizedBox(width: 10),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                Text('Current Lost Pets', style: GoogleFonts.montserrat(fontSize: 18, fontWeight: FontWeight.w700, color: AppColors.onSurface)),
-                Text('${_filtered.length} of ${_lostPetsList.length} reports', style: GoogleFonts.inter(fontSize: 12, color: AppColors.onSurfaceVariant)),
+                Text('Lost Pets',
+                    style: GoogleFonts.montserrat(
+                        fontSize: 18,
+                        fontWeight: FontWeight.w700,
+                        color: AppColors.onSurface)),
               ],
             ),
           ),
-          IconButton(onPressed: _fetchLostPets, icon: const Icon(Icons.refresh_rounded, color: AppColors.onSurfaceVariant)),
+          IconButton(
+              onPressed: _fetchLostPets,
+              icon: const Icon(Icons.refresh_rounded,
+                  color: AppColors.onSurfaceVariant)),
         ],
       ),
     );
@@ -384,18 +405,26 @@ class _LostPetCard extends StatelessWidget {
 
     final petName = petData?['name'] as String? ?? 'Unknown';
     final breed = petData?['breed'] as String? ?? 'Unknown Breed';
-    final imageUrl = pet['photo_url'] as String? ?? petData?['photo_url'] as String? ?? '';
-    final rawAddress = pet['last_seen_address'] as String? ?? pet['barangay'] as String? ?? 'Calatagan';
-    final location = rawAddress.replaceAll(RegExp(r'\s*\(?Lat:\s*[-\d.]+,\s*Lng:\s*[-\d.]+\)?'), '').trim();
+    final imageUrl =
+        pet['photo_url'] as String? ?? petData?['photo_url'] as String? ?? '';
+    final rawAddress = pet['last_seen_address'] as String? ??
+        pet['barangay'] as String? ??
+        'Calatagan';
+    final location = rawAddress
+        .replaceAll(RegExp(r'\s*\(?Lat:\s*[-\d.]+,\s*Lng:\s*[-\d.]+\)?'), '')
+        .trim();
     final note = pet['description'] as String? ?? '';
     final timeAgo = _formatTimeAgo(pet['reported_at']);
     final status = (pet['status'] ?? 'active').toString().toLowerCase();
     final isArchived = status == 'archived' || status == 'resolved';
-    
+
     final ownerName = userData != null
-        ? [userData['first_name'], userData['middle_name'], userData['surname'], userData['suffix']]
-            .where((s) => s != null && s.toString().isNotEmpty)
-            .join(' ')
+        ? [
+            userData['first_name'],
+            userData['middle_name'],
+            userData['surname'],
+            userData['suffix']
+          ].where((s) => s != null && s.toString().isNotEmpty).join(' ')
         : 'Unknown Owner';
     final ownerPhone = (userData?['phone'] as String? ?? '').trim();
     final ownerEmail = (userData?['email'] as String? ?? '').trim();
@@ -412,7 +441,12 @@ class _LostPetCard extends StatelessWidget {
           color: AppColors.surfaceContainerLowest,
           borderRadius: BorderRadius.circular(24),
           border: Border.all(color: AppColors.outlineVariant.withOpacity(0.18)),
-          boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 16, offset: const Offset(0, 6))],
+          boxShadow: [
+            BoxShadow(
+                color: Colors.black.withOpacity(0.05),
+                blurRadius: 16,
+                offset: const Offset(0, 6))
+          ],
         ),
         clipBehavior: Clip.antiAlias,
         child: Column(
@@ -433,7 +467,8 @@ class _LostPetCard extends StatelessWidget {
                         ),
                         BackdropFilter(
                           filter: ImageFilter.blur(sigmaX: 16, sigmaY: 16),
-                          child: Container(color: Colors.black.withOpacity(0.3)),
+                          child:
+                              Container(color: Colors.black.withOpacity(0.3)),
                         ),
                         Center(
                           child: Image.network(
@@ -441,7 +476,10 @@ class _LostPetCard extends StatelessWidget {
                             fit: BoxFit.contain,
                             errorBuilder: (_, __, ___) => Container(
                               color: AppColors.surfaceContainerHigh,
-                              child: const Center(child: Icon(Icons.pets, size: 72, color: AppColors.primaryContainer)),
+                              child: const Center(
+                                  child: Icon(Icons.pets,
+                                      size: 72,
+                                      color: AppColors.primaryContainer)),
                             ),
                           ),
                         ),
@@ -449,7 +487,9 @@ class _LostPetCard extends StatelessWidget {
                     )
                   : Container(
                       color: AppColors.surfaceContainerHigh,
-                      child: const Center(child: Icon(Icons.pets, size: 72, color: AppColors.primaryContainer)),
+                      child: const Center(
+                          child: Icon(Icons.pets,
+                              size: 72, color: AppColors.primaryContainer)),
                     ),
             ),
             Padding(
@@ -465,14 +505,22 @@ class _LostPetCard extends StatelessWidget {
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            Text(petName, style: GoogleFonts.montserrat(fontSize: 22, fontWeight: FontWeight.w700, color: AppColors.onSurface)),
+                            Text(petName,
+                                style: GoogleFonts.montserrat(
+                                    fontSize: 22,
+                                    fontWeight: FontWeight.w700,
+                                    color: AppColors.onSurface)),
                             const SizedBox(height: 2),
-                            Text(breed, style: GoogleFonts.inter(fontSize: 14, color: AppColors.onSurfaceVariant)),
+                            Text(breed,
+                                style: GoogleFonts.inter(
+                                    fontSize: 14,
+                                    color: AppColors.onSurfaceVariant)),
                           ],
                         ),
                       ),
                       Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 10, vertical: 5),
                         decoration: BoxDecoration(
                           color: isArchived
                               ? const Color(0xFF64748B).withOpacity(0.15)
@@ -496,30 +544,47 @@ class _LostPetCard extends StatelessWidget {
                   const SizedBox(height: 14),
                   Row(
                     children: [
-                      const Icon(Icons.location_on_outlined, size: 16, color: AppColors.onSurfaceVariant),
+                      const Icon(Icons.location_on_outlined,
+                          size: 16, color: AppColors.onSurfaceVariant),
                       const SizedBox(width: 4),
-                      Expanded(child: Text(location, style: GoogleFonts.inter(fontSize: 13, color: AppColors.onSurfaceVariant))),
+                      Expanded(
+                          child: Text(location,
+                              style: GoogleFonts.inter(
+                                  fontSize: 13,
+                                  color: AppColors.onSurfaceVariant))),
                     ],
                   ),
                   const SizedBox(height: 10),
                   Row(
                     children: [
-                      const Icon(Icons.person_outline, size: 16, color: AppColors.onSurfaceVariant),
+                      const Icon(Icons.person_outline,
+                          size: 16, color: AppColors.onSurfaceVariant),
                       const SizedBox(width: 4),
-                      Expanded(child: Text('Owner: $ownerName', style: GoogleFonts.inter(fontSize: 13, color: AppColors.onSurfaceVariant))),
+                      Expanded(
+                          child: Text('Owner: $ownerName',
+                              style: GoogleFonts.inter(
+                                  fontSize: 13,
+                                  color: AppColors.onSurfaceVariant))),
                     ],
                   ),
                   const SizedBox(height: 10),
                   Row(
                     children: [
-                      const Icon(Icons.access_time, size: 16, color: AppColors.onSurfaceVariant),
+                      const Icon(Icons.access_time,
+                          size: 16, color: AppColors.onSurfaceVariant),
                       const SizedBox(width: 4),
-                      Text(timeAgo, style: GoogleFonts.inter(fontSize: 13, color: AppColors.onSurfaceVariant)),
+                      Text(timeAgo,
+                          style: GoogleFonts.inter(
+                              fontSize: 13, color: AppColors.onSurfaceVariant)),
                     ],
                   ),
                   if (note.isNotEmpty) ...[
                     const SizedBox(height: 14),
-                    Text(note, style: GoogleFonts.inter(fontSize: 13, height: 1.5, color: AppColors.onSurfaceVariant)),
+                    Text(note,
+                        style: GoogleFonts.inter(
+                            fontSize: 13,
+                            height: 1.5,
+                            color: AppColors.onSurfaceVariant)),
                   ],
                   const SizedBox(height: 16),
                   Row(
@@ -538,8 +603,11 @@ class _LostPetCard extends StatelessWidget {
                             child: Text('Contact owner'),
                           ),
                           style: OutlinedButton.styleFrom(
-                            padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 8),
-                            side: BorderSide(color: AppColors.outlineVariant.withOpacity(0.28)),
+                            padding: const EdgeInsets.symmetric(
+                                vertical: 12, horizontal: 8),
+                            side: BorderSide(
+                                color:
+                                    AppColors.outlineVariant.withOpacity(0.28)),
                             foregroundColor: AppColors.onSurface,
                           ),
                         ),
@@ -548,10 +616,13 @@ class _LostPetCard extends StatelessWidget {
                       Expanded(
                         child: ElevatedButton.icon(
                           onPressed: () {
-                            double? lat = (pet['last_seen_lat'] as num?)?.toDouble();
-                            double? lng = (pet['last_seen_lon'] as num?)?.toDouble();
+                            double? lat =
+                                (pet['last_seen_lat'] as num?)?.toDouble();
+                            double? lng =
+                                (pet['last_seen_lon'] as num?)?.toDouble();
                             if (lat == null || lng == null) {
-                              final regExp = RegExp(r'Lat:\s*([-\d.]+),\s*Lng:\s*([-\d.]+)');
+                              final regExp = RegExp(
+                                  r'Lat:\s*([-\d.]+),\s*Lng:\s*([-\d.]+)');
                               final match = regExp.firstMatch(rawAddress);
                               if (match != null) {
                                 lat = double.tryParse(match.group(1)!);
@@ -572,7 +643,8 @@ class _LostPetCard extends StatelessWidget {
                               );
                               return;
                             }
-                            AppToast.info(context, 'No GPS coordinates available for this location.');
+                            AppToast.info(context,
+                                'No GPS coordinates available for this location.');
                           },
                           icon: const Icon(Icons.map_outlined, size: 16),
                           label: const FittedBox(
@@ -580,7 +652,8 @@ class _LostPetCard extends StatelessWidget {
                             child: Text('View map'),
                           ),
                           style: ElevatedButton.styleFrom(
-                            padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 8),
+                            padding: const EdgeInsets.symmetric(
+                                vertical: 12, horizontal: 8),
                             minimumSize: const Size.fromHeight(46),
                           ),
                         ),
@@ -890,20 +963,28 @@ class LostPetMapScreen extends StatelessWidget {
                         mainAxisSize: MainAxisSize.min,
                         children: [
                           Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 8, vertical: 4),
                             decoration: BoxDecoration(
                               color: Colors.white,
                               borderRadius: BorderRadius.circular(8),
                               boxShadow: [
-                                BoxShadow(color: Colors.black.withOpacity(0.1), blurRadius: 4, offset: const Offset(0,2))
+                                BoxShadow(
+                                    color: Colors.black.withOpacity(0.1),
+                                    blurRadius: 4,
+                                    offset: const Offset(0, 2))
                               ],
                             ),
                             child: Text(petName,
                                 maxLines: 1,
                                 overflow: TextOverflow.ellipsis,
-                                style: GoogleFonts.inter(fontSize: 12, fontWeight: FontWeight.w700, color: AppColors.error)),
+                                style: GoogleFonts.inter(
+                                    fontSize: 12,
+                                    fontWeight: FontWeight.w700,
+                                    color: AppColors.error)),
                           ),
-                          const Icon(Icons.location_on, color: AppColors.error, size: 36),
+                          const Icon(Icons.location_on,
+                              color: AppColors.error, size: 36),
                         ],
                       ),
                     ),
@@ -937,7 +1018,8 @@ class LostPetMapScreen extends StatelessWidget {
                       color: AppColors.errorContainer,
                       shape: BoxShape.circle,
                     ),
-                    child: const Icon(Icons.my_location_rounded, color: AppColors.error, size: 24),
+                    child: const Icon(Icons.my_location_rounded,
+                        color: AppColors.error, size: 24),
                   ),
                   const SizedBox(width: 16),
                   Expanded(
@@ -946,12 +1028,17 @@ class LostPetMapScreen extends StatelessWidget {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Text('Reported Location',
-                            style: GoogleFonts.inter(fontSize: 12, color: AppColors.onSurfaceVariant)),
+                            style: GoogleFonts.inter(
+                                fontSize: 12,
+                                color: AppColors.onSurfaceVariant)),
                         const SizedBox(height: 2),
                         Text(address,
                             maxLines: 2,
                             overflow: TextOverflow.ellipsis,
-                            style: GoogleFonts.inter(fontSize: 14, fontWeight: FontWeight.w600, color: AppColors.onSurface)),
+                            style: GoogleFonts.inter(
+                                fontSize: 14,
+                                fontWeight: FontWeight.w600,
+                                color: AppColors.onSurface)),
                       ],
                     ),
                   ),

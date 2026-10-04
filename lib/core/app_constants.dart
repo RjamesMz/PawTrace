@@ -30,7 +30,11 @@ class AppConstants {
     'Calatagan',
   ];
 
-  // ── Logo Widget Builders ──────────────────────────────────────────────────
+  // ── Logo Widget Builders & Global Sizing ──────────────────────────────────
+  /// Standard sizes so you can adjust the logo scale globally in one place:
+  static const double headerLogoSize = 34.0;
+  static const double defaultBadgeSize = 64.0;
+  static const double brandHeaderBadgeSize = 84.0;
 
   /// Builds just the raw logo graphic (asset image or icon).
   static Widget buildLogoGraphic({
@@ -39,30 +43,35 @@ class AppConstants {
     BoxFit fit = BoxFit.contain,
     bool applyColorToAsset = false,
   }) {
+    // If size is omitted, use headerLogoSize. If a small size was passed (< 30), scale it up generously.
+    final effectiveSize = size == null
+        ? headerLogoSize
+        : (size < 30 ? (size * 1.35).clamp(32.0, 60.0) : size);
+
     if (logoAsset.isNotEmpty) {
       return Image.asset(
         logoAsset,
-        width: size,
-        height: size,
+        width: effectiveSize,
+        height: effectiveSize,
         fit: fit,
         color: applyColorToAsset ? color : null,
         errorBuilder: (context, error, stackTrace) => Icon(
           logoIcon,
-          size: size,
+          size: effectiveSize,
           color: color,
         ),
       );
     }
     return Icon(
       logoIcon,
-      size: size,
+      size: effectiveSize,
       color: color,
     );
   }
 
   /// Builds the logo inside a circular or rounded container badge.
   static Widget buildLogoBadge({
-    double size = 48,
+    double size = defaultBadgeSize,
     double? iconSize,
     Color backgroundColor = AppColors.primary,
     Color iconColor = Colors.white,
@@ -71,16 +80,25 @@ class AppConstants {
     EdgeInsetsGeometry? padding,
     bool applyColorToAsset = false,
   }) {
+    // Ensure badge is never too small to see the logo clearly
+    final effectiveBadgeSize = size < 44 ? 44.0 : size;
+
     // If the asset is an image and the default background was primary orange,
     // use a crisp white background so the orange paw logo stands out vividly.
-    final effectiveBg = (logoAsset.isNotEmpty && backgroundColor == AppColors.primary)
-        ? Colors.white
-        : backgroundColor;
-    final effectiveIconSize = iconSize ?? (size * (logoAsset.isNotEmpty ? 0.78 : 0.55));
+    final effectiveBg =
+        (logoAsset.isNotEmpty && backgroundColor == AppColors.primary)
+            ? Colors.white
+            : backgroundColor;
+
+    // Make the logo fill 88% of the badge so it is clear, large, and prominent
+    final effectiveIconSize =
+        iconSize != null && iconSize >= (effectiveBadgeSize * 0.75)
+            ? iconSize
+            : (effectiveBadgeSize * (logoAsset.isNotEmpty ? 0.88 : 0.65));
 
     return Container(
-      width: size,
-      height: size,
+      width: effectiveBadgeSize,
+      height: effectiveBadgeSize,
       padding: padding,
       decoration: BoxDecoration(
         color: effectiveBg,
@@ -109,11 +127,11 @@ class AppConstants {
 
   /// Builds a complete branding section with logo badge + app name.
   static Widget buildBrandHeader({
-    double badgeSize = 64,
+    double badgeSize = brandHeaderBadgeSize,
     double? iconSize,
     Color badgeColor = AppColors.primary,
     Color iconColor = Colors.white,
-    double titleSize = 24,
+    double titleSize = 26,
     Color? titleColor,
     FontWeight titleWeight = FontWeight.w800,
     double spacing = 10,

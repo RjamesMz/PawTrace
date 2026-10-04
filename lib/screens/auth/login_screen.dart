@@ -103,10 +103,12 @@ class _LoginScreenState extends State<LoginScreen> {
       showDialog(
         context: context,
         builder: (ctx) => AlertDialog(
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+          shape:
+              RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
           title: Text(
             'Reset Password',
-            style: GoogleFonts.montserrat(fontWeight: FontWeight.w700, fontSize: 18),
+            style: GoogleFonts.montserrat(
+                fontWeight: FontWeight.w700, fontSize: 18),
           ),
           content: Column(
             mainAxisSize: MainAxisSize.min,
@@ -114,7 +116,8 @@ class _LoginScreenState extends State<LoginScreen> {
             children: [
               Text(
                 'Enter your registered email address to receive a password reset link.',
-                style: GoogleFonts.inter(fontSize: 14, color: AppColors.onSurfaceVariant),
+                style: GoogleFonts.inter(
+                    fontSize: 14, color: AppColors.onSurfaceVariant),
               ),
               const SizedBox(height: 16),
               TextField(
@@ -123,7 +126,8 @@ class _LoginScreenState extends State<LoginScreen> {
                 decoration: InputDecoration(
                   hintText: 'Enter your email',
                   prefixIcon: const Icon(Icons.email_outlined),
-                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                  border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(12)),
                 ),
               ),
             ],
@@ -137,7 +141,8 @@ class _LoginScreenState extends State<LoginScreen> {
               onPressed: () {
                 final entered = ctrl.text.trim();
                 if (entered.isEmpty || !entered.contains('@')) {
-                  AppToast.error(context, 'Please enter a valid email address.');
+                  AppToast.error(
+                      context, 'Please enter a valid email address.');
                   return;
                 }
                 Navigator.pop(ctx);
@@ -146,7 +151,8 @@ class _LoginScreenState extends State<LoginScreen> {
               style: ElevatedButton.styleFrom(
                 backgroundColor: AppColors.primary,
                 foregroundColor: Colors.white,
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12)),
               ),
               child: const Text('Continue'),
             ),
@@ -403,12 +409,11 @@ class _LoginScreenState extends State<LoginScreen> {
             children: [
               Text(
                 "Don't have an account? ",
-                style: GoogleFonts.inter(
-                    fontSize: 14, color: AppColors.secondary),
+                style:
+                    GoogleFonts.inter(fontSize: 14, color: AppColors.secondary),
               ),
               GestureDetector(
-                onTap: () =>
-                    Navigator.pushNamed(context, AppRoutes.register),
+                onTap: () => Navigator.pushNamed(context, AppRoutes.register),
                 child: Text(
                   'Register',
                   style: GoogleFonts.inter(
@@ -445,10 +450,10 @@ class _LoginScreenState extends State<LoginScreen> {
   Widget _buildBrandHeader() {
     return Column(
       children: [
-        AppConstants.buildLogoBadge(
-          size: 64,
+        AppConstants.buildLogoGraphic(
+          size: 80,
         ),
-        const SizedBox(height: 10),
+        const SizedBox(height: 12),
         Row(
           mainAxisSize: MainAxisSize.min,
           children: [
@@ -464,8 +469,7 @@ class _LoginScreenState extends State<LoginScreen> {
             if (kIsWeb) ...[
               const SizedBox(width: 8),
               Container(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
                 decoration: BoxDecoration(
                   color: AppColors.primaryContainer.withOpacity(0.4),
                   borderRadius: BorderRadius.circular(6),
@@ -556,8 +560,7 @@ class _LoginScreenState extends State<LoginScreen> {
       children: [
         Row(
           mainAxisAlignment: MainAxisAlignment.center,
-          children:
-              features.map((f) => _featureItem(f.$1, f.$2)).toList(),
+          children: features.map((f) => _featureItem(f.$1, f.$2)).toList(),
         ),
         const SizedBox(height: 14),
         Text(

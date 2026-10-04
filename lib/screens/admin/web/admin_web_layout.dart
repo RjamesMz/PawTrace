@@ -187,8 +187,7 @@ class _AdminWebLayoutState extends State<AdminWebLayout> {
                   child: Row(
                     children: [
                       AppConstants.buildLogoBadge(
-                        size: 38,
-                        iconSize: 22,
+                        size: 10,
                         backgroundColor: Colors.white,
                         iconColor: AppColors.primary,
                       ),
@@ -214,9 +213,10 @@ class _AdminWebLayoutState extends State<AdminWebLayout> {
                       CircleAvatar(
                         radius: 20,
                         backgroundColor: AppColors.primary,
-                        backgroundImage: _photoUrl != null && _photoUrl!.isNotEmpty
-                            ? NetworkImage(_photoUrl!)
-                            : null,
+                        backgroundImage:
+                            _photoUrl != null && _photoUrl!.isNotEmpty
+                                ? NetworkImage(_photoUrl!)
+                                : null,
                         child: (_photoUrl == null || _photoUrl!.isEmpty)
                             ? Text(
                                 _initial,
@@ -372,8 +372,6 @@ class _AdminWebLayoutState extends State<AdminWebLayout> {
                     ),
                     child: Row(
                       children: [
-                        AppConstants.buildLogoGraphic(size: 26),
-                        const SizedBox(width: 10),
                         // Current page title in Montserrat bold 20sp
                         Text(
                           _resolveTitle(),
@@ -405,7 +403,8 @@ class _AdminWebLayoutState extends State<AdminWebLayout> {
                           borderRadius: BorderRadius.circular(20),
                           onTap: () => _onNavSelected(5),
                           child: Padding(
-                            padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 4),
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 4, vertical: 4),
                             child: Row(
                               mainAxisSize: MainAxisSize.min,
                               children: [
@@ -422,19 +421,21 @@ class _AdminWebLayoutState extends State<AdminWebLayout> {
                                   radius: 18,
                                   backgroundColor:
                                       AppColors.primary.withOpacity(0.15),
-                                  backgroundImage: _photoUrl != null && _photoUrl!.isNotEmpty
-                                      ? NetworkImage(_photoUrl!)
-                                      : null,
-                                  child: (_photoUrl == null || _photoUrl!.isEmpty)
-                                      ? Text(
-                                          _initial,
-                                          style: GoogleFonts.montserrat(
-                                            fontSize: 14,
-                                            fontWeight: FontWeight.bold,
-                                            color: AppColors.primary,
-                                          ),
-                                        )
-                                      : null,
+                                  backgroundImage:
+                                      _photoUrl != null && _photoUrl!.isNotEmpty
+                                          ? NetworkImage(_photoUrl!)
+                                          : null,
+                                  child:
+                                      (_photoUrl == null || _photoUrl!.isEmpty)
+                                          ? Text(
+                                              _initial,
+                                              style: GoogleFonts.montserrat(
+                                                fontSize: 14,
+                                                fontWeight: FontWeight.bold,
+                                                color: AppColors.primary,
+                                              ),
+                                            )
+                                          : null,
                                 ),
                               ],
                             ),

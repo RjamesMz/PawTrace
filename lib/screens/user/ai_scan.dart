@@ -143,7 +143,8 @@ class _AiScanScreenState extends State<AiScanScreen>
   }
 
   /// Shows a bottom dialog explaining that the AI server is under maintenance.
-  Future<void> _showServerMaintenanceDialog({String? detail, VoidCallback? onRetry}) async {
+  Future<void> _showServerMaintenanceDialog(
+      {String? detail, VoidCallback? onRetry}) async {
     await showDialog<void>(
       context: context,
       barrierDismissible: true,
@@ -594,8 +595,6 @@ class _AiScanScreenState extends State<AiScanScreen>
       ),
       child: Row(
         children: [
-          AppConstants.buildLogoGraphic(size: 26),
-          const SizedBox(width: 10),
           Text(
             'Scan Close Match',
             style: GoogleFonts.montserrat(

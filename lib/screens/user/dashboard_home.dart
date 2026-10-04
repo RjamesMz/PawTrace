@@ -82,7 +82,8 @@ class _DashboardHomeScreenState extends State<DashboardHomeScreen> {
     try {
       var query = Supabase.instance.client.from('news').select();
       if (barangay != null && barangay.isNotEmpty) {
-        query = query.or('barangay.eq.$barangay,barangay.eq.Catanduanes,barangay.eq.All');
+        query = query.or(
+            'barangay.eq.$barangay,barangay.eq.Catanduanes,barangay.eq.All');
       }
       final data = await query.order('created_at', ascending: false).limit(10);
       if (mounted) {
@@ -159,106 +160,111 @@ class _DashboardHomeScreenState extends State<DashboardHomeScreen> {
                   SliverToBoxAdapter(
                     child: Padding(
                       padding: const EdgeInsets.fromLTRB(20, 18, 20, 0),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  _HeroCard(userName: firstName),
-                  const SizedBox(height: 24),
-                  const _SectionHeader(
-                    title: 'Latest news',
-                    subtitle: 'Fresh updates from the community and field team',
-                  ),
-                ],
-              ),
-            ),
-          ),
-          SliverToBoxAdapter(
-            child: SizedBox(
-              height: 248,
-              child: _isLoadingNews
-                  ? const Center(
-                      child:
-                          CircularProgressIndicator(color: AppColors.primary))
-                  : _newsList.isEmpty
-                      ? Center(
-                          child: Text(
-                            'No news updates found.',
-                            style: GoogleFonts.inter(
-                                color: AppColors.onSurfaceVariant
-                                    .withOpacity(0.5)),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          _HeroCard(userName: firstName),
+                          const SizedBox(height: 24),
+                          const _SectionHeader(
+                            title: 'Latest news',
+                            subtitle:
+                                'Fresh updates from the community and field team',
                           ),
-                        )
-                      : ListView.separated(
-                          padding: const EdgeInsets.fromLTRB(20, 16, 20, 0),
-                          scrollDirection: Axis.horizontal,
-                          itemCount: _newsList.length,
-                          separatorBuilder: (_, __) =>
-                              const SizedBox(width: 14),
-                          itemBuilder: (context, index) =>
-                              _NewsCard(item: _newsList[index]),
-                        ),
-            ),
-          ),
-          const SliverToBoxAdapter(
-            child: Padding(
-              padding: EdgeInsets.fromLTRB(20, 28, 20, 0),
-              child: _SectionHeader(
-                title: 'Current lost pets',
-                subtitle: 'The latest active reports available right now',
-              ),
-            ),
-          ),
-          _isLoadingLostPets
-              ? const SliverToBoxAdapter(
-                  child: Padding(
-                    padding: EdgeInsets.all(32),
-                    child: Center(
-                        child: CircularProgressIndicator(
-                            color: AppColors.primary)),
-                  ),
-                )
-              : _lostPetsList.isEmpty
-                  ? SliverToBoxAdapter(
-                      child: Padding(
-                        padding: const EdgeInsets.symmetric(
-                            vertical: 40, horizontal: 20),
-                        child: Center(
-                          child: Text(
-                            'No active lost pet reports.',
-                            style: GoogleFonts.inter(
-                                color: AppColors.onSurfaceVariant
-                                    .withOpacity(0.5)),
-                          ),
-                        ),
-                      ),
-                    )
-                  : SliverList(
-                      delegate: SliverChildBuilderDelegate(
-                        (context, index) {
-                          final pet = _lostPetsList[index];
-                          return Padding(
-                            padding: EdgeInsets.fromLTRB(
-                              20,
-                              0,
-                              20,
-                              index == _lostPetsList.length - 1 ? 120 : 16,
-                            ),
-                            child: _LostPetPreviewCard(
-                              pet: pet,
-                              onTap: () {
-                                if (widget.onNavigateToTab != null) {
-                                  widget.onNavigateToTab!(1);
-                                } else {
-                                  Navigator.pushNamed(
-                                      context, AppRoutes.lostPetScreen);
-                                }
-                              },
-                            ),
-                          );
-                        },
-                        childCount: _lostPetsList.length,
+                        ],
                       ),
                     ),
+                  ),
+                  SliverToBoxAdapter(
+                    child: SizedBox(
+                      height: 248,
+                      child: _isLoadingNews
+                          ? const Center(
+                              child: CircularProgressIndicator(
+                                  color: AppColors.primary))
+                          : _newsList.isEmpty
+                              ? Center(
+                                  child: Text(
+                                    'No news updates found.',
+                                    style: GoogleFonts.inter(
+                                        color: AppColors.onSurfaceVariant
+                                            .withOpacity(0.5)),
+                                  ),
+                                )
+                              : ListView.separated(
+                                  padding:
+                                      const EdgeInsets.fromLTRB(20, 16, 20, 0),
+                                  scrollDirection: Axis.horizontal,
+                                  itemCount: _newsList.length,
+                                  separatorBuilder: (_, __) =>
+                                      const SizedBox(width: 14),
+                                  itemBuilder: (context, index) =>
+                                      _NewsCard(item: _newsList[index]),
+                                ),
+                    ),
+                  ),
+                  const SliverToBoxAdapter(
+                    child: Padding(
+                      padding: EdgeInsets.fromLTRB(20, 28, 20, 0),
+                      child: _SectionHeader(
+                        title: 'Current lost pets',
+                        subtitle:
+                            'The latest active reports available right now',
+                      ),
+                    ),
+                  ),
+                  _isLoadingLostPets
+                      ? const SliverToBoxAdapter(
+                          child: Padding(
+                            padding: EdgeInsets.all(32),
+                            child: Center(
+                                child: CircularProgressIndicator(
+                                    color: AppColors.primary)),
+                          ),
+                        )
+                      : _lostPetsList.isEmpty
+                          ? SliverToBoxAdapter(
+                              child: Padding(
+                                padding: const EdgeInsets.symmetric(
+                                    vertical: 40, horizontal: 20),
+                                child: Center(
+                                  child: Text(
+                                    'No active lost pet reports.',
+                                    style: GoogleFonts.inter(
+                                        color: AppColors.onSurfaceVariant
+                                            .withOpacity(0.5)),
+                                  ),
+                                ),
+                              ),
+                            )
+                          : SliverList(
+                              delegate: SliverChildBuilderDelegate(
+                                (context, index) {
+                                  final pet = _lostPetsList[index];
+                                  return Padding(
+                                    padding: EdgeInsets.fromLTRB(
+                                      20,
+                                      0,
+                                      20,
+                                      index == _lostPetsList.length - 1
+                                          ? 120
+                                          : 16,
+                                    ),
+                                    child: _LostPetPreviewCard(
+                                      pet: pet,
+                                      onTap: () {
+                                        if (widget.onNavigateToTab != null) {
+                                          widget.onNavigateToTab!(1);
+                                        } else {
+                                          Navigator.pushNamed(
+                                              context, AppRoutes.lostPetScreen);
+                                        }
+                                      },
+                                    ),
+                                  );
+                                },
+                                childCount: _lostPetsList.length,
+                              ),
+                            ),
                 ],
               ),
             ),
@@ -297,10 +303,10 @@ class _TopBar extends StatelessWidget {
               mainAxisSize: MainAxisSize.min,
               children: [
                 AppConstants.buildLogoGraphic(
-                  size: 22,
+                  size: 32,
                   color: AppColors.primary,
                 ),
-                const SizedBox(width: 6),
+                const SizedBox(width: 8),
                 Flexible(
                   child: Text(
                     AppConstants.appName,
@@ -319,14 +325,6 @@ class _TopBar extends StatelessWidget {
           Row(
             mainAxisSize: MainAxisSize.min,
             children: [
-              IconButton(
-                onPressed: () {},
-                padding: EdgeInsets.zero,
-                constraints:
-                    const BoxConstraints.tightFor(width: 36, height: 36),
-                icon: const Icon(Icons.search,
-                    color: AppColors.onSurfaceVariant, size: 20),
-              ),
               const NotificationBellButton(size: 20),
               IconButton(
                 tooltip: 'My Registered Pets',
@@ -480,105 +478,105 @@ class _NewsCard extends StatelessWidget {
         width: 280,
         decoration: BoxDecoration(
           color: AppColors.surfaceContainerLowest,
-        borderRadius: BorderRadius.circular(22),
-        boxShadow: [
-          BoxShadow(
-              color: Colors.black.withOpacity(0.06),
-              blurRadius: 18,
-              offset: const Offset(0, 8))
-        ],
-      ),
-      clipBehavior: Clip.antiAlias,
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Expanded(
-            child: Stack(
-              fit: StackFit.expand,
-              children: [
-                imageUrl.isNotEmpty
-                    ? Image.network(
-                        imageUrl,
-                        fit: BoxFit.cover,
-                        errorBuilder: (_, __, ___) =>
-                            Container(color: accentColor.withOpacity(0.15)),
-                      )
-                    : Container(color: accentColor.withOpacity(0.15)),
-                DecoratedBox(
-                  decoration: BoxDecoration(
-                    gradient: LinearGradient(
-                      begin: Alignment.topCenter,
-                      end: Alignment.bottomCenter,
-                      colors: [
-                        Colors.transparent,
-                        Colors.black.withOpacity(0.72)
+          borderRadius: BorderRadius.circular(22),
+          boxShadow: [
+            BoxShadow(
+                color: Colors.black.withOpacity(0.06),
+                blurRadius: 18,
+                offset: const Offset(0, 8))
+          ],
+        ),
+        clipBehavior: Clip.antiAlias,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Expanded(
+              child: Stack(
+                fit: StackFit.expand,
+                children: [
+                  imageUrl.isNotEmpty
+                      ? Image.network(
+                          imageUrl,
+                          fit: BoxFit.cover,
+                          errorBuilder: (_, __, ___) =>
+                              Container(color: accentColor.withOpacity(0.15)),
+                        )
+                      : Container(color: accentColor.withOpacity(0.15)),
+                  DecoratedBox(
+                    decoration: BoxDecoration(
+                      gradient: LinearGradient(
+                        begin: Alignment.topCenter,
+                        end: Alignment.bottomCenter,
+                        colors: [
+                          Colors.transparent,
+                          Colors.black.withOpacity(0.72)
+                        ],
+                      ),
+                    ),
+                  ),
+                  Positioned(
+                    left: 14,
+                    right: 14,
+                    bottom: 14,
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 10, vertical: 4),
+                          decoration: BoxDecoration(
+                              color: accentColor,
+                              borderRadius: BorderRadius.circular(999)),
+                          child: Text(category.toUpperCase(),
+                              style: GoogleFonts.inter(
+                                  fontSize: 10,
+                                  fontWeight: FontWeight.w700,
+                                  color: Colors.white,
+                                  letterSpacing: 0.8)),
+                        ),
+                        const SizedBox(height: 10),
+                        Text(
+                          title,
+                          style: GoogleFonts.montserrat(
+                              fontSize: 18,
+                              fontWeight: FontWeight.w700,
+                              color: Colors.white,
+                              height: 1.15),
+                          maxLines: 3,
+                          overflow: TextOverflow.ellipsis,
+                        ),
                       ],
                     ),
                   ),
-                ),
-                Positioned(
-                  left: 14,
-                  right: 14,
-                  bottom: 14,
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Container(
-                        padding: const EdgeInsets.symmetric(
-                            horizontal: 10, vertical: 4),
-                        decoration: BoxDecoration(
-                            color: accentColor,
-                            borderRadius: BorderRadius.circular(999)),
-                        child: Text(category.toUpperCase(),
-                            style: GoogleFonts.inter(
-                                fontSize: 10,
-                                fontWeight: FontWeight.w700,
-                                color: Colors.white,
-                                letterSpacing: 0.8)),
-                      ),
-                      const SizedBox(height: 10),
-                      Text(
-                        title,
-                        style: GoogleFonts.montserrat(
-                            fontSize: 18,
-                            fontWeight: FontWeight.w700,
-                            color: Colors.white,
-                            height: 1.15),
-                        maxLines: 3,
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                    ],
-                  ),
-                ),
-              ],
+                ],
+              ),
             ),
-          ),
-          Padding(
-            padding: const EdgeInsets.all(14),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text('$source · $timeAgo',
-                    style: GoogleFonts.inter(
-                        fontSize: 11,
-                        fontWeight: FontWeight.w700,
-                        color: AppColors.onSurfaceVariant)),
-                const SizedBox(height: 8),
-                Text(summary,
-                    style: GoogleFonts.inter(
-                        fontSize: 13,
-                        height: 1.4,
-                        color: AppColors.onSurfaceVariant),
-                    maxLines: 3,
-                    overflow: TextOverflow.ellipsis),
-              ],
+            Padding(
+              padding: const EdgeInsets.all(14),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text('$source · $timeAgo',
+                      style: GoogleFonts.inter(
+                          fontSize: 11,
+                          fontWeight: FontWeight.w700,
+                          color: AppColors.onSurfaceVariant)),
+                  const SizedBox(height: 8),
+                  Text(summary,
+                      style: GoogleFonts.inter(
+                          fontSize: 13,
+                          height: 1.4,
+                          color: AppColors.onSurfaceVariant),
+                      maxLines: 3,
+                      overflow: TextOverflow.ellipsis),
+                ],
+              ),
             ),
-          ),
-        ],
+          ],
+        ),
       ),
-    ),
-  );
-}
+    );
+  }
 }
 
 class _LostPetPreviewCard extends StatelessWidget {
@@ -600,9 +598,12 @@ class _LostPetPreviewCard extends StatelessWidget {
     final breed = petData?['breed'] as String? ?? 'Unknown Breed';
     final imageUrl =
         pet['photo_url'] as String? ?? petData?['photo_url'] as String? ?? '';
-    final rawAddress =
-        pet['last_seen_address'] as String? ?? pet['barangay'] as String? ?? 'Calatagan';
-    final location = rawAddress.replaceAll(RegExp(r'\s*\(?Lat:\s*[-\d.]+,\s*Lng:\s*[-\d.]+\)?'), '').trim();
+    final rawAddress = pet['last_seen_address'] as String? ??
+        pet['barangay'] as String? ??
+        'Calatagan';
+    final location = rawAddress
+        .replaceAll(RegExp(r'\s*\(?Lat:\s*[-\d.]+,\s*Lng:\s*[-\d.]+\)?'), '')
+        .trim();
     final timeAgo = _formatTimeAgo(pet['created_at']);
 
     final ownerName = userData != null

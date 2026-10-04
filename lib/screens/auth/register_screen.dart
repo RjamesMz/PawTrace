@@ -366,10 +366,10 @@ class _RegisterScreenState extends State<RegisterScreen> {
   Widget _buildBrandHeader() {
     return Column(
       children: [
-        AppConstants.buildLogoBadge(
-          size: 64,
+        AppConstants.buildLogoGraphic(
+          size: 80,
         ),
-        const SizedBox(height: 10),
+        const SizedBox(height: 12),
         Text(
           AppConstants.appName,
           style: GoogleFonts.montserrat(

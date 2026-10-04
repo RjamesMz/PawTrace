@@ -599,8 +599,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   decoration: InputDecoration(
                     labelText: 'New Email Address',
                     hintText: 'e.g. name@example.com',
-                    prefixIcon:
-                        const Icon(Icons.email_outlined, size: 20),
+                    prefixIcon: const Icon(Icons.email_outlined, size: 20),
                     filled: true,
                     fillColor: AppColors.surfaceContainerLow,
                     border: OutlineInputBorder(
@@ -633,8 +632,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   decoration: InputDecoration(
                     labelText: 'Confirm New Email',
                     hintText: 'Re-enter new email address',
-                    prefixIcon: const Icon(Icons.mark_email_read_outlined,
-                        size: 20),
+                    prefixIcon:
+                        const Icon(Icons.mark_email_read_outlined, size: 20),
                     filled: true,
                     fillColor: AppColors.surfaceContainerLow,
                     border: OutlineInputBorder(
@@ -734,8 +733,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
                               return;
                             }
 
-                            final uid = Supabase
-                                .instance.client.auth.currentUser?.id;
+                            final uid =
+                                Supabase.instance.client.auth.currentUser?.id;
                             if (uid == null) return;
 
                             setDlg(() {
@@ -1258,7 +1257,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
         const Color(0xFF6E3900); // Warm brown/orange color from visual palette
     return Container(
       height: 60,
-      padding: const EdgeInsets.symmetric(horizontal: 8),
+      padding: const EdgeInsets.symmetric(horizontal: 20),
       decoration: BoxDecoration(
         color: AppColors.surface,
         boxShadow: [
@@ -1274,14 +1273,12 @@ class _SettingsScreenState extends State<SettingsScreen> {
         children: [
           Row(
             children: [
-              AppConstants.buildLogoGraphic(size: 26),
-              const SizedBox(width: 10),
               Text(
                 'My Profile',
                 style: GoogleFonts.montserrat(
-                  fontSize: 20,
+                  fontSize: 18,
                   fontWeight: FontWeight.w700,
-                  color: titleColor,
+                  color: AppColors.onSurface,
                 ),
               ),
             ],

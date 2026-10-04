@@ -38,7 +38,7 @@ class _BottomNavBarState extends State<BottomNavBar> {
     _NavItem(icon: Icons.home_rounded, label: 'Home', route: AppRoutes.home),
     _NavItem(
         icon: Icons.search_rounded,
-        label: 'Lost Pets',
+        label: 'Lost',
         route: AppRoutes.lostPetScreen),
     _NavItem(
         icon: Icons.camera_alt_rounded, label: 'Scan', route: AppRoutes.aiScan),

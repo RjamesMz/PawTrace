@@ -95,9 +95,8 @@ class _AdminSidebarState extends State<AdminSidebar> {
   @override
   Widget build(BuildContext context) {
     final items = _buildItems();
-    final roleLabel = widget.role == UserRole.superAdmin
-        ? 'Super Admin'
-        : 'Barangay Admin';
+    final roleLabel =
+        widget.role == UserRole.superAdmin ? 'Super Admin' : 'Barangay Admin';
     final initial =
         widget.adminName.isNotEmpty ? widget.adminName[0].toUpperCase() : 'A';
 
@@ -112,9 +111,8 @@ class _AdminSidebarState extends State<AdminSidebar> {
             padding: const EdgeInsets.fromLTRB(20, 28, 20, 0),
             child: Row(
               children: [
-                AppConstants.buildLogoBadge(
-                  size: 38,
-                  iconSize: 22,
+                AppConstants.buildLogoGraphic(
+                  size: 10,
                 ),
                 const SizedBox(width: 10),
                 Text(
@@ -145,9 +143,10 @@ class _AdminSidebarState extends State<AdminSidebar> {
                   CircleAvatar(
                     radius: 20,
                     backgroundColor: AppColors.primary.withOpacity(0.85),
-                    backgroundImage: widget.photoUrl != null && widget.photoUrl!.isNotEmpty
-                        ? NetworkImage(widget.photoUrl!)
-                        : null,
+                    backgroundImage:
+                        widget.photoUrl != null && widget.photoUrl!.isNotEmpty
+                            ? NetworkImage(widget.photoUrl!)
+                            : null,
                     child: (widget.photoUrl == null || widget.photoUrl!.isEmpty)
                         ? Text(
                             initial,
@@ -293,8 +292,7 @@ class _AdminSidebarState extends State<AdminSidebar> {
                     item.label,
                     style: GoogleFonts.inter(
                       fontSize: 13,
-                      fontWeight:
-                          isActive ? FontWeight.w700 : FontWeight.w500,
+                      fontWeight: isActive ? FontWeight.w700 : FontWeight.w500,
                       color: isActive ? _activeColor : _inactiveColor,
                     ),
                   ),

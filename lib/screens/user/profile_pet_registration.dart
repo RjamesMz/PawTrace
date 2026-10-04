@@ -672,17 +672,27 @@ class _ProfilePetRegistrationScreenState
     return Container(
       height: 64 + MediaQuery.of(context).padding.top,
       padding:
-          EdgeInsets.fromLTRB(16, MediaQuery.of(context).padding.top, 16, 0),
-      color: AppColors.surface,
+          EdgeInsets.fromLTRB(20, MediaQuery.of(context).padding.top, 20, 0),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.04),
+            blurRadius: 8,
+            offset: const Offset(0, 2),
+          ),
+        ],
+      ),
       child: Row(
         children: [
-          AppConstants.buildLogoGraphic(size: 26),
-          const SizedBox(width: 10),
-          Text('Pet Registration',
-              style: GoogleFonts.montserrat(
-                  fontSize: 18,
-                  fontWeight: FontWeight.w600,
-                  color: AppColors.onSurface)),
+          Text(
+            'Pet Registration',
+            style: GoogleFonts.montserrat(
+              fontSize: 18,
+              fontWeight: FontWeight.w700, // 👈 Changed from w600 to w700
+              color: AppColors.onSurface,
+            ),
+          ),
         ],
       ),
     );

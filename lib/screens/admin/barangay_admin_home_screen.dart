@@ -140,12 +140,10 @@ class _BarangayAdminHomeScreenState extends State<BarangayAdminHomeScreen> {
         query = query.or(
             'barangay.eq.$_adminBarangay,barangay.eq.Catanduanes,barangay.eq.All');
       }
-      final data = await query
-          .order('created_at', ascending: false)
-          .limit(10);
+      final data = await query.order('created_at', ascending: false).limit(10);
       _news = List<Map<String, dynamic>>.from(data)
-          .where((p) =>
-              (p['status'] as String? ?? '').toLowerCase() != 'archived')
+          .where(
+              (p) => (p['status'] as String? ?? '').toLowerCase() != 'archived')
           .take(3)
           .toList();
     } catch (e) {
@@ -802,9 +800,8 @@ class _BarangayAdminHomeScreenState extends State<BarangayAdminHomeScreen> {
           child: Row(
             children: [
               // PawTrace logo + name
-              AppConstants.buildLogoBadge(
-                size: 36,
-                iconSize: 20,
+              AppConstants.buildLogoGraphic(
+                size: 80,
               ),
               const SizedBox(width: 10),
               Text(
@@ -820,7 +817,8 @@ class _BarangayAdminHomeScreenState extends State<BarangayAdminHomeScreen> {
               const SizedBox(width: 4),
               // Admin avatar
               InkWell(
-                onTap: () => Navigator.pushNamed(context, AppRoutes.adminSettings),
+                onTap: () =>
+                    Navigator.pushNamed(context, AppRoutes.adminSettings),
                 borderRadius: BorderRadius.circular(20),
                 child: CircleAvatar(
                   radius: 18,
@@ -830,7 +828,9 @@ class _BarangayAdminHomeScreenState extends State<BarangayAdminHomeScreen> {
                       : null,
                   child: (_photoUrl == null || _photoUrl!.isEmpty)
                       ? Text(
-                          _adminName.isNotEmpty ? _adminName[0].toUpperCase() : 'A',
+                          _adminName.isNotEmpty
+                              ? _adminName[0].toUpperCase()
+                              : 'A',
                           style: GoogleFonts.montserrat(
                             fontSize: 16,
                             fontWeight: FontWeight.w700,
