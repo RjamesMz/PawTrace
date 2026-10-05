@@ -22,4 +22,7 @@ class AppRoutes {
   static const String superAdminHome = '/super-admin-home';
   static const String adminSettings = '/admin-settings';
   static const String resetPassword = '/reset-password';
+  static const String verified = '/verified';
+  static const String confirm = '/confirm';
+  static const String authCallback = '/auth/callback';
 }

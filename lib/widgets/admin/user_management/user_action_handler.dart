@@ -1,0 +1,621 @@
+import 'package:flutter/material.dart';
+import 'package:google_fonts/google_fonts.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
+import '../../../core/app_colors.dart';
+import '../../../core/app_toast.dart';
+
+/// Handles user actions such as viewing details and deactivating/reactivating accounts
+class UserActionHandler {
+  static Future<void> handleAction({
+    required BuildContext context,
+    required String action,
+    required Map<String, dynamic> user,
+    required Future<void> Function() onRefresh,
+  }) async {
+    final fName = user['first_name'] ?? '';
+    final sName = user['surname'] ?? '';
+    final fullName = '$fName $sName'.trim();
+    final phone = user['phone']?.toString() ?? '';
+    final email = user['email']?.toString() ?? '';
+    final rawUserStatus =
+        (user['status'] ?? 'unverified').toString().toLowerCase();
+    final isUserDeactivated =
+        rawUserStatus == 'deactivated' || rawUserStatus == 'de_activated';
+    final isUserUnverified =
+        rawUserStatus == 'unverified' || rawUserStatus == 'pending';
+    final isUserVerified = !isUserDeactivated && !isUserUnverified;
+
+    if (action == 'view') {
+      showDialog(
+        context: context,
+        barrierColor: Colors.black54,
+        builder: (ctx) => Dialog(
+          backgroundColor: Colors.transparent,
+          insetPadding:
+              const EdgeInsets.symmetric(horizontal: 20, vertical: 24),
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 440),
+            child: Container(
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(24),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withOpacity(0.12),
+                    blurRadius: 32,
+                    offset: const Offset(0, 12),
+                  ),
+                ],
+              ),
+              clipBehavior: Clip.antiAlias,
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  // Header Banner
+                  Container(
+                    padding: const EdgeInsets.fromLTRB(24, 24, 24, 20),
+                    decoration: BoxDecoration(
+                      gradient: LinearGradient(
+                        colors: [
+                          AppColors.primary.withOpacity(0.08),
+                          AppColors.primary.withOpacity(0.02),
+                        ],
+                        begin: Alignment.topLeft,
+                        end: Alignment.bottomRight,
+                      ),
+                      border: const Border(
+                        bottom: BorderSide(color: Color(0xFFF3F4F6)),
+                      ),
+                    ),
+                    child: Row(
+                      children: [
+                        CircleAvatar(
+                          radius: 26,
+                          backgroundColor: AppColors.primary.withOpacity(0.15),
+                          child: Text(
+                            (fullName.isNotEmpty
+                                    ? fullName[0]
+                                    : (email.isNotEmpty ? email[0] : 'U'))
+                                .toUpperCase(),
+                            style: GoogleFonts.montserrat(
+                              fontSize: 20,
+                              fontWeight: FontWeight.w800,
+                              color: AppColors.primary,
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 14),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                fullName.isNotEmpty
+                                    ? fullName
+                                    : 'Registered User',
+                                style: GoogleFonts.montserrat(
+                                  fontSize: 18,
+                                  fontWeight: FontWeight.w700,
+                                  color: const Color(0xFF111827),
+                                ),
+                              ),
+                              const SizedBox(height: 4),
+                              Row(
+                                children: [
+                                  // Role Pill
+                                  Container(
+                                    padding: const EdgeInsets.symmetric(
+                                        horizontal: 8, vertical: 2),
+                                    decoration: BoxDecoration(
+                                      color:
+                                          AppColors.primary.withOpacity(0.12),
+                                      borderRadius: BorderRadius.circular(6),
+                                    ),
+                                    child: Text(
+                                      (user['role'] ?? 'user')
+                                          .toString()
+                                          .toUpperCase(),
+                                      style: GoogleFonts.inter(
+                                        fontSize: 10,
+                                        fontWeight: FontWeight.w800,
+                                        letterSpacing: 0.5,
+                                        color: AppColors.primary,
+                                      ),
+                                    ),
+                                  ),
+                                  const SizedBox(width: 6),
+                                  // Status Pill
+                                  Container(
+                                    padding: const EdgeInsets.symmetric(
+                                        horizontal: 8, vertical: 2),
+                                    decoration: BoxDecoration(
+                                      color: isUserDeactivated
+                                          ? const Color(0xFFFEE2E2)
+                                          : (isUserUnverified
+                                              ? const Color(0xFFFEF3C7)
+                                              : const Color(0xFFDCFCE7)),
+                                      borderRadius: BorderRadius.circular(6),
+                                    ),
+                                    child: Text(
+                                      isUserDeactivated
+                                          ? 'DEACTIVATED'
+                                          : (isUserUnverified
+                                              ? 'UNVERIFIED'
+                                              : 'ACTIVE'),
+                                      style: GoogleFonts.inter(
+                                        fontSize: 10,
+                                        fontWeight: FontWeight.w800,
+                                        letterSpacing: 0.5,
+                                        color: isUserDeactivated
+                                            ? const Color(0xFFDC2626)
+                                            : (isUserUnverified
+                                                ? const Color(0xFFD97706)
+                                                : const Color(0xFF16A34A)),
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+
+                  // Detail Items
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(24, 20, 24, 16),
+                    child: Column(
+                      children: [
+                        _buildDetailRow(
+                          icon: Icons.email_outlined,
+                          label: 'Email',
+                          value: email.isNotEmpty ? email : 'N/A',
+                        ),
+                        const SizedBox(height: 12),
+                        _buildDetailRow(
+                          icon: Icons.phone_outlined,
+                          label: 'Phone',
+                          value: phone.isNotEmpty ? phone : 'N/A',
+                        ),
+                        const SizedBox(height: 12),
+                        _buildDetailRow(
+                          icon: Icons.location_on_outlined,
+                          label: 'Barangay',
+                          value: user['barangay']?.toString().isNotEmpty == true
+                              ? user['barangay'].toString()
+                              : 'N/A',
+                        ),
+                        const SizedBox(height: 12),
+                        _buildDetailRow(
+                          icon: Icons.verified_user_outlined,
+                          label: 'Email Verification',
+                          value: isUserVerified ? 'Verified' : 'Pending Verification',
+                          valueColor: isUserVerified
+                              ? const Color(0xFF16A34A)
+                              : const Color(0xFFD97706),
+                        ),
+                      ],
+                    ),
+                  ),
+
+                  // Footer Actions
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(24, 0, 24, 24),
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.end,
+                      children: [
+                        ElevatedButton(
+                          onPressed: () => Navigator.pop(ctx),
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: const Color(0xFFF3F4F6),
+                            foregroundColor: const Color(0xFF374151),
+                            elevation: 0,
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 24, vertical: 12),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                          ),
+                          child: Text(
+                            'Close',
+                            style: GoogleFonts.inter(
+                              fontSize: 14,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      );
+    } else if (action == 'contact') {
+      AppToast.show(
+        context,
+        phone.isNotEmpty
+            ? 'Contacting $phone...'
+            : 'No phone number for $fullName',
+        icon: Icons.phone_rounded,
+      );
+    } else if (action == 'delete' ||
+        action == 'deactivate' ||
+        action == 'toggle_status') {
+      final isSelf =
+          user['user_id'] == Supabase.instance.client.auth.currentUser?.id;
+      if (isSelf) {
+        AppToast.error(context, 'You cannot deactivate your own account.');
+        return;
+      }
+
+      final rawStatus = (user['status'] ?? 'active').toString().toLowerCase();
+      final isDeactivated =
+          rawStatus == 'deactivated' || rawStatus == 'de_activated';
+      final actionTitle =
+          isDeactivated ? 'Reactivate Account' : 'Deactivate Account';
+      final targetStatus = isDeactivated ? 'active' : 'deactivated';
+
+      final confirmed = await showDialog<bool>(
+        context: context,
+        barrierColor: Colors.black54,
+        builder: (ctx) => Dialog(
+          backgroundColor: Colors.transparent,
+          insetPadding:
+              const EdgeInsets.symmetric(horizontal: 20, vertical: 24),
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 440),
+            child: Container(
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(24),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withOpacity(0.12),
+                    blurRadius: 32,
+                    offset: const Offset(0, 12),
+                  ),
+                ],
+              ),
+              clipBehavior: Clip.antiAlias,
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  // Top Accent Strip
+                  Container(
+                    height: 4,
+                    color: isDeactivated
+                        ? const Color(0xFF16A34A)
+                        : const Color(0xFFDC2626),
+                  ),
+
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(28, 26, 28, 24),
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        // Prominent Halo Icon Badge
+                        Container(
+                          width: 64,
+                          height: 64,
+                          decoration: BoxDecoration(
+                            color: isDeactivated
+                                ? const Color(0xFFECFDF5)
+                                : const Color(0xFFFEF2F2),
+                            shape: BoxShape.circle,
+                            border: Border.all(
+                              color: isDeactivated
+                                  ? const Color(0xFFA7F3D0)
+                                  : const Color(0xFFFECACA),
+                              width: 2.5,
+                            ),
+                          ),
+                          child: Icon(
+                            isDeactivated
+                                ? Icons.check_circle_rounded
+                                : Icons.block_rounded,
+                            color: isDeactivated
+                                ? const Color(0xFF16A34A)
+                                : const Color(0xFFDC2626),
+                            size: 30,
+                          ),
+                        ),
+                        const SizedBox(height: 18),
+
+                        // Title
+                        Text(
+                          actionTitle,
+                          style: GoogleFonts.montserrat(
+                            fontSize: 19,
+                            fontWeight: FontWeight.w700,
+                            color: const Color(0xFF111827),
+                          ),
+                        ),
+                        const SizedBox(height: 16),
+
+                        // User Summary Box
+                        Container(
+                          padding: const EdgeInsets.all(12),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFFF9FAFB),
+                            borderRadius: BorderRadius.circular(14),
+                            border: Border.all(color: const Color(0xFFE5E7EB)),
+                          ),
+                          child: Row(
+                            children: [
+                              CircleAvatar(
+                                radius: 20,
+                                backgroundColor: isDeactivated
+                                    ? const Color(0xFFDCFCE7)
+                                    : const Color(0xFFFEE2E2),
+                                child: Text(
+                                  (fullName.isNotEmpty
+                                          ? fullName[0]
+                                          : (email.isNotEmpty ? email[0] : 'U'))
+                                      .toUpperCase(),
+                                  style: GoogleFonts.montserrat(
+                                    fontSize: 15,
+                                    fontWeight: FontWeight.w700,
+                                    color: isDeactivated
+                                        ? const Color(0xFF16A34A)
+                                        : const Color(0xFFDC2626),
+                                  ),
+                                ),
+                              ),
+                              const SizedBox(width: 12),
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment:
+                                      CrossAxisAlignment.start,
+                                  children: [
+                                    Text(
+                                      fullName.isNotEmpty
+                                          ? fullName
+                                          : 'Unnamed User',
+                                      style: GoogleFonts.inter(
+                                        fontSize: 13.5,
+                                        fontWeight: FontWeight.w600,
+                                        color: const Color(0xFF111827),
+                                      ),
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
+                                    ),
+                                    if (email.isNotEmpty)
+                                      Text(
+                                        email,
+                                        style: GoogleFonts.inter(
+                                          fontSize: 12,
+                                          color: const Color(0xFF6B7280),
+                                        ),
+                                        maxLines: 1,
+                                        overflow: TextOverflow.ellipsis,
+                                      ),
+                                  ],
+                                ),
+                              ),
+                              Container(
+                                padding: const EdgeInsets.symmetric(
+                                    horizontal: 8, vertical: 3),
+                                decoration: BoxDecoration(
+                                  color: Colors.white,
+                                  borderRadius: BorderRadius.circular(6),
+                                  border: Border.all(
+                                      color: const Color(0xFFE5E7EB)),
+                                ),
+                                child: Text(
+                                  (user['role'] ?? 'user')
+                                      .toString()
+                                      .toUpperCase(),
+                                  style: GoogleFonts.inter(
+                                    fontSize: 10.5,
+                                    fontWeight: FontWeight.w700,
+                                    color: const Color(0xFF4B5563),
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                        const SizedBox(height: 14),
+
+                        // Consequence Notice Banner
+                        Container(
+                          padding: const EdgeInsets.all(12),
+                          decoration: BoxDecoration(
+                            color: isDeactivated
+                                ? const Color(0xFFF0FDF4)
+                                : const Color(0xFFFFF1F2),
+                            borderRadius: BorderRadius.circular(12),
+                            border: Border.all(
+                              color: isDeactivated
+                                  ? const Color(0xFFBBF7D0)
+                                  : const Color(0xFFFFCCD3),
+                            ),
+                          ),
+                          child: Row(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Icon(
+                                isDeactivated
+                                    ? Icons.info_outline_rounded
+                                    : Icons.warning_amber_rounded,
+                                size: 18,
+                                color: isDeactivated
+                                    ? const Color(0xFF15803D)
+                                    : const Color(0xFFBE123C),
+                              ),
+                              const SizedBox(width: 8),
+                              Expanded(
+                                child: Text(
+                                  isDeactivated
+                                      ? 'They will regain full system access, allowing them to sign in and interact with PetTrace.'
+                                      : 'They will be immediately logged out and unable to access the system until reactivated.',
+                                  style: GoogleFonts.inter(
+                                    fontSize: 12,
+                                    height: 1.45,
+                                    color: isDeactivated
+                                        ? const Color(0xFF166534)
+                                        : const Color(0xFF9F1239),
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                        const SizedBox(height: 22),
+
+                        // Action Buttons
+                        Row(
+                          children: [
+                            Expanded(
+                              child: OutlinedButton(
+                                onPressed: () => Navigator.pop(ctx, false),
+                                style: OutlinedButton.styleFrom(
+                                  foregroundColor: const Color(0xFF4B5563),
+                                  side:
+                                      const BorderSide(color: Color(0xFFD1D5DB)),
+                                  padding:
+                                      const EdgeInsets.symmetric(vertical: 13),
+                                  shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(12),
+                                  ),
+                                ),
+                                child: Text(
+                                  'Cancel',
+                                  style: GoogleFonts.inter(
+                                    fontSize: 13.5,
+                                    fontWeight: FontWeight.w600,
+                                  ),
+                                ),
+                              ),
+                            ),
+                            const SizedBox(width: 12),
+                            Expanded(
+                              child: ElevatedButton.icon(
+                                onPressed: () => Navigator.pop(ctx, true),
+                                icon: Icon(
+                                  isDeactivated
+                                      ? Icons.check_circle_outline_rounded
+                                      : Icons.block_rounded,
+                                  size: 16,
+                                ),
+                                label: Text(
+                                  actionTitle,
+                                  style: GoogleFonts.inter(
+                                    fontSize: 13.5,
+                                    fontWeight: FontWeight.w700,
+                                  ),
+                                ),
+                                style: ElevatedButton.styleFrom(
+                                  backgroundColor: isDeactivated
+                                      ? const Color(0xFF16A34A)
+                                      : const Color(0xFFDC2626),
+                                  foregroundColor: Colors.white,
+                                  elevation: 0,
+                                  padding:
+                                      const EdgeInsets.symmetric(vertical: 13),
+                                  shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(12),
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      );
+
+      if (confirmed != true) return;
+
+      try {
+        final userId = user['user_id']?.toString() ?? user['id']?.toString();
+        if (userId != null && userId.isNotEmpty) {
+          final res = await Supabase.instance.client
+              .from('users')
+              .update({'status': targetStatus})
+              .eq('user_id', userId)
+              .select();
+
+          if (res.isEmpty) {
+            throw Exception(
+              'No user row was updated. Please check Supabase Row Level Security (RLS) policies on the users table.',
+            );
+          }
+        }
+        await onRefresh();
+        if (context.mounted) {
+          AppToast.success(context,
+              'Account for "${fullName.isNotEmpty ? fullName : email}" is now $targetStatus.');
+        }
+      } catch (e) {
+        if (context.mounted) {
+          final errStr = e.toString();
+          if (errStr.contains('42501') ||
+              errStr.contains('row-level security')) {
+            AppToast.error(context,
+                'Permission denied: Supabase RLS requires an admin update policy on table "users".');
+          } else {
+            AppToast.error(context, 'Failed to update account status: $e');
+          }
+        }
+      }
+    }
+  }
+
+  static Widget _buildDetailRow({
+    required IconData icon,
+    required String label,
+    required String value,
+    Color? valueColor,
+  }) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+      decoration: BoxDecoration(
+        color: const Color(0xFFF9FAFB),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: const Color(0xFFF3F4F6)),
+      ),
+      child: Row(
+        children: [
+          Icon(icon, size: 18, color: const Color(0xFF6B7280)),
+          const SizedBox(width: 12),
+          Text(
+            label,
+            style: GoogleFonts.inter(
+              fontSize: 13,
+              fontWeight: FontWeight.w500,
+              color: const Color(0xFF6B7280),
+            ),
+          ),
+          const Spacer(),
+          Flexible(
+            child: Text(
+              value,
+              textAlign: TextAlign.right,
+              style: GoogleFonts.inter(
+                fontSize: 13,
+                fontWeight: FontWeight.w600,
+                color: valueColor ?? const Color(0xFF111827),
+              ),
+              overflow: TextOverflow.ellipsis,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+

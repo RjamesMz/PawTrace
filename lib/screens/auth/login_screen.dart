@@ -6,8 +6,8 @@ import '../../core/app_colors.dart';
 import '../../core/app_constants.dart';
 import '../../core/app_routes.dart';
 import '../../core/app_toast.dart';
-import '../../services/auth_service.dart';
-import '../../widgets/change_password_dialog.dart';
+import '../../services/auth/auth_service.dart';
+import '../../widgets/common/change_password_dialog.dart';
 
 /// Standalone Login screen for PawTrace.
 ///
@@ -215,6 +215,24 @@ class _LoginScreenState extends State<LoginScreen> {
                     height: 1.4,
                     color: const Color(0xFF1E40AF),
                   ),
+                ),
+                const SizedBox(height: 6),
+                Row(
+                  children: [
+                    const Icon(Icons.info_outline_rounded,
+                        size: 13, color: Color(0xFF2563EB)),
+                    const SizedBox(width: 4),
+                    Expanded(
+                      child: Text(
+                        'Tip: Check your Spam or Junk folder if you do not see it in your inbox.',
+                        style: GoogleFonts.inter(
+                          fontSize: 11,
+                          fontWeight: FontWeight.w600,
+                          color: const Color(0xFF1D4ED8),
+                        ),
+                      ),
+                    ),
+                  ],
                 ),
               ],
             ),

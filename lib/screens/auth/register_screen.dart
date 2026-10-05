@@ -5,7 +5,7 @@ import '../../core/app_colors.dart';
 import '../../core/app_constants.dart';
 import '../../core/app_routes.dart';
 import '../../core/app_toast.dart';
-import '../../services/auth_service.dart';
+import '../../services/auth/auth_service.dart';
 
 /// Standalone Register / Sign-up screen for PawTrace.
 ///
@@ -99,18 +99,157 @@ class _RegisterScreenState extends State<RegisterScreen> {
       // Ensure the user signs out so they must verify their email before accessing
       await AuthService.instance.signOut();
       if (!mounted) return;
+
+      // Show confirmation popup with spam folder warning
+      await showDialog(
+        context: context,
+        barrierDismissible: false,
+        builder: (ctx) => Dialog(
+          backgroundColor: Colors.transparent,
+          insetPadding:
+              const EdgeInsets.symmetric(horizontal: 20, vertical: 24),
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 420),
+            child: Container(
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(24),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withOpacity(0.14),
+                    blurRadius: 30,
+                    offset: const Offset(0, 10),
+                  ),
+                ],
+              ),
+              clipBehavior: Clip.antiAlias,
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Container(
+                    height: 4,
+                    color: AppColors.primary,
+                  ),
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(28, 28, 28, 24),
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Container(
+                          width: 64,
+                          height: 64,
+                          decoration: BoxDecoration(
+                            color: const Color(0xFFEFF6FF),
+                            shape: BoxShape.circle,
+                            border: Border.all(
+                              color: const Color(0xFFBFDBFE),
+                              width: 2,
+                            ),
+                          ),
+                          child: const Icon(
+                            Icons.mark_email_unread_rounded,
+                            color: Color(0xFF2563EB),
+                            size: 32,
+                          ),
+                        ),
+                        const SizedBox(height: 18),
+                        Text(
+                          'Verify Your Email',
+                          textAlign: TextAlign.center,
+                          style: GoogleFonts.montserrat(
+                            fontSize: 20,
+                            fontWeight: FontWeight.w700,
+                            color: const Color(0xFF111827),
+                          ),
+                        ),
+                        const SizedBox(height: 10),
+                        Text(
+                          'We sent a confirmation link to:\n$email',
+                          textAlign: TextAlign.center,
+                          style: GoogleFonts.inter(
+                            fontSize: 13,
+                            fontWeight: FontWeight.w600,
+                            color: AppColors.primary,
+                          ),
+                        ),
+                        const SizedBox(height: 16),
+                        // Spam folder reminder banner
+                        Container(
+                          padding: const EdgeInsets.all(12),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFFFFFBEB),
+                            borderRadius: BorderRadius.circular(14),
+                            border: Border.all(color: const Color(0xFFFDE68A)),
+                          ),
+                          child: Row(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              const Icon(
+                                Icons.warning_amber_rounded,
+                                size: 20,
+                                color: Color(0xFFD97706),
+                              ),
+                              const SizedBox(width: 10),
+                              Expanded(
+                                child: Text(
+                                  'Important: If you do not see the confirmation email in your inbox, please make sure to check your Spam or Junk folder.',
+                                  style: GoogleFonts.inter(
+                                    fontSize: 12,
+                                    height: 1.45,
+                                    fontWeight: FontWeight.w500,
+                                    color: const Color(0xFF92400E),
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                        const SizedBox(height: 24),
+                        SizedBox(
+                          width: double.infinity,
+                          child: ElevatedButton(
+                            onPressed: () => Navigator.pop(ctx),
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: AppColors.primary,
+                              foregroundColor: Colors.white,
+                              elevation: 0,
+                              padding: const EdgeInsets.symmetric(vertical: 14),
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(14),
+                              ),
+                            ),
+                            child: Text(
+                              'Got It, Proceed to Login',
+                              style: GoogleFonts.inter(
+                                fontSize: 14,
+                                fontWeight: FontWeight.w700,
+                              ),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      );
+
+      if (!mounted) return;
       Navigator.of(context).pushNamedAndRemoveUntil(
         AppRoutes.login,
         (_) => false,
         arguments: {
           'flashMessage':
-              'Registration successful! Please check your email and verify your account first before signing in.',
+              'Registration successful! Please check your email (and Spam folder) to verify your account before logging in.',
           'flashEmail': email,
         },
       );
       AppToast.show(
         null,
-        'Please check your email and verify your account first before signing in.',
+        'Please check your email (or Spam folder) to verify your account.',
         duration: const Duration(seconds: 5),
         backgroundColor: const Color(0xFF1E293B),
         icon: Icons.mark_email_unread_rounded,

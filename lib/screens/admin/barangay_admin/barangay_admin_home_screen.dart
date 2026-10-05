@@ -1,0 +1,776 @@
+import 'package:flutter/material.dart';
+import 'package:google_fonts/google_fonts.dart';
+import 'package:responsive_framework/responsive_framework.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
+import '../../../core/app_colors.dart';
+import '../../../core/app_constants.dart';
+import '../../../core/app_routes.dart';
+import '../../../core/app_toast.dart';
+import '../../../services/auth/auth_service.dart';
+import '../../../widgets/admin/admin_content_wrapper.dart';
+import '../../../widgets/admin/admin_layout.dart';
+import '../../../widgets/common/notification_bell_button.dart';
+import '../../../widgets/admin/stat_card.dart';
+import '../news/admin_news_detail_screen.dart';
+import '../pets/admin_pets_screen.dart';
+import '../reports/admin_reports_screen.dart';
+import '../user_management/user_management_screen.dart';
+import '../../../widgets/admin/web/admin_web_layout.dart';
+import '../../../widgets/admin/barangay_admin/barangay_admin_cards.dart';
+import '../../../widgets/admin/barangay_admin/barangay_admin_desktop_view.dart';
+
+/// Barangay Admin Home Screen — main dashboard visible when the admin taps Home.
+///
+/// Shows greeting, 4 stat cards, pending verification reports, AI match preview,
+/// and recent activity. All data scoped by the admin's assigned barangay.
+class BarangayAdminHomeScreen extends StatefulWidget {
+  const BarangayAdminHomeScreen({super.key});
+
+  @override
+  State<BarangayAdminHomeScreen> createState() =>
+      _BarangayAdminHomeScreenState();
+}
+
+class _BarangayAdminHomeScreenState extends State<BarangayAdminHomeScreen> {
+  final _supabase = Supabase.instance.client;
+
+  String _adminBarangay = '';
+  String _adminName = 'Admin';
+  String? _photoUrl;
+  bool _isLoading = true;
+
+  // Stat counts
+  int _registeredPets = 0;
+  int _lostReports = 0;
+  int _registeredUsers = 0;
+
+  // Data lists
+  List<Map<String, dynamic>> _news = [];
+  List<Map<String, dynamic>> _recentActivity = [];
+  List<Map<String, dynamic>> _pendingReports = [];
+  bool _newsExpanded = true;
+
+  @override
+  void initState() {
+    super.initState();
+    AuthService.instance.profileNotifier.addListener(_onProfileChanged);
+    _loadDashboard();
+  }
+
+  @override
+  void dispose() {
+    AuthService.instance.profileNotifier.removeListener(_onProfileChanged);
+    super.dispose();
+  }
+
+  void _onProfileChanged() {
+    final profile = AuthService.instance.profileNotifier.value;
+    if (profile != null && mounted) {
+      setState(() {
+        final first = profile['first_name'] ?? '';
+        final surname = profile['surname'] ?? '';
+        if (first.toString().isNotEmpty) {
+          _adminName = '$first $surname'.trim();
+        }
+        _photoUrl = profile['photo_url']?.toString();
+      });
+    }
+  }
+
+  Future<void> _loadDashboard() async {
+    setState(() => _isLoading = true);
+
+    // Fetch admin barangay and profile
+    _adminBarangay = await AuthService.instance.getCurrentUserBarangay();
+    final profile = await AuthService.instance.getCurrentUserProfile();
+    if (profile != null) {
+      final first = profile['first_name'] ?? '';
+      final surname = profile['surname'] ?? '';
+      if (first.toString().isNotEmpty) {
+        _adminName = '$first $surname'.trim();
+      }
+      _photoUrl = profile['photo_url']?.toString();
+    }
+
+    await Future.wait([
+      _fetchStats(),
+      _fetchNews(),
+      _fetchRecentActivity(),
+      _fetchPendingReports(),
+    ]);
+
+    if (mounted) setState(() => _isLoading = false);
+  }
+
+  Future<void> _fetchStats() async {
+    try {
+      // Registered pets (active / lost only, excluding archived)
+      var petQuery = _supabase
+          .from('pets')
+          .select('pet_id')
+          .neq('status', 'archived')
+          .neq('status', 'Archived');
+      if (_adminBarangay.isNotEmpty) {
+        petQuery = petQuery.eq('barangay', _adminBarangay);
+      }
+      final pets = await petQuery;
+      _registeredPets = pets.length;
+
+      // Lost reports (active only)
+      var lostQuery = _supabase
+          .from('lost_reports')
+          .select('report_id')
+          .eq('status', 'active');
+      if (_adminBarangay.isNotEmpty) {
+        lostQuery = lostQuery.eq('barangay', _adminBarangay);
+      }
+      final lost = await lostQuery;
+      _lostReports = lost.length;
+
+      // Registered Users count (scoped to barangay, excluding admins)
+      var userQuery = _supabase
+          .from('users')
+          .select('user_id')
+          .neq('role', 'admin')
+          .neq('role', 'super_admin');
+      if (_adminBarangay.isNotEmpty) {
+        userQuery = userQuery.eq('barangay', _adminBarangay);
+      }
+      final users = await userQuery;
+      _registeredUsers = users.length;
+    } catch (e) {
+      debugPrint('Error fetching stats: $e');
+    }
+  }
+
+  Future<void> _fetchNews() async {
+    try {
+      var query = _supabase.from('news').select();
+      if (_adminBarangay.isNotEmpty) {
+        query = query.or(
+            'barangay.eq.$_adminBarangay,barangay.eq.Catanduanes,barangay.eq.All');
+      }
+      final data = await query.order('created_at', ascending: false).limit(10);
+      _news = List<Map<String, dynamic>>.from(data)
+          .where(
+              (p) => (p['status'] as String? ?? '').toLowerCase() != 'archived')
+          .take(3)
+          .toList();
+    } catch (e) {
+      debugPrint('Error fetching news: $e');
+    }
+  }
+
+  Future<void> _fetchRecentActivity() async {
+    try {
+      // Fetch recently registered pets as activity items
+      final pets = await _supabase
+          .from('pets')
+          .select('name, created_at, users(first_name, surname)')
+          .eq('barangay', _adminBarangay)
+          .order('created_at', ascending: false)
+          .limit(5);
+
+      final List<Map<String, dynamic>> activities = [];
+      for (final p in pets) {
+        final petName = p['name'] ?? 'A pet';
+        final u = p['users'];
+        final ownerName = u != null
+            ? '${u['first_name'] ?? ''} ${u['surname'] ?? ''}'.trim()
+            : 'Someone';
+        activities.add({
+          'description': '$petName was registered by $ownerName',
+          'timestamp': p['created_at'],
+          'color': const Color(0xFF22C55E),
+        });
+      }
+
+      // Fetch recent lost reports as activity
+      final reports = await _supabase
+          .from('lost_reports')
+          .select('*, pets(name), owner_id(first_name, surname)')
+          .eq('barangay', _adminBarangay)
+          .order('reported_at', ascending: false)
+          .limit(5);
+
+      for (final r in reports) {
+        final petData = r['pets'];
+        final petName = petData is Map ? (petData['name'] ?? 'A pet') : 'A pet';
+        final userData = r['owner_id'];
+        final reporterName = userData is Map
+            ? '${userData['first_name'] ?? ''} ${userData['surname'] ?? ''}'
+                .trim()
+            : 'Someone';
+        activities.add({
+          'description': '$petName was reported lost by $reporterName',
+          'timestamp': r['reported_at'],
+          'color': AppColors.error,
+        });
+      }
+
+      // Sort by timestamp descending
+      activities.sort((a, b) {
+        final ta = a['timestamp']?.toString() ?? '';
+        final tb = b['timestamp']?.toString() ?? '';
+        return tb.compareTo(ta);
+      });
+
+      _recentActivity = activities.take(8).toList();
+    } catch (e) {
+      debugPrint('Error fetching activity: $e');
+    }
+  }
+
+  Future<void> _fetchPendingReports() async {
+    try {
+      final data = await _supabase
+          .from('lost_reports')
+          .select(
+              '*, pets(name, photo_url), owner_id(first_name, surname, phone)')
+          .eq('barangay', _adminBarangay)
+          .order('reported_at', ascending: false);
+
+      final reports = List<Map<String, dynamic>>.from(data);
+      _pendingReports = reports.where((r) {
+        final status = (r['status'] ?? '').toString().toLowerCase();
+        return status == 'pending' || status == 'active';
+      }).toList();
+    } catch (e) {
+      debugPrint('Error fetching pending reports: $e');
+    }
+  }
+
+  String _greeting() {
+    final hour = DateTime.now().hour;
+    if (hour < 12) return 'Good morning';
+    if (hour < 17) return 'Good afternoon';
+    return 'Good evening';
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (ResponsiveBreakpoints.of(context).isDesktop) {
+      return _buildDesktopLayout();
+    }
+    return _buildMobileLayout();
+  }
+
+  Widget _buildMobileLayout() {
+    return Scaffold(
+      backgroundColor: const Color(0xFFF2F3F5),
+      body: AdminLayout(
+        currentIndex: 0,
+        pageTitle: 'Dashboard',
+        role: UserRole.admin,
+        child: _buildBody(context),
+      ),
+    );
+  }
+
+  Widget _buildDesktopLayout() {
+    if (_isLoading) {
+      return const AdminWebLayout(
+        currentIndex: 0,
+        pageTitle: 'Dashboard',
+        body: Center(
+          child: Padding(
+            padding: EdgeInsets.all(60.0),
+            child: CircularProgressIndicator(color: AppColors.primary),
+          ),
+        ),
+      );
+    }
+
+    return AdminWebLayout(
+      currentIndex: 0,
+      pageTitle: 'Dashboard',
+      body: BarangayAdminDesktopView(
+        adminBarangay: _adminBarangay,
+        registeredPets: _registeredPets,
+        lostReports: _lostReports,
+        registeredUsers: _registeredUsers,
+        isLoading: _isLoading,
+        pendingReports: _pendingReports,
+        recentActivity: _recentActivity,
+      ),
+    );
+  }
+
+  Widget _buildBody(BuildContext context) {
+    return Column(
+      children: [
+        _buildAppBar(context),
+        Expanded(
+          child: _isLoading
+              ? const Center(
+                  child: CircularProgressIndicator(color: AppColors.primary))
+              : RefreshIndicator(
+                  onRefresh: _loadDashboard,
+                  color: AppColors.primary,
+                  child: SingleChildScrollView(
+                    physics: const AlwaysScrollableScrollPhysics(),
+                    padding: const EdgeInsets.fromLTRB(0, 0, 0, 20),
+                    child: AdminContentWrapper(
+                      child: LayoutBuilder(
+                        builder: (context, constraints) {
+                          return Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              _buildGreeting(),
+                              const SizedBox(height: 18),
+                              _buildStatCards(constraints.maxWidth),
+                              const SizedBox(height: 24),
+                              _buildRecentActivity(),
+                              const SizedBox(height: 20),
+                            ],
+                          );
+                        },
+                      ),
+                    ),
+                  ),
+                ),
+        ),
+      ],
+    );
+  }
+
+  // ─── AppBar (mobile only — hidden on web by AdminLayout) ────────────────────
+
+  Widget _buildAppBar(BuildContext context) {
+    // On wide screens AdminLayout renders its own top bar; hide this one.
+    final screenWidth = MediaQuery.of(context).size.width;
+    if (screenWidth >= 800) return const SizedBox.shrink();
+    return Container(
+      height: 60,
+      padding: const EdgeInsets.symmetric(horizontal: 16),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.04),
+            blurRadius: 8,
+            offset: const Offset(0, 2),
+          ),
+        ],
+      ),
+      child: Row(
+        children: [
+          // PawTrace logo + name
+          AppConstants.buildLogoGraphic(
+            size: 26,
+          ),
+          const SizedBox(width: 10),
+          Text(
+            AppConstants.appName,
+            style: GoogleFonts.montserrat(
+              fontSize: 20,
+              fontWeight: FontWeight.w800,
+              color: AppColors.primary,
+            ),
+          ),
+          const Spacer(),
+          const NotificationBellButton(size: 24),
+          const SizedBox(width: 8),
+          // Admin avatar
+          InkWell(
+            onTap: () =>
+                Navigator.pushNamed(context, AppRoutes.adminSettings),
+            borderRadius: BorderRadius.circular(20),
+            child: CircleAvatar(
+              radius: 17,
+              backgroundColor: AppColors.primaryContainer,
+              backgroundImage: _photoUrl != null && _photoUrl!.isNotEmpty
+                  ? NetworkImage(_photoUrl!)
+                  : null,
+              child: (_photoUrl == null || _photoUrl!.isEmpty)
+                  ? Text(
+                      _adminName.isNotEmpty
+                          ? _adminName[0].toUpperCase()
+                          : 'A',
+                      style: GoogleFonts.montserrat(
+                        fontSize: 14,
+                        fontWeight: FontWeight.w700,
+                        color: AppColors.onPrimaryContainer,
+                      ),
+                    )
+                  : null,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // ─── Greeting / Welcome Banner ───────────────────────────────────────────────
+
+  Widget _buildGreeting() {
+    return Container(
+      margin: const EdgeInsets.fromLTRB(16, 16, 16, 0),
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(20),
+        gradient: const LinearGradient(
+          colors: [Color(0xFFFF6600), Color(0xFFFF8C00)],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: const Color(0xFFFF6600).withOpacity(0.3),
+            blurRadius: 16,
+            offset: const Offset(0, 6),
+          ),
+        ],
+      ),
+      child: Row(
+        children: [
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  '${_greeting()}, $_adminName',
+                  style: GoogleFonts.montserrat(
+                    fontSize: 18,
+                    fontWeight: FontWeight.bold,
+                    color: Colors.white,
+                  ),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  _adminBarangay.isNotEmpty
+                      ? 'Brgy. $_adminBarangay • Barangay Admin'
+                      : 'Barangay Admin Dashboard',
+                  style: GoogleFonts.inter(
+                    fontSize: 13,
+                    color: Colors.white.withOpacity(0.9),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          Container(
+            width: 52,
+            height: 52,
+            decoration: BoxDecoration(
+              color: Colors.white.withOpacity(0.2),
+              shape: BoxShape.circle,
+            ),
+            child: const Icon(Icons.pets_rounded,
+                color: Colors.white, size: 28),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // ─── Stat Cards ──────────────────────────────────────────────────────────────
+
+  Widget _buildStatCards(double availableWidth) {
+    final isWide = availableWidth >= 900;
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 20),
+      child: StatCardGrid(
+        crossAxisCount: isWide ? 3 : 2,
+        childAspectRatio: isWide ? 1.4 : 1.3,
+        children: [
+          StatCard(
+            label: 'Registered Pets',
+            count: _registeredPets,
+            icon: Icons.pets,
+            color: AppColors.primary,
+            isLoading: _isLoading,
+            onTap: () => Navigator.push(
+              context,
+              MaterialPageRoute(builder: (_) => const AdminPetsScreen()),
+            ),
+          ),
+          StatCard(
+            label: 'Lost Reports',
+            count: _lostReports,
+            icon: Icons.flag_rounded,
+            color: AppColors.error,
+            isLoading: _isLoading,
+            onTap: () => Navigator.push(
+              context,
+              MaterialPageRoute(builder: (_) => const AdminReportsScreen()),
+            ),
+          ),
+          StatCard(
+            label: 'Total Users',
+            count: _registeredUsers,
+            icon: Icons.people_alt_rounded,
+            color: const Color(0xFF2563EB),
+            isLoading: _isLoading,
+            onTap: () => Navigator.push(
+              context,
+              MaterialPageRoute(builder: (_) => const UserManagementScreen()),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // ─── News Announcements Section ─────────────────────────────────────────────
+
+  Future<void> _archivePost(Map<String, dynamic> post) async {
+    final title = post['title']?.toString() ?? 'this post';
+
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (_) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        title: Text('Archive Post?',
+            style: GoogleFonts.montserrat(fontWeight: FontWeight.w700)),
+        content: Text(
+            'Are you sure you want to archive "$title"? It will be removed from published news and preserved in records.',
+            style: GoogleFonts.inter(fontSize: 14)),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: Text('Cancel',
+                style: GoogleFonts.inter(color: AppColors.onSurfaceVariant)),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(
+                backgroundColor: AppColors.primary,
+                foregroundColor: Colors.white,
+                shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12))),
+            onPressed: () => Navigator.pop(context, true),
+            child: Text('Archive',
+                style: GoogleFonts.inter(fontWeight: FontWeight.w600)),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || !mounted) return;
+    try {
+      final rawId = post['news_id'] ?? post['post_id'] ?? post['id'];
+      dynamic idToUse = rawId;
+      if (rawId != null) {
+        final parsed = int.tryParse(rawId.toString());
+        if (parsed != null) idToUse = parsed;
+      }
+
+      List<dynamic> res = [];
+      if (idToUse != null) {
+        for (final idCol in ['news_id', 'post_id', 'id']) {
+          try {
+            res = await _supabase
+                .from('news')
+                .update({'status': 'archived'})
+                .eq(idCol, idToUse)
+                .select();
+            if (res.isNotEmpty) break;
+          } catch (_) {}
+        }
+      }
+      if (res.isEmpty && title.isNotEmpty) {
+        try {
+          res = await _supabase
+              .from('news')
+              .update({'status': 'archived'})
+              .eq('title', title)
+              .select();
+        } catch (_) {}
+      }
+      _fetchNews();
+      if (mounted) {
+        if (res.isNotEmpty) {
+          AppToast.success(context, 'News post archived successfully.');
+        } else {
+          AppToast.error(context,
+              'Unable to archive. Please run SQL to add status column or check Supabase permissions.');
+        }
+      }
+    } catch (e) {
+      if (mounted) {
+        AppToast.error(context, 'Error archiving post: $e');
+      }
+    }
+  }
+
+  // ignore: unused_element
+  Widget _buildNewsSection() {
+    return Column(
+      children: [
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 20),
+          child: Row(
+            children: [
+              Expanded(
+                child: Text(
+                  'News & Announcements',
+                  style: GoogleFonts.montserrat(
+                    fontSize: 16,
+                    fontWeight: FontWeight.w700,
+                    color: AppColors.onSurface,
+                  ),
+                ),
+              ),
+              TextButton.icon(
+                onPressed: () async {
+                  await Navigator.pushNamed(context, AppRoutes.postNews);
+                  _fetchNews();
+                  if (mounted) setState(() {});
+                },
+                icon: const Icon(Icons.add_rounded, size: 16),
+                label: Text(
+                  'Create Post',
+                  style: GoogleFonts.inter(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+                style: TextButton.styleFrom(
+                  foregroundColor: AppColors.primary,
+                  backgroundColor: AppColors.primaryContainer.withOpacity(0.3),
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                  shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(20)),
+                ),
+              ),
+              const SizedBox(width: 8),
+              GestureDetector(
+                onTap: () => setState(() => _newsExpanded = !_newsExpanded),
+                child: AnimatedRotation(
+                  turns: _newsExpanded ? 0 : -0.25,
+                  duration: const Duration(milliseconds: 250),
+                  child: const Icon(Icons.keyboard_arrow_down_rounded,
+                      color: AppColors.onSurfaceVariant),
+                ),
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(height: 12),
+        AnimatedCrossFade(
+          firstChild: _news.isEmpty
+              ? Padding(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
+                  child: Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.symmetric(vertical: 28),
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      borderRadius: BorderRadius.circular(16),
+                      border: Border.all(
+                          color: AppColors.outlineVariant.withOpacity(0.15)),
+                    ),
+                    child: Column(
+                      children: [
+                        Icon(Icons.campaign_outlined,
+                            size: 36, color: Colors.grey.shade400),
+                        const SizedBox(height: 8),
+                        Text('No announcements yet',
+                            style: GoogleFonts.inter(
+                                fontSize: 13,
+                                color: AppColors.onSurfaceVariant
+                                    .withOpacity(0.6))),
+                      ],
+                    ),
+                  ),
+                )
+              : Column(
+                  children: _news
+                      .map((post) => Padding(
+                            padding: const EdgeInsets.fromLTRB(20, 0, 20, 10),
+                            child: BarangayAdminNewsCard(
+                              post: post,
+                              onTap: () {
+                                Navigator.push(
+                                  context,
+                                  MaterialPageRoute(
+                                    builder: (_) => AdminNewsDetailScreen(
+                                      news: post,
+                                      onArchive: () => _archivePost(post),
+                                    ),
+                                  ),
+                                );
+                              },
+                              onArchive: () => _archivePost(post),
+                            ),
+                          ))
+                      .toList(),
+                ),
+          secondChild: const SizedBox.shrink(),
+          crossFadeState: _newsExpanded
+              ? CrossFadeState.showFirst
+              : CrossFadeState.showSecond,
+          duration: const Duration(milliseconds: 250),
+        ),
+      ],
+    );
+  }
+
+  // ─── Recent Activity ─────────────────────────────────────────────────────────
+
+  Widget _buildRecentActivity() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 20),
+          child: Text(
+            'Recent Activity',
+            style: GoogleFonts.montserrat(
+              fontSize: 16,
+              fontWeight: FontWeight.w700,
+              color: AppColors.onSurface,
+            ),
+          ),
+        ),
+        const SizedBox(height: 12),
+        if (_recentActivity.isEmpty)
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 20),
+            child: Container(
+              width: double.infinity,
+              padding: const EdgeInsets.symmetric(vertical: 24),
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(16),
+              ),
+              child: Center(
+                child: Text('No recent activity',
+                    style: GoogleFonts.inter(
+                        fontSize: 13,
+                        color: AppColors.onSurfaceVariant.withOpacity(0.6))),
+              ),
+            ),
+          )
+        else
+          ...List.generate(
+            _recentActivity.length,
+            (i) => Padding(
+              padding: const EdgeInsets.fromLTRB(20, 0, 20, 8),
+              child: BarangayAdminActivityItem(
+                activity: _recentActivity[i],
+                timeAgo: _formatTimeAgo(
+                    _recentActivity[i]['timestamp']?.toString()),
+              ),
+            ),
+          ),
+      ],
+    );
+  }
+
+  // ─── Helpers ─────────────────────────────────────────────────────────────────
+
+  String _formatTimeAgo(String? timestamp) {
+    if (timestamp == null || timestamp.isEmpty) return 'Recent';
+    try {
+      final dt = DateTime.parse(timestamp);
+      final diff = DateTime.now().difference(dt);
+      if (diff.inMinutes < 60) return '${diff.inMinutes}m ago';
+      if (diff.inHours < 24) return '${diff.inHours}h ago';
+      return '${diff.inDays}d ago';
+    } catch (_) {
+      return 'Recent';
+    }
+  }
+}

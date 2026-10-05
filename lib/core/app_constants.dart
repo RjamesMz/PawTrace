@@ -30,6 +30,54 @@ class AppConstants {
     'Calatagan',
   ];
 
+  // ── Known Breeds List ──────────────────────────────────────────────────────
+  static const List<String> dogBreeds = [
+    'Aspin',
+    'Shih Tzu',
+    'Pomeranian',
+    'Golden Retriever',
+    'Labrador Retriever',
+    'Siberian Husky',
+    'Chihuahua',
+    'Poodle',
+    'German Shepherd',
+    'Pug',
+    'Beagle',
+    'French Bulldog',
+    'Rottweiler',
+    'Dachshund',
+    'Belgian Malinois',
+    'Chow Chow',
+    'Pitbull / Bully',
+    'Corgi',
+    'Japanese Spitz',
+    'Doberman',
+    'Great Dane',
+    'Mixed Breed',
+    'Other',
+  ];
+
+  static const List<String> catBreeds = [
+    'Puspin',
+    'Persian',
+    'Siamese',
+    'British Shorthair',
+    'Maine Coon',
+    'Scottish Fold',
+    'Ragdoll',
+    'Bengal',
+    'Russian Blue',
+    'American Shorthair',
+    'Sphynx',
+    'Munchkin',
+    'Himalayan',
+    'Birman',
+    'Abyssinian',
+    'Domestic Shorthair',
+    'Mixed Breed',
+    'Other',
+  ];
+
   // ── Logo Widget Builders & Global Sizing ──────────────────────────────────
   /// Standard sizes so you can adjust the logo scale globally in one place:
   static const double headerLogoSize = 34.0;

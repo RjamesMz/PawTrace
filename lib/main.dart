@@ -4,10 +4,11 @@ import 'package:flutter/services.dart';
 import 'package:responsive_framework/responsive_framework.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
+import 'core/app_colors.dart';
 import 'core/app_constants.dart';
 import 'core/app_routes.dart';
 import 'core/app_toast.dart';
-import 'widgets/main_app_layout.dart';
+import 'widgets/user/main_app_layout.dart';
 import 'core/app_theme.dart';
 import 'core/supabase_config.dart';
 
@@ -15,21 +16,20 @@ import 'core/supabase_config.dart';
 import 'screens/auth/auth_wrapper.dart';
 import 'screens/auth/login_screen.dart';
 import 'screens/auth/register_screen.dart';
+import 'screens/auth/email_verified_screen.dart';
 
 // Screens - User
-import 'screens/user/locate_my_pet.dart';
-import 'screens/user/pet_profile_detail.dart';
-import 'screens/user/my_pets_screen.dart';
-import 'screens/user/report_lost_pet.dart';
+import 'screens/user/locate_pet/locate_my_pet.dart';
+import 'screens/user/my_pets/pet_profile_detail.dart';
+import 'screens/user/lost_pet/report_lost_pet.dart';
 
 // Screens - Admin
-import 'screens/admin/user_management.dart';
-import 'screens/admin/admin_pets_screen.dart';
-import 'screens/admin/barangay_admin_home_screen.dart';
-import 'screens/admin/admin_reports_screen.dart';
-import 'screens/admin/super_admin_screen.dart';
-import 'screens/admin/post_news_screen.dart';
-import 'screens/admin/admin_settings_screen.dart';
+import 'screens/admin/user_management/user_management_screen.dart';
+import 'screens/admin/pets/admin_pets_screen.dart';
+import 'screens/admin/barangay_admin/barangay_admin_home_screen.dart';
+import 'screens/admin/reports/admin_reports_screen.dart';
+import 'screens/super_admin/super_admin_screen.dart';
+import 'screens/admin/news/post_news_screen.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -113,7 +113,8 @@ class PetTraceApp extends StatelessWidget {
 
         // ─── Main tabs (User & Admin via MainAppLayout) ──────────────────────
         AppRoutes.home: (_) => const MainAppLayout(initialIndex: 0),
-        AppRoutes.lostPetScreen: (_) => const MainAppLayout(initialIndex: 1),
+        AppRoutes.lostPetScreen: (_) => const MainAppLayout(initialIndex: 0),
+        AppRoutes.myPets: (_) => const MainAppLayout(initialIndex: 1),
         AppRoutes.aiScan: (_) => const MainAppLayout(initialIndex: 2),
         AppRoutes.profilePetRegistration: (_) => const MainAppLayout(initialIndex: 3),
         AppRoutes.settings: (_) => const MainAppLayout(initialIndex: 4),
@@ -133,16 +134,105 @@ class PetTraceApp extends StatelessWidget {
         AppRoutes.petProfileDetail: (_) => const PetProfileDetailScreen(),
 
         // ─── Admin ────────────────────────────────────────────────────────────
-        AppRoutes.myPets: (_) => const MyPetsScreen(),
         AppRoutes.postNews: (_) => const PostNewsScreen(),
-        AppRoutes.adminSettings: (_) => const AdminSettingsScreen(),
+        // ─── Verification & Deep Link Callbacks ──────────────────────────────
+        AppRoutes.verified: (_) => const EmailVerifiedScreen(),
+        AppRoutes.confirm: (_) => const EmailVerifiedScreen(),
+        AppRoutes.authCallback: (_) => const EmailVerifiedScreen(),
+        '/auth/v1/verify': (_) => const EmailVerifiedScreen(),
+        '/verify': (_) => const EmailVerifiedScreen(),
       },
 
-      // Fallback for unknown routes
-      onUnknownRoute: (_) => MaterialPageRoute(
-        builder: (_) => const Scaffold(
-          body: Center(child: Text('Page not found', style: TextStyle(fontSize: 18))),
-        ),
+      // Handle dynamic paths, tokens, and verification deep links
+      onGenerateRoute: (settings) {
+        final rawName = settings.name ?? '';
+        final uri = Uri.tryParse(rawName);
+        final path = uri?.path ?? '';
+
+        if (path == '/verified' ||
+            path == '/confirm' ||
+            path.contains('verify') ||
+            path.contains('callback') ||
+            rawName.contains('access_token=') ||
+            rawName.contains('type=signup') ||
+            rawName.contains('type=recovery') ||
+            rawName.contains('type=magiclink') ||
+            rawName.contains('code=')) {
+          return MaterialPageRoute(
+            settings: settings,
+            builder: (_) => const EmailVerifiedScreen(),
+          );
+        }
+        return null;
+      },
+
+      // Fallback for unknown routes — safely redirects home or shows clean 404
+      onUnknownRoute: (settings) => MaterialPageRoute(
+        settings: settings,
+        builder: (_) {
+          if (Supabase.instance.client.auth.currentSession != null) {
+            return const AuthWrapper();
+          }
+          return Scaffold(
+            backgroundColor: Colors.white,
+            body: Center(
+              child: Padding(
+                padding: const EdgeInsets.all(28),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Container(
+                      width: 72,
+                      height: 72,
+                      decoration: BoxDecoration(
+                        color: AppColors.primary.withOpacity(0.1),
+                        shape: BoxShape.circle,
+                      ),
+                      child: const Icon(
+                        Icons.pets_rounded,
+                        size: 38,
+                        color: AppColors.primary,
+                      ),
+                    ),
+                    const SizedBox(height: 20),
+                    const Text(
+                      'Page Not Found',
+                      style: TextStyle(
+                        fontSize: 20,
+                        fontWeight: FontWeight.w700,
+                        color: AppColors.onSurface,
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    const Text(
+                      'The requested link or screen could not be found.',
+                      textAlign: TextAlign.center,
+                      style: TextStyle(
+                        fontSize: 14,
+                        color: AppColors.onSurfaceVariant,
+                      ),
+                    ),
+                    const SizedBox(height: 24),
+                    ElevatedButton(
+                      onPressed: () => rootNavigatorKey.currentState
+                          ?.pushNamedAndRemoveUntil('/', (route) => false),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: AppColors.primary,
+                        foregroundColor: Colors.white,
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 24, vertical: 12),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(14),
+                        ),
+                      ),
+                      child: const Text('Return to Home / Login'),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          );
+        },
       ),
     );
   }
