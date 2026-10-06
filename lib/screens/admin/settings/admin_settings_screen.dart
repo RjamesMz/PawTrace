@@ -467,18 +467,61 @@ class _AdminSettingsScreenState extends State<AdminSettingsScreen> {
       body: AdminLayout(
         currentIndex: 4,
         pageTitle: 'Admin Settings',
-        child: _isLoading
-            ? const Center(
-                child: CircularProgressIndicator(color: AppColors.primary),
-              )
-            : SingleChildScrollView(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 16, vertical: 20),
-                child: _buildFormContent(),
-              ),
+        child: Column(
+          children: [
+            _buildMobileAppBar(),
+            Expanded(
+              child: _isLoading
+                  ? const Center(
+                      child:
+                          CircularProgressIndicator(color: AppColors.primary),
+                    )
+                  : SingleChildScrollView(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 16, vertical: 20),
+                      child: _buildFormContent(),
+                    ),
+            ),
+          ],
+        ),
       ),
     );
   }
+
+  Widget _buildMobileAppBar() {
+    return Container(
+      height: 64 + MediaQuery.of(context).padding.top,
+      padding:
+          EdgeInsets.fromLTRB(16, MediaQuery.of(context).padding.top, 16, 0),
+      decoration: BoxDecoration(
+        color: AppColors.surface,
+        boxShadow: [
+          BoxShadow(color: Colors.black.withOpacity(0.04), blurRadius: 8),
+        ],
+      ),
+      child: Row(
+        children: [
+          AppConstants.buildLogoGraphic(size: 24),
+          const SizedBox(width: 8),
+          Text(
+            'Admin Settings',
+            style: GoogleFonts.montserrat(
+              fontSize: 18,
+              fontWeight: FontWeight.w700,
+              color: AppColors.onSurface,
+            ),
+          ),
+          const Spacer(),
+          IconButton(
+            tooltip: 'Log out',
+            icon: const Icon(Icons.logout_rounded, color: AppColors.error),
+            onPressed: _handleLogout,
+          ),
+        ],
+      ),
+    );
+  }
+
 
   Widget _buildFormContent() {
     final fullName = [

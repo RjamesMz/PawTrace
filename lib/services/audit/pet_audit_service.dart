@@ -68,7 +68,7 @@ class PetAuditService {
 
   /// Records an audit log entry when a pet profile is modified.
   Future<void> logPetModification({
-    required String petId,
+    required dynamic petId,
     required String petName,
     required String action,
     required String changesSummary,
@@ -76,6 +76,7 @@ class PetAuditService {
     String? modifierRole,
     String? modifiedByRole,
   }) async {
+    final petIdStr = petId?.toString() ?? '';
     final effectiveRole = modifierRole ?? modifiedByRole ?? 'Owner';
     final currentUserId = _client.auth.currentUser?.id;
     final now = DateTime.now();
@@ -104,7 +105,7 @@ class PetAuditService {
 
     final logEntry = PetAuditLog(
       id: 'local_${now.millisecondsSinceEpoch}',
-      petId: petId,
+      petId: petIdStr,
       petName: petName,
       action: action,
       changesSummary: changesSummary,
@@ -127,18 +128,19 @@ class PetAuditService {
 
   /// Fetches modification audit logs for a specific pet.
   Future<List<PetAuditLog>> fetchLogsForPet(
-    String petId, {
+    dynamic petId, {
     Map<String, dynamic>? petData,
   }) async {
+    final petIdStr = petId?.toString() ?? '';
     final List<PetAuditLog> results = [];
 
     // 1. Try fetching from Supabase table
     try {
-      final data = await _client
-          .from('pet_audit_logs')
-          .select()
-          .eq('pet_id', petId)
-          .order('created_at', ascending: false);
+      final petIdInt = int.tryParse(petIdStr);
+      final query = _client.from('pet_audit_logs').select();
+      final data = petIdInt != null
+          ? await query.eq('pet_id', petIdInt).order('created_at', ascending: false)
+          : await query.eq('pet_id', petIdStr).order('created_at', ascending: false);
 
       for (final item in data) {
         results.add(PetAuditLog.fromMap(Map<String, dynamic>.from(item)));

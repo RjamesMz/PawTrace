@@ -1,6 +1,3 @@
-import 'dart:io';
-import 'dart:math';
-import 'package:image_picker/image_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
@@ -91,7 +88,7 @@ class _PetProfileDetailScreenState extends State<PetProfileDetailScreen> {
 
     setState(() => _isMarkingFound = true);
     try {
-      // 1. Update pet status back to active
+      // 1. Update pet status back to active in Supabase
       await Supabase.instance.client
           .from('pets')
           .update({'status': 'active'}).eq('pet_id', petId);
@@ -105,9 +102,16 @@ class _PetProfileDetailScreenState extends State<PetProfileDetailScreen> {
           .eq('pet_id', petId)
           .eq('status', 'active');
 
+      // Update in-memory state immediately so UI updates right away
+      if (mounted) {
+        setState(() {
+          _currentPet?['status'] = 'active';
+        });
+      }
+
       // 3. Log modification audit trail
       PetAuditService.instance.logPetModification(
-        petId: petId,
+        petId: petId.toString(),
         petName: pet['name']?.toString() ?? 'Pet',
         action: 'Status Changed: Found (Active)',
         changesSummary: 'Pet marked as found. Open lost reports archived.',
@@ -121,7 +125,7 @@ class _PetProfileDetailScreenState extends State<PetProfileDetailScreen> {
         '${pet['name'] ?? 'Pet'} has been marked as found! 🎉',
       );
 
-      _reloadPet();
+      await _reloadPet();
     } catch (e) {
       if (!mounted) return;
       AppToast.error(context, 'Failed to mark as found: $e');
@@ -176,7 +180,7 @@ class _PetProfileDetailScreenState extends State<PetProfileDetailScreen> {
 
       // Log modification audit trail
       PetAuditService.instance.logPetModification(
-        petId: petId,
+        petId: petId.toString(),
         petName: pet['name']?.toString() ?? 'Pet',
         action: 'Profile Archived',
         changesSummary: 'Reason: $reason',
@@ -883,7 +887,7 @@ class _PetProfileDetailScreenState extends State<PetProfileDetailScreen> {
           child: OutlinedButton.icon(
             onPressed: () => _showEditPetDialog(pet),
             icon: const Icon(Icons.edit_note_rounded, size: 20),
-            label: const Text('Edit Profile & Status'),
+            label: const Text('Edit Pet Profile'),
             style: OutlinedButton.styleFrom(
               side: const BorderSide(color: AppColors.primary, width: 1.6),
               foregroundColor: AppColors.primary,
@@ -1048,49 +1052,11 @@ class _PetProfileDetailScreenState extends State<PetProfileDetailScreen> {
     );
   }
 
-  Widget _speciesChip(String species, String label, bool isSelected,
-      Function(bool) onSelected) {
-    return Expanded(
-      child: InkWell(
-        onTap: () => onSelected(true),
-        borderRadius: BorderRadius.circular(12),
-        child: Container(
-          padding: const EdgeInsets.symmetric(vertical: 12),
-          decoration: BoxDecoration(
-            color: isSelected
-                ? AppColors.primaryContainer.withOpacity(0.3)
-                : const Color(0xFFF1F5F9),
-            borderRadius: BorderRadius.circular(12),
-            border: Border.all(
-              color: isSelected ? AppColors.primary : Colors.transparent,
-              width: 1.5,
-            ),
-          ),
-          child: Center(
-            child: Text(
-              label,
-              style: GoogleFonts.inter(
-                fontSize: 13.5,
-                fontWeight: isSelected ? FontWeight.w700 : FontWeight.w500,
-                color: isSelected ? AppColors.primary : const Color(0xFF64748B),
-              ),
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-
   Future<void> _showEditPetDialog(Map<String, dynamic> pet) async {
     final petId = pet['pet_id'];
     if (petId == null) return;
 
     final nameCtrl = TextEditingController(text: pet['name']?.toString() ?? '');
-    final breedCtrl = TextEditingController(
-      text: (pet['breed'] != null && pet['breed'] != 'N/A')
-          ? pet['breed'].toString()
-          : '',
-    );
     final colorCtrl = TextEditingController(
       text: (pet['color'] != null && pet['color'] != 'N/A')
           ? pet['color'].toString()
@@ -1102,19 +1068,17 @@ class _PetProfileDetailScreenState extends State<PetProfileDetailScreen> {
               ? pet['weight'].toString()
               : '',
     );
-    final barangayCtrl = TextEditingController(
-      text: pet['barangay']?.toString() ?? 'Calatagan',
-    );
 
-    String selectedSpecies =
-        (pet['species']?.toString().toLowerCase() == 'cat') ? 'Cat' : 'Dog';
-    String selectedStatus =
-        (pet['status']?.toString().toLowerCase() == 'lost') ? 'lost' : 'active';
+    final species = pet['species']?.toString() ?? 'Pet';
+    final breed = (pet['breed'] != null && pet['breed'] != 'N/A')
+        ? pet['breed'].toString()
+        : 'Unknown Breed';
+    final photoUrl = pet['photo_url']?.toString();
+
     DateTime? selectedDOB = pet['date_of_birth'] != null
         ? DateTime.tryParse(pet['date_of_birth'].toString())
         : null;
     bool isDOBUnknown = selectedDOB == null;
-    File? newPhotoFile;
     bool isSubmitting = false;
     String? errorMessage;
 
@@ -1125,50 +1089,6 @@ class _PetProfileDetailScreenState extends State<PetProfileDetailScreen> {
       builder: (BuildContext modalContext) {
         return StatefulBuilder(
           builder: (context, setModalState) {
-            Future<void> pickNewPhoto() async {
-              final picker = ImagePicker();
-              final source = await showModalBottomSheet<ImageSource>(
-                context: context,
-                shape: const RoundedRectangleBorder(
-                  borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-                ),
-                builder: (ctx) => SafeArea(
-                  child: Padding(
-                    padding: const EdgeInsets.symmetric(vertical: 16),
-                    child: Column(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        ListTile(
-                          leading: const Icon(Icons.photo_camera_rounded,
-                              color: AppColors.primary),
-                          title: const Text('Take a photo'),
-                          onTap: () => Navigator.pop(ctx, ImageSource.camera),
-                        ),
-                        ListTile(
-                          leading: const Icon(Icons.photo_library_rounded,
-                              color: AppColors.primary),
-                          title: const Text('Choose from gallery'),
-                          onTap: () => Navigator.pop(ctx, ImageSource.gallery),
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-              );
-
-              if (source == null) return;
-              final picked = await picker.pickImage(
-                  source: source,
-                  maxWidth: 1200,
-                  maxHeight: 1200,
-                  imageQuality: 85);
-              if (picked != null) {
-                setModalState(() {
-                  newPhotoFile = File(picked.path);
-                });
-              }
-            }
-
             Future<void> selectDOB() async {
               final picked = await showDatePicker(
                 context: context,
@@ -1186,7 +1106,7 @@ class _PetProfileDetailScreenState extends State<PetProfileDetailScreen> {
             }
 
             return Container(
-              height: MediaQuery.of(context).size.height * 0.90,
+              height: MediaQuery.of(context).size.height * 0.85,
               decoration: const BoxDecoration(
                 color: Colors.white,
                 borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
@@ -1234,7 +1154,7 @@ class _PetProfileDetailScreenState extends State<PetProfileDetailScreen> {
                                 ),
                               ),
                               Text(
-                                'Update details, physical description, or status',
+                                'Update name, weight, description, or birth date',
                                 style: GoogleFonts.inter(
                                   fontSize: 12,
                                   color: AppColors.onSurfaceVariant,
@@ -1288,202 +1208,96 @@ class _PetProfileDetailScreenState extends State<PetProfileDetailScreen> {
                             ),
                             const SizedBox(height: 16),
                           ],
-                          // Pet Photo Preview & Update Button
-                          Center(
-                            child: Stack(
+
+                          // PERMANENT BIOMETRIC IDENTITY CARD (Read-only)
+                          Container(
+                            padding: const EdgeInsets.all(12),
+                            decoration: BoxDecoration(
+                              color: const Color(0xFFF8FAFC),
+                              borderRadius: BorderRadius.circular(16),
+                              border: Border.all(
+                                  color: const Color(0xFFE2E8F0), width: 1.2),
+                            ),
+                            child: Row(
                               children: [
                                 ClipRRect(
-                                  borderRadius: BorderRadius.circular(20),
+                                  borderRadius: BorderRadius.circular(12),
                                   child: Container(
-                                    width: 100,
-                                    height: 100,
+                                    width: 54,
+                                    height: 54,
                                     color: AppColors.surfaceContainerHigh,
-                                    child: newPhotoFile != null
-                                        ? Image.file(newPhotoFile!,
-                                            fit: BoxFit.cover)
-                                        : (pet['photo_url'] != null &&
-                                                pet['photo_url']
-                                                    .toString()
-                                                    .isNotEmpty
-                                            ? Image.network(
-                                                pet['photo_url'].toString(),
-                                                fit: BoxFit.cover,
-                                                errorBuilder: (_, __, ___) =>
-                                                    const Icon(Icons.pets,
-                                                        size: 40,
-                                                        color:
-                                                            AppColors.primary),
-                                              )
-                                            : const Icon(Icons.pets,
-                                                size: 40,
-                                                color: AppColors.primary)),
+                                    child: (photoUrl != null &&
+                                            photoUrl.isNotEmpty)
+                                        ? Image.network(
+                                            photoUrl,
+                                            fit: BoxFit.cover,
+                                            errorBuilder: (_, __, ___) =>
+                                                const Icon(Icons.pets,
+                                                    size: 28,
+                                                    color: AppColors.primary),
+                                          )
+                                        : const Icon(Icons.pets,
+                                            size: 28, color: AppColors.primary),
                                   ),
                                 ),
-                                Positioned(
-                                  bottom: 0,
-                                  right: 0,
-                                  child: GestureDetector(
-                                    onTap: pickNewPhoto,
-                                    child: Container(
-                                      padding: const EdgeInsets.all(7),
-                                      decoration: BoxDecoration(
-                                        color: AppColors.primary,
-                                        shape: BoxShape.circle,
-                                        border: Border.all(
-                                            color: Colors.white, width: 2),
-                                        boxShadow: [
-                                          BoxShadow(
-                                            color:
-                                                Colors.black.withOpacity(0.2),
-                                            blurRadius: 4,
-                                            offset: const Offset(0, 2),
+                                const SizedBox(width: 12),
+                                Expanded(
+                                  child: Column(
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
+                                    children: [
+                                      Row(
+                                        children: [
+                                          Text(
+                                            species.toLowerCase() == 'cat'
+                                                ? '🐱 Cat'
+                                                : '🐶 Dog',
+                                            style: GoogleFonts.inter(
+                                              fontSize: 13.5,
+                                              fontWeight: FontWeight.w700,
+                                              color: const Color(0xFF0F172A),
+                                            ),
+                                          ),
+                                          const SizedBox(width: 6),
+                                          Text(
+                                            '• $breed',
+                                            style: GoogleFonts.inter(
+                                              fontSize: 13,
+                                              fontWeight: FontWeight.w600,
+                                              color: const Color(0xFF475569),
+                                            ),
+                                            overflow: TextOverflow.ellipsis,
                                           ),
                                         ],
                                       ),
-                                      child: const Icon(
-                                          Icons.camera_alt_rounded,
-                                          color: Colors.white,
-                                          size: 16),
-                                    ),
+                                      const SizedBox(height: 4),
+                                      Row(
+                                        children: [
+                                          const Icon(Icons.lock_rounded,
+                                              size: 12,
+                                              color: Color(0xFF94A3B8)),
+                                          const SizedBox(width: 4),
+                                          Expanded(
+                                            child: Text(
+                                              'Species & breed are locked after registration',
+                                              style: GoogleFonts.inter(
+                                                fontSize: 11,
+                                                color: const Color(0xFF64748B),
+                                                fontWeight: FontWeight.w500,
+                                              ),
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                    ],
                                   ),
                                 ),
                               ],
                             ),
                           ),
-                          const SizedBox(height: 6),
-                          Center(
-                            child: TextButton.icon(
-                              onPressed: pickNewPhoto,
-                              icon: const Icon(Icons.photo_camera_rounded,
-                                  size: 16),
-                              label: Text(newPhotoFile != null
-                                  ? 'Change Selected Photo'
-                                  : 'Update Photo'),
-                              style: TextButton.styleFrom(
-                                foregroundColor: AppColors.primary,
-                                textStyle: GoogleFonts.inter(
-                                    fontSize: 12.5,
-                                    fontWeight: FontWeight.w600),
-                              ),
-                            ),
-                          ),
-                          const SizedBox(height: 14),
-
-                          // STATUS SELECTOR (Active vs Lost)
-                          Text(
-                            'PET STATUS',
-                            style: GoogleFonts.inter(
-                              fontSize: 11,
-                              fontWeight: FontWeight.w700,
-                              letterSpacing: 0.5,
-                              color: AppColors.onSurfaceVariant,
-                            ),
-                          ),
-                          const SizedBox(height: 8),
-                          Row(
-                            children: [
-                              Expanded(
-                                child: InkWell(
-                                  borderRadius: BorderRadius.circular(12),
-                                  onTap: () => setModalState(
-                                      () => selectedStatus = 'active'),
-                                  child: AnimatedContainer(
-                                    duration: const Duration(milliseconds: 180),
-                                    padding: const EdgeInsets.symmetric(
-                                        vertical: 12),
-                                    decoration: BoxDecoration(
-                                      color: selectedStatus == 'active'
-                                          ? const Color(0xFFDCFCE7)
-                                          : const Color(0xFFF1F5F9),
-                                      borderRadius: BorderRadius.circular(12),
-                                      border: Border.all(
-                                        color: selectedStatus == 'active'
-                                            ? const Color(0xFF16A34A)
-                                            : Colors.transparent,
-                                        width: 1.5,
-                                      ),
-                                    ),
-                                    child: Row(
-                                      mainAxisAlignment:
-                                          MainAxisAlignment.center,
-                                      children: [
-                                        Icon(
-                                          Icons.check_circle_rounded,
-                                          size: 18,
-                                          color: selectedStatus == 'active'
-                                              ? const Color(0xFF16A34A)
-                                              : Colors.grey,
-                                        ),
-                                        const SizedBox(width: 8),
-                                        Text(
-                                          'ACTIVE / SAFE',
-                                          style: GoogleFonts.inter(
-                                            fontSize: 12.5,
-                                            fontWeight: FontWeight.w700,
-                                            color: selectedStatus == 'active'
-                                                ? const Color(0xFF166534)
-                                                : const Color(0xFF64748B),
-                                          ),
-                                        ),
-                                      ],
-                                    ),
-                                  ),
-                                ),
-                              ),
-                              const SizedBox(width: 10),
-                              Expanded(
-                                child: InkWell(
-                                  borderRadius: BorderRadius.circular(12),
-                                  onTap: () => setModalState(
-                                      () => selectedStatus = 'lost'),
-                                  child: AnimatedContainer(
-                                    duration: const Duration(milliseconds: 180),
-                                    padding: const EdgeInsets.symmetric(
-                                        vertical: 12),
-                                    decoration: BoxDecoration(
-                                      color: selectedStatus == 'lost'
-                                          ? const Color(0xFFFEE2E2)
-                                          : const Color(0xFFF1F5F9),
-                                      borderRadius: BorderRadius.circular(12),
-                                      border: Border.all(
-                                        color: selectedStatus == 'lost'
-                                            ? const Color(0xFFDC2626)
-                                            : Colors.transparent,
-                                        width: 1.5,
-                                      ),
-                                    ),
-                                    child: Row(
-                                      mainAxisAlignment:
-                                          MainAxisAlignment.center,
-                                      children: [
-                                        Icon(
-                                          Icons.warning_amber_rounded,
-                                          size: 18,
-                                          color: selectedStatus == 'lost'
-                                              ? const Color(0xFFDC2626)
-                                              : Colors.grey,
-                                        ),
-                                        const SizedBox(width: 8),
-                                        Text(
-                                          'REPORTED LOST',
-                                          style: GoogleFonts.inter(
-                                            fontSize: 12.5,
-                                            fontWeight: FontWeight.w700,
-                                            color: selectedStatus == 'lost'
-                                                ? const Color(0xFF991B1B)
-                                                : const Color(0xFF64748B),
-                                          ),
-                                        ),
-                                      ],
-                                    ),
-                                  ),
-                                ),
-                              ),
-                            ],
-                          ),
                           const SizedBox(height: 18),
 
-                          // PET NAME
+                          // 1. PET NAME
                           _buildFieldLabel('PET NAME *'),
                           const SizedBox(height: 6),
                           TextField(
@@ -1491,56 +1305,9 @@ class _PetProfileDetailScreenState extends State<PetProfileDetailScreen> {
                             decoration: _inputDecoration(
                                 'e.g. Cutie', Icons.badge_outlined),
                           ),
-                          const SizedBox(height: 14),
+                          const SizedBox(height: 16),
 
-                          // SPECIES SELECTOR
-                          _buildFieldLabel('SPECIES'),
-                          const SizedBox(height: 6),
-                          Row(
-                            children: [
-                              _speciesChip(
-                                  'Dog',
-                                  '🐶 Dog',
-                                  selectedSpecies == 'Dog',
-                                  (val) => setModalState(
-                                      () => selectedSpecies = 'Dog')),
-                              const SizedBox(width: 10),
-                              _speciesChip(
-                                  'Cat',
-                                  '🐱 Cat',
-                                  selectedSpecies == 'Cat',
-                                  (val) => setModalState(
-                                      () => selectedSpecies = 'Cat')),
-                            ],
-                          ),
-                          const SizedBox(height: 14),
-
-                          // BREED
-                          _buildFieldLabel('BREED'),
-                          const SizedBox(height: 6),
-                          TextField(
-                            controller: breedCtrl,
-                            decoration: _inputDecoration(
-                                'e.g. Puspin, Golden Retriever, Aspin',
-                                Icons.pets_outlined),
-                          ),
-                          const SizedBox(height: 14),
-
-                          // COLOR, MARKINGS & DESCRIPTION
-                          _buildFieldLabel(
-                              'COLOR, DISTINCTIVE MARKINGS & DESCRIPTION'),
-                          const SizedBox(height: 6),
-                          TextField(
-                            controller: colorCtrl,
-                            maxLines: 3,
-                            decoration: _inputDecoration(
-                              'Describe coat color, spots, unique physical marks, ear tips, or collar tag details...',
-                              Icons.description_outlined,
-                            ),
-                          ),
-                          const SizedBox(height: 14),
-
-                          // WEIGHT (KG)
+                          // 2. WEIGHT (KG)
                           _buildFieldLabel('WEIGHT (KG)'),
                           const SizedBox(height: 6),
                           TextField(
@@ -1550,19 +1317,23 @@ class _PetProfileDetailScreenState extends State<PetProfileDetailScreen> {
                             decoration: _inputDecoration(
                                 'e.g. 4.5', Icons.monitor_weight_outlined),
                           ),
-                          const SizedBox(height: 14),
+                          const SizedBox(height: 16),
 
-                          // BARANGAY
-                          _buildFieldLabel('REGISTERED BARANGAY'),
+                          // 3. COLOR, DISTINCTIVE MARKINGS & DESCRIPTION
+                          _buildFieldLabel(
+                              'COLOR, DISTINCTIVE MARKINGS & DESCRIPTION'),
                           const SizedBox(height: 6),
                           TextField(
-                            controller: barangayCtrl,
+                            controller: colorCtrl,
+                            maxLines: 3,
                             decoration: _inputDecoration(
-                                'e.g. Calatagan', Icons.location_on_outlined),
+                              'Describe coat color, spots, unique physical marks, ear tips...',
+                              Icons.description_outlined,
+                            ),
                           ),
-                          const SizedBox(height: 14),
+                          const SizedBox(height: 16),
 
-                          // DATE OF BIRTH
+                          // 4. DATE OF BIRTH
                           _buildFieldLabel('DATE OF BIRTH'),
                           const SizedBox(height: 6),
                           InkWell(
@@ -1624,190 +1395,167 @@ class _PetProfileDetailScreenState extends State<PetProfileDetailScreen> {
                                     if (isDOBUnknown) selectedDOB = null;
                                   });
                                 },
-                                child: Text(
-                                  'Date of birth is unknown / approximate',
-                                  style: GoogleFonts.inter(
-                                      fontSize: 12.5,
-                                      color: AppColors.onSurfaceVariant),
-                                ),
-                              ),
-                            ],
-                          ),
-                          const SizedBox(height: 20),
-
-                          // SAVE BUTTON
-                          SizedBox(
-                            width: double.infinity,
-                            height: 52,
-                            child: ElevatedButton.icon(
-                              onPressed: isSubmitting
-                                  ? null
-                                  : () async {
-                                      final newName = nameCtrl.text.trim();
-                                      if (newName.isEmpty) {
-                                        setModalState(() => errorMessage =
-                                            'Pet name cannot be empty.');
-                                        return;
-                                      }
-
-                                      setModalState(() {
-                                        isSubmitting = true;
-                                        errorMessage = null;
-                                      });
-
-                                      try {
-                                        String? photoUrl;
-                                        if (newPhotoFile != null) {
-                                          final timestamp = DateTime.now()
-                                              .millisecondsSinceEpoch;
-                                          final randomSuffix = Random()
-                                              .nextInt(999999)
-                                              .toString()
-                                              .padLeft(6, '0');
-                                          final fileExt = newPhotoFile!.path
-                                              .split('.')
-                                              .last;
-                                          final fileName =
-                                              'pets/${timestamp}_face_$randomSuffix.$fileExt';
-                                          await Supabase.instance.client.storage
-                                              .from('pet-photos')
-                                              .upload(fileName, newPhotoFile!);
-                                          photoUrl = Supabase
-                                              .instance.client.storage
-                                              .from('pet-photos')
-                                              .getPublicUrl(fileName);
-                                        }
-
-                                        final updatePayload = <String, dynamic>{
-                                          'name': newName,
-                                          'species': selectedSpecies,
-                                          'breed': breedCtrl.text.trim().isEmpty
-                                              ? 'N/A'
-                                              : breedCtrl.text.trim(),
-                                          'color': colorCtrl.text.trim().isEmpty
-                                              ? 'N/A'
-                                              : colorCtrl.text.trim(),
-                                          'weight': double.tryParse(
-                                                  weightCtrl.text.trim()) ??
-                                              0.0,
-                                          'barangay':
-                                              barangayCtrl.text.trim().isEmpty
-                                                  ? 'Calatagan'
-                                                  : barangayCtrl.text.trim(),
-                                          'date_of_birth': isDOBUnknown ||
-                                                  selectedDOB == null
-                                              ? null
-                                              : selectedDOB!.toIso8601String(),
-                                          'status': selectedStatus,
-                                        };
-                                        if (photoUrl != null) {
-                                          updatePayload['photo_url'] = photoUrl;
-                                        }
-
-                                        await Supabase.instance.client
-                                            .from('pets')
-                                            .update(updatePayload)
-                                            .eq('pet_id', petId);
-
-                                        // Compute audit changes diff
-                                        final diffs = <String>[];
-                                        if ((pet['name'] ?? '').toString().trim() != newName.trim()) {
-                                          diffs.add('Name: "${pet['name']}" -> "$newName"');
-                                        }
-                                        if ((pet['species'] ?? '').toString().trim() != selectedSpecies.trim()) {
-                                          diffs.add('Species: "${pet['species']}" -> "$selectedSpecies"');
-                                        }
-                                        final newBreed = breedCtrl.text.trim().isEmpty ? 'N/A' : breedCtrl.text.trim();
-                                        if ((pet['breed'] ?? 'N/A').toString().trim() != newBreed) {
-                                          diffs.add('Breed: "${pet['breed']}" -> "$newBreed"');
-                                        }
-                                        final newColor = colorCtrl.text.trim().isEmpty ? 'N/A' : colorCtrl.text.trim();
-                                        if ((pet['color'] ?? 'N/A').toString().trim() != newColor) {
-                                          diffs.add('Color: "${pet['color']}" -> "$newColor"');
-                                        }
-                                        final oldWeight = (pet['weight'] is num) ? (pet['weight'] as num).toDouble() : double.tryParse(pet['weight']?.toString() ?? '0') ?? 0.0;
-                                        final parsedWeight = double.tryParse(weightCtrl.text.trim()) ?? 0.0;
-                                        if ((oldWeight - parsedWeight).abs() > 0.001) {
-                                          diffs.add('Weight: ${oldWeight}kg -> ${parsedWeight}kg');
-                                        }
-                                        final previousStatus = (pet['status'] ?? '').toString().toLowerCase();
-                                        if (previousStatus != selectedStatus.toLowerCase()) {
-                                          diffs.add('Status: $previousStatus -> $selectedStatus');
-                                        }
-                                        if (photoUrl != null) {
-                                          diffs.add('Photo updated');
-                                        }
-
-                                        PetAuditService.instance.logPetModification(
-                                          petId: petId,
-                                          petName: newName,
-                                          action: 'Profile Details Updated',
-                                          changesSummary: diffs.isEmpty ? 'Profile details updated' : diffs.join('; '),
-                                          modifiedByRole: 'Owner',
-                                        );
-
-                                        // If changed from lost to active, archive any open lost reports
-                                        if (selectedStatus == 'active' &&
-                                            previousStatus == 'lost') {
-                                          await Supabase.instance.client
-                                              .from('lost_reports')
-                                              .update({'status': 'archived'})
-                                              .eq('pet_id', petId)
-                                              .eq('status', 'active');
-                                        }
-
-                                        if (context.mounted) {
-                                          Navigator.pop(context);
-                                          AppToast.success(context,
-                                              '$newName profile updated successfully! ✨');
-                                          _reloadPet();
-                                        }
-                                      } catch (err) {
-                                        setModalState(() {
-                                          isSubmitting = false;
-                                          errorMessage =
-                                              'Failed to save changes: $err';
-                                        });
-                                      }
-                                    },
-                              icon: isSubmitting
-                                  ? const SizedBox(
-                                      width: 18,
-                                      height: 18,
-                                      child: CircularProgressIndicator(
-                                        strokeWidth: 2,
-                                        valueColor:
-                                            AlwaysStoppedAnimation<Color>(
-                                                Colors.white),
-                                      ),
-                                    )
-                                  : const Icon(Icons.check_rounded, size: 20),
-                              label: Text(
-                                isSubmitting
-                                    ? 'Saving Changes...'
-                                    : 'Save Profile Changes',
+                              child: Text(
+                                'Date of birth is unknown / approximate',
                                 style: GoogleFonts.inter(
-                                    fontSize: 15, fontWeight: FontWeight.w700),
-                              ),
-                              style: ElevatedButton.styleFrom(
-                                backgroundColor: AppColors.primary,
-                                foregroundColor: Colors.white,
-                                shape: RoundedRectangleBorder(
-                                    borderRadius: BorderRadius.circular(16)),
-                                elevation: 0,
+                                    fontSize: 12.5,
+                                    color: AppColors.onSurfaceVariant),
                               ),
                             ),
+                          ],
+                        ),
+                        const SizedBox(height: 24),
+
+                        // SAVE BUTTON
+                        SizedBox(
+                          width: double.infinity,
+                          height: 52,
+                          child: ElevatedButton.icon(
+                            onPressed: isSubmitting
+                                ? null
+                                : () async {
+                                    final newName = nameCtrl.text.trim();
+                                    if (newName.isEmpty) {
+                                      setModalState(() => errorMessage =
+                                          'Pet name cannot be empty.');
+                                      return;
+                                    }
+
+                                    setModalState(() {
+                                      isSubmitting = true;
+                                      errorMessage = null;
+                                    });
+
+                                    try {
+                                      final parsedWeight = double.tryParse(
+                                              weightCtrl.text.trim()) ??
+                                          0.0;
+                                      final newColor =
+                                          colorCtrl.text.trim().isEmpty
+                                              ? 'N/A'
+                                              : colorCtrl.text.trim();
+                                      final newDob = isDOBUnknown ||
+                                              selectedDOB == null
+                                          ? null
+                                          : selectedDOB!.toIso8601String();
+
+                                      final updatePayload = <String, dynamic>{
+                                        'name': newName,
+                                        'color': newColor,
+                                        'weight': parsedWeight,
+                                        'date_of_birth': newDob,
+                                      };
+
+                                      await Supabase.instance.client
+                                          .from('pets')
+                                          .update(updatePayload)
+                                          .eq('pet_id', petId);
+
+                                      // Compute audit changes diff for edited fields
+                                      final diffs = <String>[];
+                                      if ((pet['name'] ?? '')
+                                              .toString()
+                                              .trim() !=
+                                          newName.trim()) {
+                                        diffs.add(
+                                            'Name: "${pet['name']}" -> "$newName"');
+                                      }
+                                      final oldColor = (pet['color'] ?? 'N/A')
+                                          .toString()
+                                          .trim();
+                                      if (oldColor != newColor) {
+                                        diffs.add(
+                                            'Description: "$oldColor" -> "$newColor"');
+                                      }
+                                      final oldWeight = (pet['weight'] is num)
+                                          ? (pet['weight'] as num).toDouble()
+                                          : double.tryParse(
+                                                  pet['weight']?.toString() ??
+                                                      '0') ??
+                                              0.0;
+                                      if ((oldWeight - parsedWeight).abs() >
+                                          0.001) {
+                                        diffs.add(
+                                            'Weight: ${oldWeight}kg -> ${parsedWeight}kg');
+                                      }
+                                      final oldDob =
+                                          pet['date_of_birth']?.toString();
+                                      if (oldDob != newDob) {
+                                        diffs.add('DOB updated');
+                                      }
+
+                                      PetAuditService.instance
+                                          .logPetModification(
+                                        petId: petId.toString(),
+                                        petName: newName,
+                                        action: 'Profile Details Updated',
+                                        changesSummary: diffs.isEmpty
+                                            ? 'Profile details updated'
+                                            : diffs.join('; '),
+                                        modifiedByRole: 'Owner',
+                                      );
+
+                                      // Optimistically update in-memory pet state
+                                      setState(() {
+                                        _currentPet?['name'] = newName;
+                                        _currentPet?['color'] = newColor;
+                                        _currentPet?['weight'] = parsedWeight;
+                                        _currentPet?['date_of_birth'] = newDob;
+                                      });
+
+                                      if (context.mounted) {
+                                        Navigator.pop(context);
+                                        AppToast.success(context,
+                                            '$newName profile updated successfully! ✨');
+                                        _reloadPet();
+                                      }
+                                    } catch (err) {
+                                      setModalState(() {
+                                        isSubmitting = false;
+                                        errorMessage =
+                                            'Failed to save changes: $err';
+                                      });
+                                    }
+                                  },
+                            icon: isSubmitting
+                                ? const SizedBox(
+                                    width: 18,
+                                    height: 18,
+                                    child: CircularProgressIndicator(
+                                      strokeWidth: 2,
+                                      valueColor:
+                                          AlwaysStoppedAnimation<Color>(
+                                              Colors.white),
+                                    ),
+                                  )
+                                : const Icon(Icons.check_rounded, size: 20),
+                            label: Text(
+                              isSubmitting
+                                  ? 'Saving Changes...'
+                                  : 'Save Profile Changes',
+                              style: GoogleFonts.inter(
+                                  fontSize: 15, fontWeight: FontWeight.w700),
+                            ),
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: AppColors.primary,
+                              foregroundColor: Colors.white,
+                              shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(16)),
+                              elevation: 0,
+                            ),
                           ),
-                        ],
-                      ),
+                        ),
+                      ],
                     ),
                   ),
-                ],
-              ),
-            );
-          },
-        );
-      },
-    );
-  }
+                ),
+              ],
+            ),
+          );
+        },
+      );
+    },
+  );
 }
+}
+

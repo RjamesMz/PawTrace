@@ -30,6 +30,7 @@ import 'screens/admin/barangay_admin/barangay_admin_home_screen.dart';
 import 'screens/admin/reports/admin_reports_screen.dart';
 import 'screens/super_admin/super_admin_screen.dart';
 import 'screens/admin/news/post_news_screen.dart';
+import 'screens/admin/settings/admin_settings_screen.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -120,10 +121,12 @@ class PetTraceApp extends StatelessWidget {
         AppRoutes.settings: (_) => const MainAppLayout(initialIndex: 4),
 
         AppRoutes.barangayAdminHome: (_) => const BarangayAdminHomeScreen(),
+        AppRoutes.adminHome: (_) => const BarangayAdminHomeScreen(),
         AppRoutes.superAdminHome: (_) => const SuperAdminScreen(),
         AppRoutes.adminPets: (_) => const AdminPetsScreen(),
         AppRoutes.adminReports: (_) => const AdminReportsScreen(),
         AppRoutes.userManagement: (_) => const UserManagementScreen(),
+        AppRoutes.adminSettings: (_) => const AdminSettingsScreen(),
 
         // ─── Lost pet flow ────────────────────────────────────────────────────
         AppRoutes.reportLostPet: (_) => const ReportLostPetScreen(),

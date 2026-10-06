@@ -194,7 +194,7 @@ class _AdminPetDetailScreenState extends State<AdminPetDetailScreen> {
         pet['archive_reason'] = reason;
       });
       PetAuditService.instance.logPetModification(
-        petId: petId,
+        petId: petId.toString(),
         petName: pet['name']?.toString() ?? 'Pet',
         action: 'Archive Reason Updated',
         changesSummary: 'Reason updated to: $reason',
