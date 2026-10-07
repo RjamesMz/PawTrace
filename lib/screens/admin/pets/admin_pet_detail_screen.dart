@@ -5,7 +5,6 @@ import '../../../core/app_colors.dart';
 import '../../../core/app_toast.dart';
 import '../../../core/navigation_helpers.dart';
 import '../../../services/alerts/alert_service.dart';
-import '../../../services/audit/pet_audit_service.dart';
 import '../../../widgets/admin/admin_content_wrapper.dart';
 import '../../../widgets/admin/pet_location_map_dialog.dart';
 import '../../../widgets/common/photo_placeholder.dart';
@@ -172,44 +171,6 @@ class _AdminPetDetailScreenState extends State<AdminPetDetailScreen> {
 
   void _showContactDialog() {
     showAdminContactOwnerDialog(context, pet);
-  }
-
-  void _showEditArchiveReasonDialog() {
-    showAdminEditArchiveReasonDialog(
-      context,
-      initialReason: pet['archive_reason']?.toString(),
-      onSave: _updateArchiveReason,
-    );
-  }
-
-  Future<void> _updateArchiveReason(String reason) async {
-    setState(() => _isUpdating = true);
-    try {
-      final petId = pet['pet_id'] ?? pet['id'];
-      await _supabase
-          .from('pets')
-          .update({'archive_reason': reason})
-          .eq('pet_id', petId);
-      setState(() {
-        pet['archive_reason'] = reason;
-      });
-      PetAuditService.instance.logPetModification(
-        petId: petId.toString(),
-        petName: pet['name']?.toString() ?? 'Pet',
-        action: 'Archive Reason Updated',
-        changesSummary: 'Reason updated to: $reason',
-        modifiedByRole: 'Admin',
-      );
-      if (mounted) {
-        AppToast.success(context, 'Archive reason updated: $reason');
-      }
-    } catch (e) {
-      if (mounted) {
-        AppToast.error(context, 'Failed to update reason: $e');
-      }
-    } finally {
-      if (mounted) setState(() => _isUpdating = false);
-    }
   }
 
   Future<void> _showLocationDialog() async {
@@ -507,7 +468,6 @@ class _AdminPetDetailScreenState extends State<AdminPetDetailScreen> {
                 onContactOwner: _showContactDialog,
                 onViewMap: _showLocationDialog,
                 onBroadcastLostPet: _repostLostPetToNews,
-                onEditArchiveReason: _showEditArchiveReasonDialog,
                 onViewAuditLogs: () => showPetAuditLogDialog(context, pet),
               ),
             ],
@@ -675,7 +635,6 @@ class _AdminPetDetailScreenState extends State<AdminPetDetailScreen> {
           onContactOwner: _showContactDialog,
           onViewMap: _showLocationDialog,
           onBroadcastLostPet: _repostLostPetToNews,
-          onEditArchiveReason: _showEditArchiveReasonDialog,
           onViewAuditLogs: () => showPetAuditLogDialog(context, pet),
         ),
       ],

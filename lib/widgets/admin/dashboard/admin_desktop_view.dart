@@ -1,12 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../../../core/app_colors.dart';
-import '../stat_card.dart';
-import '../../../screens/admin/pets/admin_pets_screen.dart';
 import '../../../screens/admin/reports/admin_reports_screen.dart';
-import '../../../screens/admin/user_management/user_management_screen.dart';
+import 'admin_dashboard_analytics_view.dart';
 
-class BarangayAdminDesktopView extends StatelessWidget {
+class AdminDesktopView extends StatelessWidget {
   final String adminBarangay;
   final int registeredPets;
   final int lostReports;
@@ -15,7 +13,7 @@ class BarangayAdminDesktopView extends StatelessWidget {
   final List<Map<String, dynamic>> pendingReports;
   final List<Map<String, dynamic>> recentActivity;
 
-  const BarangayAdminDesktopView({
+  const AdminDesktopView({
     super.key,
     required this.adminBarangay,
     required this.registeredPets,
@@ -46,7 +44,7 @@ class BarangayAdminDesktopView extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        // Welcome banner orange gradient height 90
+        // Welcome banner
         Container(
           height: 90,
           width: double.infinity,
@@ -84,8 +82,8 @@ class BarangayAdminDesktopView extends StatelessWidget {
                     const SizedBox(height: 4),
                     Text(
                       adminBarangay.isNotEmpty
-                          ? 'Brgy. $adminBarangay '
-                          : 'Barangay',
+                          ? 'Brgy. $adminBarangay • Admin Operations'
+                          : 'Admin Dashboard',
                       style: GoogleFonts.inter(
                         fontSize: 13,
                         color: Colors.white.withOpacity(0.9),
@@ -109,66 +107,13 @@ class BarangayAdminDesktopView extends StatelessWidget {
         ),
         const SizedBox(height: 20),
 
-        // Row of 3 StatCard widgets
-        Row(
-          children: [
-            Expanded(
-              child: SizedBox(
-                height: 110,
-                child: StatCard(
-                  label: 'Registered Pets',
-                  count: registeredPets,
-                  icon: Icons.pets_rounded,
-                  color: const Color(0xFFFF6600),
-                  isLoading: isLoading,
-                  onTap: () => Navigator.push(
-                    context,
-                    MaterialPageRoute(builder: (_) => const AdminPetsScreen()),
-                  ),
-                ),
-              ),
-            ),
-            const SizedBox(width: 16),
-            Expanded(
-              child: SizedBox(
-                height: 110,
-                child: StatCard(
-                  label: 'Lost Reports',
-                  count: lostReports,
-                  icon: Icons.flag_rounded,
-                  color: const Color(0xFFBA1A1A),
-                  isLoading: isLoading,
-                  onTap: () => Navigator.push(
-                    context,
-                    MaterialPageRoute(
-                        builder: (_) => const AdminReportsScreen()),
-                  ),
-                ),
-              ),
-            ),
-            const SizedBox(width: 16),
-            Expanded(
-              child: SizedBox(
-                height: 110,
-                child: StatCard(
-                  label: 'Total Users',
-                  count: registeredUsers,
-                  icon: Icons.people_alt_rounded,
-                  color: const Color(0xFF2563EB),
-                  isLoading: isLoading,
-                  onTap: () => Navigator.push(
-                    context,
-                    MaterialPageRoute(
-                        builder: (_) => const UserManagementScreen()),
-                  ),
-                ),
-              ),
-            ),
-          ],
+        // Complete Dashboard Operations & Analytics
+        AdminDashboardAnalyticsView(
+          adminBarangay: adminBarangay,
         ),
         const SizedBox(height: 24),
 
-        // Row with two sections: left 60%, right 40%
+        // Operational queues: left 60%, right 40%
         Row(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
@@ -272,10 +217,10 @@ class BarangayAdminDesktopView extends StatelessWidget {
                                 backgroundImage: petPhoto.isNotEmpty
                                     ? NetworkImage(petPhoto)
                                     : null,
-                                child: petPhoto.isEmpty
-                                    ? const Icon(Icons.pets,
-                                        size: 16, color: AppColors.primary)
-                                    : null,
+                              child: petPhoto.isEmpty
+                                  ? const Icon(Icons.pets,
+                                      size: 16, color: AppColors.primary)
+                                  : null,
                               ),
                               title: Row(
                                 children: [
@@ -488,3 +433,6 @@ class BarangayAdminDesktopView extends StatelessWidget {
     );
   }
 }
+
+// Alias for compatibility
+typedef BarangayAdminDesktopView = AdminDesktopView;

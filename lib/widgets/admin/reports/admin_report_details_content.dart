@@ -16,6 +16,9 @@ class AdminReportDetailsContent extends StatelessWidget {
   final String Function(String?) formatDate;
   final String Function(String?) formatTime;
 
+  final bool hasGps;
+  final VoidCallback? onViewMap;
+
   const AdminReportDetailsContent({
     super.key,
     required this.petName,
@@ -30,6 +33,8 @@ class AdminReportDetailsContent extends StatelessWidget {
     required this.formatDate,
     required this.formatTime,
     this.onClose,
+    this.hasGps = false,
+    this.onViewMap,
   });
 
   @override
@@ -105,31 +110,84 @@ class AdminReportDetailsContent extends StatelessWidget {
           _buildNoteCard(),
         ],
 
-        // Close Button (in dialog mode)
-        if (isDialog && onClose != null) ...[
-          const SizedBox(height: 18),
-          SizedBox(
-            width: double.infinity,
-            height: 42,
-            child: OutlinedButton(
-              onPressed: onClose,
-              style: OutlinedButton.styleFrom(
-                foregroundColor: const Color(0xFF475569),
-                side: const BorderSide(color: Color(0xFFCBD5E1)),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(12),
+        // Action Buttons Row (Close Details and View Map / No GPS)
+        const SizedBox(height: 18),
+        Row(
+          children: [
+            if (isDialog && onClose != null) ...[
+              Expanded(
+                child: SizedBox(
+                  height: 42,
+                  child: OutlinedButton(
+                    onPressed: onClose,
+                    style: OutlinedButton.styleFrom(
+                      foregroundColor: const Color(0xFF475569),
+                      side: const BorderSide(color: Color(0xFFCBD5E1)),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                    ),
+                    child: Text(
+                      'Close Details',
+                      style: GoogleFonts.inter(
+                        fontSize: 13,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ),
                 ),
               ),
-              child: Text(
-                'Close Details',
-                style: GoogleFonts.inter(
-                  fontSize: 13,
-                  fontWeight: FontWeight.w600,
-                ),
+              const SizedBox(width: 10),
+            ],
+            Expanded(
+              child: SizedBox(
+                height: 42,
+                child: hasGps && onViewMap != null
+                    ? ElevatedButton.icon(
+                        onPressed: onViewMap,
+                        icon: const Icon(Icons.map_rounded, size: 16),
+                        label: Text(
+                          'View Map',
+                          style: GoogleFonts.inter(
+                            fontSize: 13,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: const Color(0xFFFF6600),
+                          foregroundColor: Colors.white,
+                          elevation: 0,
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                        ),
+                      )
+                    : Tooltip(
+                        message: 'No active GPS collar or coordinates available for this pet.',
+                        child: OutlinedButton.icon(
+                          onPressed: null,
+                          icon: const Icon(Icons.gps_off_rounded,
+                              size: 15, color: Color(0xFF94A3B8)),
+                          label: Text(
+                            'No GPS Connected',
+                            style: GoogleFonts.inter(
+                              fontSize: 12,
+                              fontWeight: FontWeight.w600,
+                              color: const Color(0xFF94A3B8),
+                            ),
+                          ),
+                          style: OutlinedButton.styleFrom(
+                            side: const BorderSide(color: Color(0xFFE2E8F0)),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                          ),
+                        ),
+                      ),
               ),
             ),
-          ),
-        ],
+          ],
+        ),
       ],
     );
   }
@@ -162,14 +220,78 @@ class AdminReportDetailsContent extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(
-                  'LAST SEEN LOCATION',
-                  style: GoogleFonts.inter(
-                    fontSize: 10,
-                    fontWeight: FontWeight.w700,
-                    letterSpacing: 0.5,
-                    color: const Color(0xFF64748B),
-                  ),
+                Row(
+                  children: [
+                    Text(
+                      'LAST SEEN LOCATION',
+                      style: GoogleFonts.inter(
+                        fontSize: 10,
+                        fontWeight: FontWeight.w700,
+                        letterSpacing: 0.5,
+                        color: const Color(0xFF64748B),
+                      ),
+                    ),
+                    const Spacer(),
+                    if (hasGps)
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 6, vertical: 2),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFFDCFCE7),
+                          borderRadius: BorderRadius.circular(6),
+                        ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Container(
+                              width: 6,
+                              height: 6,
+                              decoration: const BoxDecoration(
+                                color: Color(0xFF16A34A),
+                                shape: BoxShape.circle,
+                              ),
+                            ),
+                            const SizedBox(width: 4),
+                            Text(
+                              'GPS Connected',
+                              style: GoogleFonts.inter(
+                                fontSize: 9,
+                                fontWeight: FontWeight.w700,
+                                color: const Color(0xFF15803D),
+                              ),
+                            ),
+                          ],
+                        ),
+                      )
+                    else
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 6, vertical: 2),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFFF1F5F9),
+                          borderRadius: BorderRadius.circular(6),
+                        ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            const Icon(
+                              Icons.gps_off_rounded,
+                              size: 10,
+                              color: Color(0xFF94A3B8),
+                            ),
+                            const SizedBox(width: 3),
+                            Text(
+                              'No GPS Connected',
+                              style: GoogleFonts.inter(
+                                fontSize: 9,
+                                fontWeight: FontWeight.w600,
+                                color: const Color(0xFF64748B),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                  ],
                 ),
                 const SizedBox(height: 3),
                 Text(

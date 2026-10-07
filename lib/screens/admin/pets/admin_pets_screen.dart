@@ -6,6 +6,7 @@ import '../../../core/app_colors.dart';
 import '../../../core/app_constants.dart';
 import '../../../core/app_toast.dart';
 import '../../../services/alerts/alert_service.dart';
+import '../../../services/audit/pet_audit_service.dart';
 import '../../../services/auth/auth_service.dart';
 import '../../../widgets/admin/admin_content_wrapper.dart';
 import '../../../widgets/admin/admin_layout.dart';
@@ -34,13 +35,37 @@ class _AdminPetsScreenState extends State<AdminPetsScreen> {
 
   List<Map<String, dynamic>> allPets = [];
   List<Map<String, dynamic>> filteredPets = [];
+  List<Map<String, dynamic>> filteredActivePets = [];
+  List<Map<String, dynamic>> filteredArchivedPets = [];
   bool isLoading = true;
   int _selectedChipIndex = 0;
+  int _tableSegmentIndex =
+      0; // 0: Active & Lost Pets, 1: Archived Pets, 2: View Both Tables
   String _adminBarangay = '';
   UserRole _currentUserRole = UserRole.admin;
   String _selectedBarangayFilter = 'All';
 
-  static const List<String> _chipLabels = ['All', 'Active', 'Lost', 'Archived'];
+  int _unifiedSortColumnIndex = 1;
+  bool _unifiedSortAscending = true;
+
+  List<String> get _currentChipLabels {
+    if (_tableSegmentIndex == 2) {
+      return [
+        'All (${allPets.length})',
+        'Active ($_activeCount)',
+        'Lost ($_lostCount)',
+        'Archived ($_archivedCount)'
+      ];
+    } else if (_tableSegmentIndex == 0) {
+      return [
+        'All Active & Lost (${_activeCount + _lostCount})',
+        'Active ($_activeCount)',
+        'Lost ($_lostCount)'
+      ];
+    } else {
+      return ['All Archived ($_archivedCount)'];
+    }
+  }
 
   List<String> get _availableBarangays {
     final set = <String>{'All'};
@@ -87,8 +112,59 @@ class _AdminPetsScreenState extends State<AdminPetsScreen> {
 
       final data = await query.order('created_at', ascending: false);
       if (!mounted) return;
+      final petsList = List<Map<String, dynamic>>.from(data);
+
+      // Backfill updated_at from pet_audit_logs if updated_at is null or matches created_at
+      try {
+        final auditLogsRes = await _supabase
+            .from('pet_audit_logs')
+            .select('pet_id, created_at, action')
+            .neq('action', 'Pet Registered')
+            .order('created_at', ascending: false);
+
+        final Map<String, String> latestAuditByPet = {};
+        for (final row in auditLogsRes) {
+          final pid = (row['pet_id'] ?? '').toString();
+          final ts = (row['created_at'] ?? '').toString();
+          if (pid.isNotEmpty && ts.isNotEmpty && !latestAuditByPet.containsKey(pid)) {
+            latestAuditByPet[pid] = ts;
+          }
+        }
+
+        for (final p in petsList) {
+          final pid = (p['pet_id'] ?? p['id'] ?? '').toString();
+          final curUpdated = p['updated_at'] ?? p['modified_at'];
+          final isUntouched = curUpdated == null ||
+              curUpdated.toString().trim().isEmpty ||
+              curUpdated.toString() == (p['created_at'] ?? '').toString();
+
+          if (isUntouched) {
+            if (latestAuditByPet.containsKey(pid)) {
+              p['updated_at'] = latestAuditByPet[pid];
+            } else {
+              final localLatest = PetAuditService.getLatestModificationForPet(pid);
+              if (localLatest != null) {
+                p['updated_at'] = localLatest.timestamp.toIso8601String();
+              }
+            }
+          }
+        }
+      } catch (err) {
+        debugPrint('[AdminPetsScreen] Notice backfilling audit dates: $err');
+        for (final p in petsList) {
+          final pid = (p['pet_id'] ?? p['id'] ?? '').toString();
+          final curUpdated = p['updated_at'] ?? p['modified_at'];
+          if (curUpdated == null || curUpdated.toString().trim().isEmpty) {
+            final localLatest = PetAuditService.getLatestModificationForPet(pid);
+            if (localLatest != null) {
+              p['updated_at'] = localLatest.timestamp.toIso8601String();
+            }
+          }
+        }
+      }
+
       setState(() {
-        allPets = List<Map<String, dynamic>>.from(data);
+        allPets = petsList;
         _applyFilters();
       });
     } catch (e) {
@@ -100,12 +176,12 @@ class _AdminPetsScreenState extends State<AdminPetsScreen> {
   }
 
   void _applyFilters() {
-    List<Map<String, dynamic>> result = List.from(allPets);
+    List<Map<String, dynamic>> base = List.from(allPets);
 
     // Apply barangay filter for super admin
     if (_currentUserRole == UserRole.superAdmin &&
         _selectedBarangayFilter != 'All') {
-      result = result.where((p) {
+      base = base.where((p) {
         final b = (p['barangay'] ?? p['users']?['barangay'] ?? '')
             .toString()
             .toLowerCase();
@@ -113,32 +189,10 @@ class _AdminPetsScreenState extends State<AdminPetsScreen> {
       }).toList();
     }
 
-    // Apply chip filter
-    switch (_selectedChipIndex) {
-      case 1: // Active
-        result = result
-            .where(
-                (p) => (p['status'] ?? '').toString().toLowerCase() == 'active')
-            .toList();
-        break;
-      case 2: // Lost
-        result = result
-            .where(
-                (p) => (p['status'] ?? '').toString().toLowerCase() == 'lost')
-            .toList();
-        break;
-      case 3: // Archived
-        result = result
-            .where((p) =>
-                (p['status'] ?? '').toString().toLowerCase() == 'archived')
-            .toList();
-        break;
-    }
-
-    // Apply search filter
+    // Apply search filter across name, owner, breed, species, collar, or archive reason
     final q = _searchCtrl.text.trim().toLowerCase();
     if (q.isNotEmpty) {
-      result = result.where((p) {
+      base = base.where((p) {
         final petName = (p['name'] ?? '').toString().toLowerCase();
         final breed = (p['breed'] ?? '').toString().toLowerCase();
         final species = (p['species'] ?? '').toString().toLowerCase();
@@ -146,6 +200,10 @@ class _AdminPetsScreenState extends State<AdminPetsScreen> {
             .toString()
             .toLowerCase();
         final collarId = (p['gps_id'] ?? '').toString().toLowerCase();
+        final reason =
+            (p['archive_reason'] ?? p['archived_reason'] ?? p['reason'] ?? '')
+                .toString()
+                .toLowerCase();
         final u = p['users'];
         final ownerName = u != null
             ? [u['first_name'], u['middle_name'], u['surname'], u['suffix']]
@@ -158,11 +216,57 @@ class _AdminPetsScreenState extends State<AdminPetsScreen> {
             barangay.contains(q) ||
             breed.contains(q) ||
             species.contains(q) ||
-            collarId.contains(q);
+            collarId.contains(q) ||
+            reason.contains(q);
       }).toList();
     }
 
-    filteredPets = result;
+    // Partition into Archived vs Active/Lost
+    filteredArchivedPets = base
+        .where(
+            (p) => (p['status'] ?? '').toString().toLowerCase() == 'archived')
+        .toList();
+
+    var activeList = base
+        .where(
+            (p) => (p['status'] ?? '').toString().toLowerCase() != 'archived')
+        .toList();
+
+    if (_selectedChipIndex == 1) {
+      activeList = activeList
+          .where(
+              (p) => (p['status'] ?? '').toString().toLowerCase() == 'active')
+          .toList();
+    } else if (_selectedChipIndex == 2) {
+      activeList = activeList
+          .where((p) => (p['status'] ?? '').toString().toLowerCase() == 'lost')
+          .toList();
+    }
+
+    filteredActivePets = activeList;
+
+    if (_tableSegmentIndex == 1) {
+      filteredPets = filteredArchivedPets;
+    } else if (_tableSegmentIndex == 0) {
+      filteredPets = filteredActivePets;
+    } else {
+      // _tableSegmentIndex == 2 (View Both Tables)
+      if (_selectedChipIndex == 1) {
+        filteredPets = base
+            .where(
+                (p) => (p['status'] ?? '').toString().toLowerCase() == 'active')
+            .toList();
+      } else if (_selectedChipIndex == 2) {
+        filteredPets = base
+            .where(
+                (p) => (p['status'] ?? '').toString().toLowerCase() == 'lost')
+            .toList();
+      } else if (_selectedChipIndex == 3) {
+        filteredPets = filteredArchivedPets;
+      } else {
+        filteredPets = base;
+      }
+    }
   }
 
   void _showContactDialog(Map<String, dynamic> pet) {
@@ -335,26 +439,76 @@ class _AdminPetsScreenState extends State<AdminPetsScreen> {
       .where((p) => (p['status'] ?? '').toString().toLowerCase() == 'archived')
       .length;
 
-  int _sortColumnIndex = 1;
-  bool _sortAscending = true;
+  int _activeSortColumnIndex = 1;
+  bool _activeSortAscending = true;
+  int _archivedSortColumnIndex = 1;
+  bool _archivedSortAscending = true;
 
-  void _sort<T>(Comparable<T> Function(Map<String, dynamic> pet) getField,
+  void _sortActive<T>(Comparable<T> Function(Map<String, dynamic> pet) getField,
       int columnIndex, bool ascending) {
-    filteredPets.sort((a, b) {
+    int comparator(Map<String, dynamic> a, Map<String, dynamic> b) {
       final aValue = getField(a);
       final bValue = getField(b);
       return ascending
           ? Comparable.compare(aValue, bValue)
           : Comparable.compare(bValue, aValue);
-    });
+    }
+
+    filteredActivePets.sort(comparator);
     setState(() {
-      _sortColumnIndex = columnIndex;
-      _sortAscending = ascending;
+      _activeSortColumnIndex = columnIndex;
+      _activeSortAscending = ascending;
+    });
+  }
+
+  void _sortArchived<T>(
+      Comparable<T> Function(Map<String, dynamic> pet) getField,
+      int columnIndex,
+      bool ascending) {
+    int comparator(Map<String, dynamic> a, Map<String, dynamic> b) {
+      final aValue = getField(a);
+      final bValue = getField(b);
+      return ascending
+          ? Comparable.compare(aValue, bValue)
+          : Comparable.compare(bValue, aValue);
+    }
+
+    filteredArchivedPets.sort(comparator);
+    setState(() {
+      _archivedSortColumnIndex = columnIndex;
+      _archivedSortAscending = ascending;
+    });
+  }
+
+  void _sortUnified<T>(
+      Comparable<T> Function(Map<String, dynamic> pet) getField,
+      int columnIndex,
+      bool ascending) {
+    int comparator(Map<String, dynamic> a, Map<String, dynamic> b) {
+      final aValue = getField(a);
+      final bValue = getField(b);
+      return ascending
+          ? Comparable.compare(aValue, bValue)
+          : Comparable.compare(bValue, aValue);
+    }
+
+    filteredPets.sort(comparator);
+    setState(() {
+      _unifiedSortColumnIndex = columnIndex;
+      _unifiedSortAscending = ascending;
     });
   }
 
   Future<void> _exportToExcel() async {
     await PetsExportService.exportPetsToExcel(context, filteredPets);
+  }
+
+  Future<void> _exportActiveToExcel() async {
+    await PetsExportService.exportPetsToExcel(context, filteredActivePets);
+  }
+
+  Future<void> _exportArchivedToExcel() async {
+    await PetsExportService.exportPetsToExcel(context, filteredArchivedPets);
   }
 
   @override
@@ -462,173 +616,698 @@ class _AdminPetsScreenState extends State<AdminPetsScreen> {
             ],
           ],
         ),
-        const SizedBox(height: 16),
-
-        // Filter chips Row
-        _buildFilterChips(),
-        const SizedBox(height: 20),
-
-        // Card with PaginatedDataTable
-        Card(
-          elevation: 0,
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(16),
-            side: BorderSide(color: Colors.grey.shade200),
+        // Table View Segmented Switcher
+        Container(
+          padding: const EdgeInsets.all(4),
+          decoration: BoxDecoration(
+            color: const Color(0xFFF1F5F9),
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(color: const Color(0xFFE2E8F0)),
           ),
-          color: Colors.white,
-          clipBehavior: Clip.antiAlias,
-          child: Theme(
-            data: Theme.of(context).copyWith(
-              cardColor: Colors.white,
-              dividerColor: Colors.grey.shade200,
+          child: SingleChildScrollView(
+            scrollDirection: Axis.horizontal,
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                _buildSegmentTab(
+                  index: 0,
+                  icon: Icons.pets_rounded,
+                  label: 'Active',
+                  count: filteredActivePets.length,
+                  activeColor: AppColors.primary,
+                ),
+                const SizedBox(width: 6),
+                _buildSegmentTab(
+                  index: 1,
+                  icon: Icons.archive_outlined,
+                  label: 'Archived Pets',
+                  count: filteredArchivedPets.length,
+                  activeColor: const Color(0xFF64748B),
+                ),
+                const SizedBox(width: 6),
+                _buildSegmentTab(
+                  index: 2,
+                  icon: Icons.table_rows_rounded,
+                  label: 'View Both',
+                  count:
+                      filteredActivePets.length + filteredArchivedPets.length,
+                  activeColor: const Color(0xFF0F172A),
+                ),
+              ],
             ),
-            child: PaginatedDataTable(
-              header: Row(
+          ),
+        ),
+        const SizedBox(height: 18),
+
+        if (_tableSegmentIndex == 0) ...[
+          _buildFilterChips(),
+          const SizedBox(height: 16),
+          _buildActivePetsTableCard(),
+        ] else if (_tableSegmentIndex == 1) ...[
+          _buildArchivedPetsTableCard(),
+        ] else ...[
+          _buildFilterChips(),
+          const SizedBox(height: 16),
+          _buildUnifiedAllPetsTableCard(),
+        ],
+      ],
+    );
+  }
+
+  Widget _buildSegmentTab({
+    required int index,
+    required IconData icon,
+    required String label,
+    required int count,
+    required Color activeColor,
+  }) {
+    final isSelected = _tableSegmentIndex == index;
+    return InkWell(
+      onTap: () {
+        setState(() {
+          _tableSegmentIndex = index;
+          _selectedChipIndex = 0;
+          _applyFilters();
+        });
+      },
+      borderRadius: BorderRadius.circular(10),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+        decoration: BoxDecoration(
+          color: isSelected ? Colors.white : Colors.transparent,
+          borderRadius: BorderRadius.circular(10),
+          boxShadow: isSelected
+              ? [
+                  BoxShadow(
+                    color: Colors.black.withOpacity(0.06),
+                    blurRadius: 4,
+                    offset: const Offset(0, 1),
+                  ),
+                ]
+              : null,
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(
+              icon,
+              size: 16,
+              color: isSelected ? activeColor : const Color(0xFF64748B),
+            ),
+            const SizedBox(width: 7),
+            Text(
+              label,
+              style: GoogleFonts.inter(
+                fontSize: 12.5,
+                fontWeight: isSelected ? FontWeight.w700 : FontWeight.w500,
+                color: isSelected
+                    ? const Color(0xFF0F172A)
+                    : const Color(0xFF64748B),
+              ),
+            ),
+            const SizedBox(width: 6),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+              decoration: BoxDecoration(
+                color: isSelected
+                    ? activeColor.withOpacity(0.12)
+                    : const Color(0xFFE2E8F0),
+                borderRadius: BorderRadius.circular(999),
+              ),
+              child: Text(
+                '$count',
+                style: GoogleFonts.inter(
+                  fontSize: 11,
+                  fontWeight: FontWeight.w700,
+                  color: isSelected ? activeColor : const Color(0xFF64748B),
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildActivePetsTableCard() {
+    return Card(
+      elevation: 0,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(16),
+        side: BorderSide(color: Colors.grey.shade200),
+      ),
+      color: Colors.white,
+      clipBehavior: Clip.antiAlias,
+      child: Theme(
+        data: Theme.of(context).copyWith(
+          cardColor: Colors.white,
+          dividerColor: Colors.grey.shade200,
+        ),
+        child: PaginatedDataTable(
+          key: ValueKey(
+              'active_table_${_tableSegmentIndex}_${_selectedChipIndex}_${filteredActivePets.length}_${_activeSortColumnIndex}_$_activeSortAscending'),
+          header: Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(7),
+                decoration: BoxDecoration(
+                  color: AppColors.primary.withOpacity(0.10),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: const Icon(Icons.pets_rounded,
+                    size: 18, color: AppColors.primary),
+              ),
+              const SizedBox(width: 10),
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
                 children: [
                   Text(
-                    'Pets Registry (${filteredPets.length})',
+                    'Active Pets Registry (${filteredActivePets.length})',
                     style: GoogleFonts.montserrat(
                       fontSize: 16,
                       fontWeight: FontWeight.bold,
                       color: AppColors.onSurface,
                     ),
                   ),
-                  const Spacer(),
-                  ElevatedButton.icon(
-                    onPressed: filteredPets.isEmpty ? null : _exportToExcel,
-                    icon: const Icon(Icons.table_chart_outlined, size: 16),
-                    label: Text('Export to Excel',
-                        style: GoogleFonts.inter(
-                            fontSize: 13, fontWeight: FontWeight.w600)),
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: const Color(0xFF1D6F42),
-                      foregroundColor: Colors.white,
-                      disabledBackgroundColor: Colors.grey.shade300,
-                      padding: const EdgeInsets.symmetric(
-                          horizontal: 14, vertical: 10),
-                      shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(10)),
-                      elevation: 0,
+                  Text(
+                    'Active and missing pets currently managed in the barangay',
+                    style: GoogleFonts.inter(
+                      fontSize: 11,
+                      color: const Color(0xFF64748B),
                     ),
-                  ),
-                  const SizedBox(width: 8),
-                  IconButton(
-                    icon: const Icon(Icons.refresh),
-                    tooltip: 'Refresh',
-                    onPressed: fetchAllPets,
                   ),
                 ],
               ),
-              rowsPerPage: 10,
-              showFirstLastButtons: true,
-              sortColumnIndex: _sortColumnIndex,
-              sortAscending: _sortAscending,
-              columns: [
-                const DataColumn(label: Text('Photo')),
-                DataColumn(
-                  label: const Text('Pet Name'),
-                  onSort: (columnIndex, ascending) {
-                    _sort<String>(
-                      (p) => (p['name'] ?? '').toString().toLowerCase(),
-                      columnIndex,
-                      ascending,
-                    );
-                  },
+              const Spacer(),
+              ElevatedButton.icon(
+                onPressed:
+                    filteredActivePets.isEmpty ? null : _exportActiveToExcel,
+                icon: const Icon(Icons.table_chart_outlined, size: 16),
+                label: Text('Export to Excel',
+                    style: GoogleFonts.inter(
+                        fontSize: 13, fontWeight: FontWeight.w600)),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: const Color(0xFF1D6F42),
+                  foregroundColor: Colors.white,
+                  disabledBackgroundColor: Colors.grey.shade300,
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                  shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(10)),
+                  elevation: 0,
                 ),
-                DataColumn(
-                  label: const Text('Breed'),
-                  onSort: (columnIndex, ascending) {
-                    _sort<String>(
-                      (p) => (p['breed'] ?? '').toString().toLowerCase(),
-                      columnIndex,
-                      ascending,
-                    );
-                  },
-                ),
-                DataColumn(
-                  label: const Text('Species'),
-                  onSort: (columnIndex, ascending) {
-                    _sort<String>(
-                      (p) => (p['species'] ?? '').toString().toLowerCase(),
-                      columnIndex,
-                      ascending,
-                    );
-                  },
-                ),
-                DataColumn(
-                  label: const Text('Owner'),
-                  onSort: (columnIndex, ascending) {
-                    _sort<String>(
-                      (p) {
-                        final u = p['users'];
-                        return u is Map
-                            ? '${u['first_name'] ?? ''} ${u['surname'] ?? ''}'
-                                .toLowerCase()
-                            : '';
-                      },
-                      columnIndex,
-                      ascending,
-                    );
-                  },
-                ),
-                DataColumn(
-                  label: const Text('Barangay'),
-                  onSort: (columnIndex, ascending) {
-                    _sort<String>(
-                      (p) => (p['barangay'] ?? '').toString().toLowerCase(),
-                      columnIndex,
-                      ascending,
-                    );
-                  },
-                ),
-                DataColumn(
-                  label: const Text('Status'),
-                  onSort: (columnIndex, ascending) {
-                    _sort<String>(
-                      (p) => (p['status'] ?? '').toString().toLowerCase(),
-                      columnIndex,
-                      ascending,
-                    );
-                  },
-                ),
-                DataColumn(
-                  label: const Text('Registered Date'),
-                  onSort: (columnIndex, ascending) {
-                    _sort<String>(
-                      (p) => (p['created_at'] ?? '').toString(),
-                      columnIndex,
-                      ascending,
-                    );
-                  },
-                ),
-                DataColumn(
-                  label: const Text('Last Modified'),
-                  onSort: (columnIndex, ascending) {
-                    _sort<String>(
-                      (p) => (p['updated_at'] ??
-                              p['modified_at'] ??
-                              p['created_at'] ??
-                              '')
-                          .toString(),
-                      columnIndex,
-                      ascending,
-                    );
-                  },
-                ),
-                const DataColumn(label: Text('Actions')),
-              ],
-              source: PetsDataTableSource(
-                filteredPets,
-                context,
-                onContact: _showContactDialog,
-                onViewMap: _showLocationDialog,
-                onRepost: _repostPetToNews,
-                onViewLogs: (pet) => showPetAuditLogDialog(context, pet),
               ),
+              const SizedBox(width: 8),
+              IconButton(
+                icon: const Icon(Icons.refresh),
+                tooltip: 'Refresh',
+                onPressed: fetchAllPets,
+              ),
+            ],
+          ),
+          rowsPerPage: filteredActivePets.length > 5 ? 10 : 5,
+          showFirstLastButtons: true,
+          sortColumnIndex: _activeSortColumnIndex,
+          sortAscending: _activeSortAscending,
+          columns: [
+            const DataColumn(label: Text('Photo')),
+            DataColumn(
+              label: const Text('Pet Name'),
+              onSort: (columnIndex, ascending) {
+                _sortActive<String>(
+                  (p) => (p['name'] ?? '').toString().toLowerCase(),
+                  columnIndex,
+                  ascending,
+                );
+              },
             ),
+            DataColumn(
+              label: const Text('Breed'),
+              onSort: (columnIndex, ascending) {
+                _sortActive<String>(
+                  (p) => (p['breed'] ?? '').toString().toLowerCase(),
+                  columnIndex,
+                  ascending,
+                );
+              },
+            ),
+            DataColumn(
+              label: const Text('Species'),
+              onSort: (columnIndex, ascending) {
+                _sortActive<String>(
+                  (p) => (p['species'] ?? '').toString().toLowerCase(),
+                  columnIndex,
+                  ascending,
+                );
+              },
+            ),
+            DataColumn(
+              label: const Text('Owner'),
+              onSort: (columnIndex, ascending) {
+                _sortActive<String>(
+                  (p) {
+                    final u = p['users'];
+                    return u is Map
+                        ? '${u['first_name'] ?? ''} ${u['surname'] ?? ''}'
+                            .toLowerCase()
+                        : '';
+                  },
+                  columnIndex,
+                  ascending,
+                );
+              },
+            ),
+            DataColumn(
+              label: const Text('Barangay'),
+              onSort: (columnIndex, ascending) {
+                _sortActive<String>(
+                  (p) => (p['barangay'] ?? '').toString().toLowerCase(),
+                  columnIndex,
+                  ascending,
+                );
+              },
+            ),
+            DataColumn(
+              label: const Text('Status'),
+              onSort: (columnIndex, ascending) {
+                _sortActive<String>(
+                  (p) => (p['status'] ?? '').toString().toLowerCase(),
+                  columnIndex,
+                  ascending,
+                );
+              },
+            ),
+            DataColumn(
+              label: const Text('Registered Date'),
+              onSort: (columnIndex, ascending) {
+                _sortActive<String>(
+                  (p) => (p['created_at'] ?? '').toString(),
+                  columnIndex,
+                  ascending,
+                );
+              },
+            ),
+            DataColumn(
+              label: const Text('Last Modified'),
+              onSort: (columnIndex, ascending) {
+                _sortActive<String>(
+                  (p) => (p['updated_at'] ??
+                          p['modified_at'] ??
+                          p['created_at'] ??
+                          '')
+                      .toString(),
+                  columnIndex,
+                  ascending,
+                );
+              },
+            ),
+            const DataColumn(label: Text('Actions')),
+          ],
+          source: PetsDataTableSource(
+            filteredActivePets,
+            context,
+            onContact: _showContactDialog,
+            onViewMap: _showLocationDialog,
+            onRepost: _repostPetToNews,
+            onViewLogs: (pet) => showPetAuditLogDialog(context, pet),
           ),
         ),
-      ],
+      ),
+    );
+  }
+
+  Widget _buildUnifiedAllPetsTableCard() {
+    return Card(
+      elevation: 0,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(16),
+        side: BorderSide(color: Colors.grey.shade200),
+      ),
+      color: Colors.white,
+      clipBehavior: Clip.antiAlias,
+      child: Theme(
+        data: Theme.of(context).copyWith(
+          cardColor: Colors.white,
+          dividerColor: Colors.grey.shade200,
+        ),
+        child: PaginatedDataTable(
+          key: ValueKey(
+              'unified_table_${_tableSegmentIndex}_${_selectedChipIndex}_${filteredPets.length}_${_unifiedSortColumnIndex}_$_unifiedSortAscending'),
+          header: Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(7),
+                decoration: BoxDecoration(
+                  color: const Color(0xFF0F172A).withOpacity(0.08),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: const Icon(Icons.table_rows_rounded,
+                    size: 18, color: Color(0xFF0F172A)),
+              ),
+              const SizedBox(width: 10),
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(
+                    'All Pets Registry (${filteredPets.length})',
+                    style: GoogleFonts.montserrat(
+                      fontSize: 16,
+                      fontWeight: FontWeight.bold,
+                      color: AppColors.onSurface,
+                    ),
+                  ),
+                  Text(
+                    'Complete registry of active, lost, and archived pets',
+                    style: GoogleFonts.inter(
+                      fontSize: 11,
+                      color: const Color(0xFF64748B),
+                    ),
+                  ),
+                ],
+              ),
+              const Spacer(),
+              ElevatedButton.icon(
+                onPressed: filteredPets.isEmpty ? null : _exportToExcel,
+                icon: const Icon(Icons.table_chart_outlined, size: 16),
+                label: Text('Export All to Excel',
+                    style: GoogleFonts.inter(
+                        fontSize: 13, fontWeight: FontWeight.w600)),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: const Color(0xFF0F172A),
+                  foregroundColor: Colors.white,
+                  disabledBackgroundColor: Colors.grey.shade300,
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                  shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(10)),
+                  elevation: 0,
+                ),
+              ),
+              const SizedBox(width: 8),
+              IconButton(
+                icon: const Icon(Icons.refresh),
+                tooltip: 'Refresh',
+                onPressed: fetchAllPets,
+              ),
+            ],
+          ),
+          rowsPerPage: filteredPets.length > 5 ? 10 : 5,
+          showFirstLastButtons: true,
+          sortColumnIndex: _unifiedSortColumnIndex,
+          sortAscending: _unifiedSortAscending,
+          columns: [
+            const DataColumn(label: Text('Photo')),
+            DataColumn(
+              label: const Text('Pet Name'),
+              onSort: (columnIndex, ascending) {
+                _sortUnified<String>(
+                  (p) => (p['name'] ?? '').toString().toLowerCase(),
+                  columnIndex,
+                  ascending,
+                );
+              },
+            ),
+            DataColumn(
+              label: const Text('Breed'),
+              onSort: (columnIndex, ascending) {
+                _sortUnified<String>(
+                  (p) => (p['breed'] ?? '').toString().toLowerCase(),
+                  columnIndex,
+                  ascending,
+                );
+              },
+            ),
+            DataColumn(
+              label: const Text('Species'),
+              onSort: (columnIndex, ascending) {
+                _sortUnified<String>(
+                  (p) => (p['species'] ?? '').toString().toLowerCase(),
+                  columnIndex,
+                  ascending,
+                );
+              },
+            ),
+            DataColumn(
+              label: const Text('Owner'),
+              onSort: (columnIndex, ascending) {
+                _sortUnified<String>(
+                  (p) {
+                    final u = p['users'];
+                    return u is Map
+                        ? '${u['first_name'] ?? ''} ${u['surname'] ?? ''}'
+                            .toLowerCase()
+                        : '';
+                  },
+                  columnIndex,
+                  ascending,
+                );
+              },
+            ),
+            DataColumn(
+              label: const Text('Barangay'),
+              onSort: (columnIndex, ascending) {
+                _sortUnified<String>(
+                  (p) => (p['barangay'] ?? '').toString().toLowerCase(),
+                  columnIndex,
+                  ascending,
+                );
+              },
+            ),
+            DataColumn(
+              label: const Text('Status'),
+              onSort: (columnIndex, ascending) {
+                _sortUnified<String>(
+                  (p) => (p['status'] ?? '').toString().toLowerCase(),
+                  columnIndex,
+                  ascending,
+                );
+              },
+            ),
+            DataColumn(
+              label: const Text('Registered Date'),
+              onSort: (columnIndex, ascending) {
+                _sortUnified<String>(
+                  (p) => (p['created_at'] ?? '').toString(),
+                  columnIndex,
+                  ascending,
+                );
+              },
+            ),
+            DataColumn(
+              label: const Text('Last Modified'),
+              onSort: (columnIndex, ascending) {
+                _sortUnified<String>(
+                  (p) => (p['updated_at'] ??
+                          p['modified_at'] ??
+                          p['created_at'] ??
+                          '')
+                      .toString(),
+                  columnIndex,
+                  ascending,
+                );
+              },
+            ),
+            const DataColumn(label: Text('Actions')),
+          ],
+          source: PetsDataTableSource(
+            filteredPets,
+            context,
+            onContact: _showContactDialog,
+            onViewMap: _showLocationDialog,
+            onRepost: _repostPetToNews,
+            onViewLogs: (pet) => showPetAuditLogDialog(context, pet),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildArchivedPetsTableCard() {
+    return Card(
+      elevation: 0,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(16),
+        side: BorderSide(color: Colors.grey.shade200),
+      ),
+      color: Colors.white,
+      clipBehavior: Clip.antiAlias,
+      child: Theme(
+        data: Theme.of(context).copyWith(
+          cardColor: Colors.white,
+          dividerColor: Colors.grey.shade200,
+        ),
+        child: PaginatedDataTable(
+          key: ValueKey(
+              'archived_table_${_tableSegmentIndex}_${filteredArchivedPets.length}_${_archivedSortColumnIndex}_$_archivedSortAscending'),
+          header: Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(7),
+                decoration: BoxDecoration(
+                  color: const Color(0xFFF1F5F9),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: const Icon(Icons.archive_outlined,
+                    size: 18, color: Color(0xFF64748B)),
+              ),
+              const SizedBox(width: 10),
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Row(
+                    children: [
+                      Text(
+                        'Archived Pets Archive (${filteredArchivedPets.length})',
+                        style: GoogleFonts.montserrat(
+                          fontSize: 16,
+                          fontWeight: FontWeight.bold,
+                          color: AppColors.onSurface,
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                    ],
+                  ),
+                  Text(
+                    'Historical pet profiles removed by owner',
+                    style: GoogleFonts.inter(
+                      fontSize: 11,
+                      color: const Color(0xFF64748B),
+                    ),
+                  ),
+                ],
+              ),
+              const Spacer(),
+              ElevatedButton.icon(
+                onPressed: filteredArchivedPets.isEmpty
+                    ? null
+                    : _exportArchivedToExcel,
+                icon: const Icon(Icons.table_chart_outlined, size: 16),
+                label: Text('Export Archived to Excel',
+                    style: GoogleFonts.inter(
+                        fontSize: 13, fontWeight: FontWeight.w600)),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: const Color(0xFF475569),
+                  foregroundColor: Colors.white,
+                  disabledBackgroundColor: Colors.grey.shade300,
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                  shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(10)),
+                  elevation: 0,
+                ),
+              ),
+              const SizedBox(width: 8),
+              IconButton(
+                icon: const Icon(Icons.refresh),
+                tooltip: 'Refresh',
+                onPressed: fetchAllPets,
+              ),
+            ],
+          ),
+          rowsPerPage: filteredArchivedPets.length > 5 ? 10 : 5,
+          showFirstLastButtons: true,
+          sortColumnIndex: _archivedSortColumnIndex,
+          sortAscending: _archivedSortAscending,
+          columns: [
+            const DataColumn(label: Text('Photo')),
+            DataColumn(
+              label: const Text('Pet Name'),
+              onSort: (columnIndex, ascending) {
+                _sortArchived<String>(
+                  (p) => (p['name'] ?? '').toString().toLowerCase(),
+                  columnIndex,
+                  ascending,
+                );
+              },
+            ),
+            DataColumn(
+              label: const Text('Breed'),
+              onSort: (columnIndex, ascending) {
+                _sortArchived<String>(
+                  (p) => (p['breed'] ?? '').toString().toLowerCase(),
+                  columnIndex,
+                  ascending,
+                );
+              },
+            ),
+            DataColumn(
+              label: const Text('Species'),
+              onSort: (columnIndex, ascending) {
+                _sortArchived<String>(
+                  (p) => (p['species'] ?? '').toString().toLowerCase(),
+                  columnIndex,
+                  ascending,
+                );
+              },
+            ),
+            DataColumn(
+              label: const Text('Owner'),
+              onSort: (columnIndex, ascending) {
+                _sortArchived<String>(
+                  (p) {
+                    final u = p['users'];
+                    return u is Map
+                        ? '${u['first_name'] ?? ''} ${u['surname'] ?? ''}'
+                            .toLowerCase()
+                        : '';
+                  },
+                  columnIndex,
+                  ascending,
+                );
+              },
+            ),
+            DataColumn(
+              label: const Text('Barangay'),
+              onSort: (columnIndex, ascending) {
+                _sortArchived<String>(
+                  (p) => (p['barangay'] ?? '').toString().toLowerCase(),
+                  columnIndex,
+                  ascending,
+                );
+              },
+            ),
+            DataColumn(
+              label: const Text('Archive Reason'),
+              onSort: (columnIndex, ascending) {
+                _sortArchived<String>(
+                  (p) => (p['archive_reason'] ??
+                          p['archived_reason'] ??
+                          p['reason'] ??
+                          '')
+                      .toString()
+                      .toLowerCase(),
+                  columnIndex,
+                  ascending,
+                );
+              },
+            ),
+            DataColumn(
+              label: const Text('Date Archived'),
+              onSort: (columnIndex, ascending) {
+                _sortArchived<String>(
+                  (p) => (p['updated_at'] ??
+                          p['modified_at'] ??
+                          p['created_at'] ??
+                          '')
+                      .toString(),
+                  columnIndex,
+                  ascending,
+                );
+              },
+            ),
+            const DataColumn(label: Text('Actions')),
+          ],
+          source: ArchivedPetsDataTableSource(
+            filteredArchivedPets,
+            context,
+            onContact: _showContactDialog,
+            onViewLogs: (pet) => showPetAuditLogDialog(context, pet),
+          ),
+        ),
+      ),
     );
   }
 
@@ -666,6 +1345,47 @@ class _AdminPetsScreenState extends State<AdminPetsScreen> {
             _buildSummaryRow(),
             const SizedBox(height: 14),
             _buildSearchBar(),
+            const SizedBox(height: 14),
+            Container(
+              padding: const EdgeInsets.all(4),
+              decoration: BoxDecoration(
+                color: const Color(0xFFF1F5F9),
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: const Color(0xFFE2E8F0)),
+              ),
+              child: SingleChildScrollView(
+                scrollDirection: Axis.horizontal,
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    _buildSegmentTab(
+                      index: 0,
+                      icon: Icons.pets_rounded,
+                      label: 'Active & Lost',
+                      count: filteredActivePets.length,
+                      activeColor: AppColors.primary,
+                    ),
+                    const SizedBox(width: 6),
+                    _buildSegmentTab(
+                      index: 1,
+                      icon: Icons.archive_outlined,
+                      label: 'Archived',
+                      count: filteredArchivedPets.length,
+                      activeColor: const Color(0xFF64748B),
+                    ),
+                    const SizedBox(width: 6),
+                    _buildSegmentTab(
+                      index: 2,
+                      icon: Icons.table_rows_rounded,
+                      label: 'All Pets',
+                      count: filteredActivePets.length +
+                          filteredArchivedPets.length,
+                      activeColor: const Color(0xFF0F172A),
+                    ),
+                  ],
+                ),
+              ),
+            ),
             const SizedBox(height: 14),
             Row(
               children: [
@@ -724,13 +1444,56 @@ class _AdminPetsScreenState extends State<AdminPetsScreen> {
                     const SizedBox(height: 14),
                     _buildSearchBar(),
                     const SizedBox(height: 14),
+                    Container(
+                      padding: const EdgeInsets.all(4),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFFF1F5F9),
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(color: const Color(0xFFE2E8F0)),
+                      ),
+                      child: SingleChildScrollView(
+                        scrollDirection: Axis.horizontal,
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            _buildSegmentTab(
+                              index: 0,
+                              icon: Icons.pets_rounded,
+                              label: 'Active & Lost',
+                              count: filteredActivePets.length,
+                              activeColor: AppColors.primary,
+                            ),
+                            const SizedBox(width: 6),
+                            _buildSegmentTab(
+                              index: 1,
+                              icon: Icons.archive_outlined,
+                              label: 'Archived',
+                              count: filteredArchivedPets.length,
+                              activeColor: const Color(0xFF64748B),
+                            ),
+                            const SizedBox(width: 6),
+                            _buildSegmentTab(
+                              index: 2,
+                              icon: Icons.table_rows_rounded,
+                              label: 'All Pets',
+                              count: filteredActivePets.length +
+                                  filteredArchivedPets.length,
+                              activeColor: const Color(0xFF0F172A),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 14),
                     Row(
                       children: [
                         Expanded(child: _buildFilterChips()),
                         const SizedBox(width: 12),
                         ElevatedButton.icon(
-                          onPressed: filteredPets.isEmpty ? null : _exportToExcel,
-                          icon: const Icon(Icons.table_chart_outlined, size: 18),
+                          onPressed:
+                              filteredPets.isEmpty ? null : _exportToExcel,
+                          icon:
+                              const Icon(Icons.table_chart_outlined, size: 18),
                           label: Text('Export to Excel',
                               style: GoogleFonts.inter(
                                   fontSize: 13, fontWeight: FontWeight.w600)),
@@ -870,30 +1633,88 @@ class _AdminPetsScreenState extends State<AdminPetsScreen> {
       scrollDirection: Axis.horizontal,
       child: Row(
         children: [
-          _summaryPill('Total: $_totalCount', AppColors.primary),
+          _clickableSummaryPill(
+            text: 'Total: $_totalCount',
+            color: AppColors.primary,
+            isActive: _tableSegmentIndex == 2,
+            onTap: () {
+              setState(() {
+                _tableSegmentIndex = 2; // Both
+                _selectedChipIndex = 0;
+                _applyFilters();
+              });
+            },
+          ),
           const SizedBox(width: 8),
-          _summaryPill('Active: $_activeCount', const Color(0xFF22C55E)),
+          _clickableSummaryPill(
+            text: 'Active: $_activeCount',
+            color: const Color(0xFF22C55E),
+            isActive: _tableSegmentIndex == 0 && _selectedChipIndex == 1,
+            onTap: () {
+              setState(() {
+                _tableSegmentIndex = 0; // Active table
+                _selectedChipIndex = 1; // Active only
+                _applyFilters();
+              });
+            },
+          ),
           const SizedBox(width: 8),
-          _summaryPill('Lost: $_lostCount', AppColors.error),
+          _clickableSummaryPill(
+            text: 'Lost: $_lostCount',
+            color: AppColors.error,
+            isActive: _tableSegmentIndex == 0 && _selectedChipIndex == 2,
+            onTap: () {
+              setState(() {
+                _tableSegmentIndex = 0; // Active table
+                _selectedChipIndex = 2; // Lost only
+                _applyFilters();
+              });
+            },
+          ),
           const SizedBox(width: 8),
-          _summaryPill('Archived: $_archivedCount', const Color(0xFF64748B)),
+          _clickableSummaryPill(
+            text: 'Archived: $_archivedCount',
+            color: const Color(0xFF64748B),
+            isActive: _tableSegmentIndex == 1,
+            onTap: () {
+              setState(() {
+                _tableSegmentIndex = 1; // Archived table
+                _applyFilters();
+              });
+            },
+          ),
         ],
       ),
     );
   }
 
-  Widget _summaryPill(String text, Color color) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-      decoration: BoxDecoration(
-        color: color.withOpacity(0.12),
-        borderRadius: BorderRadius.circular(999),
-        border: Border.all(color: color.withOpacity(0.3)),
-      ),
-      child: Text(
-        text,
-        style: GoogleFonts.inter(
-            fontSize: 12, fontWeight: FontWeight.w700, color: color),
+  Widget _clickableSummaryPill({
+    required String text,
+    required Color color,
+    required VoidCallback onTap,
+    bool isActive = false,
+  }) {
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(999),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+        decoration: BoxDecoration(
+          color: isActive ? color.withOpacity(0.20) : color.withOpacity(0.10),
+          borderRadius: BorderRadius.circular(999),
+          border: Border.all(
+            color: isActive ? color : color.withOpacity(0.3),
+            width: isActive ? 1.8 : 1.0,
+          ),
+        ),
+        child: Text(
+          text,
+          style: GoogleFonts.inter(
+            fontSize: 12,
+            fontWeight: FontWeight.w700,
+            color: color,
+          ),
+        ),
       ),
     );
   }
@@ -919,16 +1740,17 @@ class _AdminPetsScreenState extends State<AdminPetsScreen> {
   }
 
   Widget _buildFilterChips() {
+    final labels = _currentChipLabels;
     return SingleChildScrollView(
       scrollDirection: Axis.horizontal,
       child: Row(
-        children: List.generate(_chipLabels.length, (i) {
+        children: List.generate(labels.length, (i) {
           final isSelected = i == _selectedChipIndex;
           return Padding(
             padding: const EdgeInsets.only(right: 8),
             child: FilterChip(
               selected: isSelected,
-              label: Text(_chipLabels[i]),
+              label: Text(labels[i]),
               labelStyle: GoogleFonts.inter(
                 fontSize: 12,
                 fontWeight: FontWeight.w600,
@@ -976,4 +1798,3 @@ class _AdminPetsScreenState extends State<AdminPetsScreen> {
     );
   }
 }
-

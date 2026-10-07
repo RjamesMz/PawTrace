@@ -7,7 +7,7 @@ class AdminPetCard extends StatelessWidget {
   final Map<String, dynamic> pet;
   final VoidCallback onTap;
   final VoidCallback onContact;
-  final VoidCallback onViewMap;
+  final VoidCallback? onViewMap;
   final VoidCallback onRepost;
   final VoidCallback? onViewLogs;
 
@@ -16,7 +16,7 @@ class AdminPetCard extends StatelessWidget {
     required this.pet,
     required this.onTap,
     required this.onContact,
-    required this.onViewMap,
+    this.onViewMap,
     required this.onRepost,
     this.onViewLogs,
   });
@@ -203,32 +203,6 @@ class AdminPetCard extends StatelessWidget {
                       side:
                           BorderSide(color: AppColors.primary.withOpacity(0.5)),
                       foregroundColor: AppColors.primary,
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(999),
-                      ),
-                    ),
-                  ),
-                  const SizedBox(width: 6),
-                  ElevatedButton.icon(
-                    onPressed: onViewMap,
-                    icon: const Icon(Icons.map_outlined, size: 13),
-                    label: Text(
-                      'View Map',
-                      style: GoogleFonts.inter(
-                        fontSize: 11,
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: AppColors.primaryContainer,
-                      foregroundColor: AppColors.onPrimaryContainer,
-                      elevation: 0,
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 10,
-                        vertical: 6,
-                      ),
-                      minimumSize: Size.zero,
-                      tapTargetSize: MaterialTapTargetSize.shrinkWrap,
                       shape: RoundedRectangleBorder(
                         borderRadius: BorderRadius.circular(999),
                       ),

@@ -26,7 +26,7 @@ import 'screens/user/lost_pet/report_lost_pet.dart';
 // Screens - Admin
 import 'screens/admin/user_management/user_management_screen.dart';
 import 'screens/admin/pets/admin_pets_screen.dart';
-import 'screens/admin/barangay_admin/barangay_admin_home_screen.dart';
+import 'screens/admin/dashboard/admin_home_screen.dart';
 import 'screens/admin/reports/admin_reports_screen.dart';
 import 'screens/super_admin/super_admin_screen.dart';
 import 'screens/admin/news/post_news_screen.dart';
@@ -120,8 +120,8 @@ class PetTraceApp extends StatelessWidget {
         AppRoutes.profilePetRegistration: (_) => const MainAppLayout(initialIndex: 3),
         AppRoutes.settings: (_) => const MainAppLayout(initialIndex: 4),
 
-        AppRoutes.barangayAdminHome: (_) => const BarangayAdminHomeScreen(),
-        AppRoutes.adminHome: (_) => const BarangayAdminHomeScreen(),
+        AppRoutes.barangayAdminHome: (_) => const AdminHomeScreen(),
+        AppRoutes.adminHome: (_) => const AdminHomeScreen(),
         AppRoutes.superAdminHome: (_) => const SuperAdminScreen(),
         AppRoutes.adminPets: (_) => const AdminPetsScreen(),
         AppRoutes.adminReports: (_) => const AdminReportsScreen(),

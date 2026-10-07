@@ -8,6 +8,7 @@ import '../../../core/app_colors.dart';
 import '../../../core/app_routes.dart';
 import '../../../core/app_toast.dart';
 import '../../../services/ai/pet_embedding_service.dart';
+import '../../../services/alerts/alert_service.dart';
 import '../../../widgets/user/pet_registration/pet_photo_slot_card.dart';
 import '../../../widgets/user/pet_registration/pet_registration_biometrics_section.dart';
 import '../../../widgets/user/pet_registration/pet_registration_fields.dart';
@@ -455,6 +456,14 @@ class _ProfilePetRegistrationScreenState
           debugPrint('[PetTrace] Embedding extraction/saving error: $embErr');
         }
       }
+
+      // Dispatch in-app alert to Barangay Admin(s)
+      await AlertService.instance.createNewPetRegistrationAlert(
+        petName: _nameCtrl.text.trim(),
+        species: selectedSpecies,
+        breed: breedText.isEmpty ? 'N/A' : breedText,
+        barangay: _selectedBarangay,
+      );
 
       if (!mounted) return;
 

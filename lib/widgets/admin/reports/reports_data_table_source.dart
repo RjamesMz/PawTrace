@@ -1,14 +1,16 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../../../core/app_colors.dart';
+import '../../../services/admin/admin_analytics_service.dart';
 import '../../../widgets/common/photo_placeholder.dart';
 
 /// DataTableSource for AdminReportsScreen on desktop web.
 class ReportsDataTableSource extends DataTableSource {
   final List<Map<String, dynamic>> reports;
   final void Function(Map<String, dynamic> report)? onViewReport;
+  final void Function(Map<String, dynamic> report)? onViewMap;
 
-  ReportsDataTableSource(this.reports, {this.onViewReport});
+  ReportsDataTableSource(this.reports, {this.onViewReport, this.onViewMap});
 
   @override
   DataRow? getRow(int index) {
@@ -26,32 +28,20 @@ class ReportsDataTableSource extends DataTableSource {
         ? '${owner['first_name'] ?? ''} ${owner['surname'] ?? ''}'.trim()
         : 'Unknown Owner';
 
-    final location = report['last_seen_address']?.toString() ??
+    final rawLocation = report['last_seen_address']?.toString() ??
         report['barangay']?.toString() ??
         '-';
+    final cleanLocation = rawLocation
+        .replaceAll(RegExp(r'\s*\(?Lat:\s*[-\d.]+,\s*Lng:\s*[-\d.]+\)?', caseSensitive: false), '')
+        .trim();
+    final location = cleanLocation.isNotEmpty
+        ? cleanLocation
+        : (report['barangay']?.toString() ?? '-');
     final reportedAt = report['reported_at']?.toString() ?? '';
-    final petStatus =
-        pet is Map ? (pet['status']?.toString() ?? '').toLowerCase() : '';
-    final reportStatus =
-        (report['status']?.toString() ?? 'active').toLowerCase();
 
     // Determine Pet Condition: LOST or FOUND
-    String petCondition = (report['outcome'] ??
-            report['pet_status'] ??
-            report['condition'] ??
-            '')
-        .toString()
-        .toUpperCase();
-    if (petCondition != 'FOUND' && petCondition != 'LOST') {
-      final bool isFound = reportStatus == 'resolved' ||
-          reportStatus == 'found' ||
-          reportStatus == 'archived' ||
-          report['is_found'] == true ||
-          report['found_at'] != null ||
-          (petStatus == 'active' && reportStatus == 'archived') ||
-          petStatus == 'found';
-      petCondition = isFound ? 'FOUND' : 'LOST';
-    }
+    final bool isFound = AdminAnalyticsService.isReportFound(report);
+    final String petCondition = isFound ? 'FOUND' : 'LOST';
 
     String formattedDate = '';
     String formattedTime = '';
@@ -72,6 +62,7 @@ class ReportsDataTableSource extends DataTableSource {
 
     return DataRow.byIndex(
       index: index,
+      onSelectChanged: (_) => onViewReport?.call(report),
       color: WidgetStateProperty.resolveWith<Color?>(
         (states) => isEven ? Colors.white : const Color(0xFFF9FAFB),
       ),
@@ -134,7 +125,7 @@ class ReportsDataTableSource extends DataTableSource {
           formattedTime,
           style: GoogleFonts.inter(fontSize: 13),
         )),
-        // Pet Status Chip (LOST or FOUND)
+        // Status Chip (LOST or FOUND)
         DataCell(
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
@@ -156,35 +147,81 @@ class ReportsDataTableSource extends DataTableSource {
             ),
           ),
         ),
-        // Archive Status Chip
-        DataCell(
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-            decoration: BoxDecoration(
-              color: reportStatus == 'archived'
-                  ? const Color(0xFF64748B).withOpacity(0.15)
-                  : const Color(0xFF3B82F6).withOpacity(0.15),
-              borderRadius: BorderRadius.circular(12),
-            ),
-            child: Text(
-              reportStatus == 'archived' ? 'ARCHIVED' : 'ACTIVE',
-              style: GoogleFonts.inter(
-                fontSize: 11,
-                fontWeight: FontWeight.bold,
-                color: reportStatus == 'archived'
-                    ? const Color(0xFF475569)
-                    : const Color(0xFF1D4ED8),
-              ),
-            ),
-          ),
-        ),
         // Action
         DataCell(
-          IconButton(
-            icon: const Icon(Icons.visibility_outlined,
-                size: 18, color: AppColors.primary),
-            tooltip: 'View Details',
-            onPressed: () => onViewReport?.call(report),
+          Builder(
+            builder: (context) {
+              final collarId =
+                  (pet is Map ? pet['gps_id'] : report['gps_id'])?.toString().trim() ?? '';
+              final bool hasCollar = collarId.isNotEmpty &&
+                  collarId.toUpperCase() != 'N/A' &&
+                  collarId.toUpperCase() != 'NONE';
+              final double? rLat = (report['last_seen_lat'] as num?)?.toDouble() ??
+                  (pet is Map ? (pet['last_seen_lat'] as num?)?.toDouble() : null);
+              final double? rLon = (report['last_seen_lon'] as num?)?.toDouble() ??
+                  (pet is Map ? (pet['last_seen_lon'] as num?)?.toDouble() : null);
+              final bool hasRegexCoords = RegExp(
+                      r'Lat:\s*([-\d.]+),\s*Lng:\s*([-\d.]+)',
+                      caseSensitive: false)
+                  .hasMatch(rawLocation);
+              final bool hasGps =
+                  hasCollar || (rLat != null && rLon != null) || hasRegexCoords;
+
+              return PopupMenuButton<String>(
+                icon: const Icon(Icons.more_vert_rounded,
+                    size: 20, color: Color(0xFF64748B)),
+                tooltip: 'Actions',
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                onSelected: (action) {
+                  if (action == 'view') {
+                    onViewReport?.call(report);
+                  } else if (action == 'map') {
+                    onViewMap?.call(report);
+                  }
+                },
+                itemBuilder: (context) => [
+                  PopupMenuItem(
+                    value: 'view',
+                    child: Row(
+                      children: [
+                        const Icon(Icons.visibility_outlined,
+                            size: 16, color: AppColors.primary),
+                        const SizedBox(width: 8),
+                        Text(
+                          'View Details',
+                          style: GoogleFonts.inter(
+                            fontSize: 13,
+                            fontWeight: FontWeight.w500,
+                            color: AppColors.onSurface,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  if (hasGps && onViewMap != null)
+                    PopupMenuItem(
+                      value: 'map',
+                      child: Row(
+                        children: [
+                          const Icon(Icons.map_outlined,
+                              size: 16, color: Color(0xFF2563EB)),
+                          const SizedBox(width: 8),
+                          Text(
+                            'View Map',
+                            style: GoogleFonts.inter(
+                              fontSize: 13,
+                              fontWeight: FontWeight.w500,
+                              color: AppColors.onSurface,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                ],
+              );
+            },
           ),
         ),
       ],

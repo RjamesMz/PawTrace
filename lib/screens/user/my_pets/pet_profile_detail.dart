@@ -733,7 +733,7 @@ class _PetProfileDetailScreenState extends State<PetProfileDetailScreen> {
                         Row(
                           children: [
                             Text(
-                              'COLLAR ID',
+                              'GPS ID',
                               style: GoogleFonts.inter(
                                 fontSize: 10,
                                 fontWeight: FontWeight.w600,
@@ -1395,167 +1395,182 @@ class _PetProfileDetailScreenState extends State<PetProfileDetailScreen> {
                                     if (isDOBUnknown) selectedDOB = null;
                                   });
                                 },
-                              child: Text(
-                                'Date of birth is unknown / approximate',
+                                child: Text(
+                                  'Date of birth is unknown / approximate',
+                                  style: GoogleFonts.inter(
+                                      fontSize: 12.5,
+                                      color: AppColors.onSurfaceVariant),
+                                ),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 24),
+
+                          // SAVE BUTTON
+                          SizedBox(
+                            width: double.infinity,
+                            height: 52,
+                            child: ElevatedButton.icon(
+                              onPressed: isSubmitting
+                                  ? null
+                                  : () async {
+                                      final newName = nameCtrl.text.trim();
+                                      if (newName.isEmpty) {
+                                        setModalState(() => errorMessage =
+                                            'Pet name cannot be empty.');
+                                        return;
+                                      }
+
+                                      setModalState(() {
+                                        isSubmitting = true;
+                                        errorMessage = null;
+                                      });
+
+                                      try {
+                                        final parsedWeight = double.tryParse(
+                                                weightCtrl.text.trim()) ??
+                                            0.0;
+                                        final newColor =
+                                            colorCtrl.text.trim().isEmpty
+                                                ? 'N/A'
+                                                : colorCtrl.text.trim();
+                                        final newDob = isDOBUnknown ||
+                                                selectedDOB == null
+                                            ? null
+                                            : selectedDOB!.toIso8601String();
+
+                                        final nowIso =
+                                            DateTime.now().toIso8601String();
+                                        final updatePayload = <String, dynamic>{
+                                          'name': newName,
+                                          'color': newColor,
+                                          'weight': parsedWeight,
+                                          'date_of_birth': newDob,
+                                          'updated_at': nowIso,
+                                        };
+
+                                        try {
+                                          await Supabase.instance.client
+                                              .from('pets')
+                                              .update(updatePayload)
+                                              .eq('pet_id', petId);
+                                        } catch (_) {
+                                          final fallbackPayload =
+                                              Map<String, dynamic>.from(
+                                                  updatePayload)
+                                                ..remove('updated_at');
+                                          await Supabase.instance.client
+                                              .from('pets')
+                                              .update(fallbackPayload)
+                                              .eq('pet_id', petId);
+                                        }
+
+                                        // Compute audit changes diff for edited fields
+                                        final diffs = <String>[];
+                                        if ((pet['name'] ?? '')
+                                                .toString()
+                                                .trim() !=
+                                            newName.trim()) {
+                                          diffs.add(
+                                              'Name: "${pet['name']}" -> "$newName"');
+                                        }
+                                        final oldColor = (pet['color'] ?? 'N/A')
+                                            .toString()
+                                            .trim();
+                                        if (oldColor != newColor) {
+                                          diffs.add(
+                                              'Description: "$oldColor" -> "$newColor"');
+                                        }
+                                        final oldWeight = (pet['weight'] is num)
+                                            ? (pet['weight'] as num).toDouble()
+                                            : double.tryParse(
+                                                    pet['weight']?.toString() ??
+                                                        '0') ??
+                                                0.0;
+                                        if ((oldWeight - parsedWeight).abs() >
+                                            0.001) {
+                                          diffs.add(
+                                              'Weight: ${oldWeight}kg -> ${parsedWeight}kg');
+                                        }
+                                        final oldDob =
+                                            pet['date_of_birth']?.toString();
+                                        if (oldDob != newDob) {
+                                          diffs.add('DOB updated');
+                                        }
+
+                                        PetAuditService.instance
+                                            .logPetModification(
+                                          petId: petId.toString(),
+                                          petName: newName,
+                                          action: 'Profile Details Updated',
+                                          changesSummary: diffs.isEmpty
+                                              ? 'Profile details updated'
+                                              : diffs.join('; '),
+                                          modifiedByRole: 'Owner',
+                                        );
+
+                                        // Optimistically update in-memory pet state
+                                        setState(() {
+                                          _currentPet?['name'] = newName;
+                                          _currentPet?['color'] = newColor;
+                                          _currentPet?['weight'] = parsedWeight;
+                                          _currentPet?['date_of_birth'] =
+                                              newDob;
+                                          _currentPet?['updated_at'] = nowIso;
+                                        });
+
+                                        if (context.mounted) {
+                                          Navigator.pop(context);
+                                          AppToast.success(context,
+                                              '$newName profile updated successfully! ✨');
+                                          _reloadPet();
+                                        }
+                                      } catch (err) {
+                                        setModalState(() {
+                                          isSubmitting = false;
+                                          errorMessage =
+                                              'Failed to save changes: $err';
+                                        });
+                                      }
+                                    },
+                              icon: isSubmitting
+                                  ? const SizedBox(
+                                      width: 18,
+                                      height: 18,
+                                      child: CircularProgressIndicator(
+                                        strokeWidth: 2,
+                                        valueColor:
+                                            AlwaysStoppedAnimation<Color>(
+                                                Colors.white),
+                                      ),
+                                    )
+                                  : const Icon(Icons.check_rounded, size: 20),
+                              label: Text(
+                                isSubmitting
+                                    ? 'Saving Changes...'
+                                    : 'Save Profile Changes',
                                 style: GoogleFonts.inter(
-                                    fontSize: 12.5,
-                                    color: AppColors.onSurfaceVariant),
+                                    fontSize: 15, fontWeight: FontWeight.w700),
+                              ),
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: AppColors.primary,
+                                foregroundColor: Colors.white,
+                                shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(16)),
+                                elevation: 0,
                               ),
                             ),
-                          ],
-                        ),
-                        const SizedBox(height: 24),
-
-                        // SAVE BUTTON
-                        SizedBox(
-                          width: double.infinity,
-                          height: 52,
-                          child: ElevatedButton.icon(
-                            onPressed: isSubmitting
-                                ? null
-                                : () async {
-                                    final newName = nameCtrl.text.trim();
-                                    if (newName.isEmpty) {
-                                      setModalState(() => errorMessage =
-                                          'Pet name cannot be empty.');
-                                      return;
-                                    }
-
-                                    setModalState(() {
-                                      isSubmitting = true;
-                                      errorMessage = null;
-                                    });
-
-                                    try {
-                                      final parsedWeight = double.tryParse(
-                                              weightCtrl.text.trim()) ??
-                                          0.0;
-                                      final newColor =
-                                          colorCtrl.text.trim().isEmpty
-                                              ? 'N/A'
-                                              : colorCtrl.text.trim();
-                                      final newDob = isDOBUnknown ||
-                                              selectedDOB == null
-                                          ? null
-                                          : selectedDOB!.toIso8601String();
-
-                                      final updatePayload = <String, dynamic>{
-                                        'name': newName,
-                                        'color': newColor,
-                                        'weight': parsedWeight,
-                                        'date_of_birth': newDob,
-                                      };
-
-                                      await Supabase.instance.client
-                                          .from('pets')
-                                          .update(updatePayload)
-                                          .eq('pet_id', petId);
-
-                                      // Compute audit changes diff for edited fields
-                                      final diffs = <String>[];
-                                      if ((pet['name'] ?? '')
-                                              .toString()
-                                              .trim() !=
-                                          newName.trim()) {
-                                        diffs.add(
-                                            'Name: "${pet['name']}" -> "$newName"');
-                                      }
-                                      final oldColor = (pet['color'] ?? 'N/A')
-                                          .toString()
-                                          .trim();
-                                      if (oldColor != newColor) {
-                                        diffs.add(
-                                            'Description: "$oldColor" -> "$newColor"');
-                                      }
-                                      final oldWeight = (pet['weight'] is num)
-                                          ? (pet['weight'] as num).toDouble()
-                                          : double.tryParse(
-                                                  pet['weight']?.toString() ??
-                                                      '0') ??
-                                              0.0;
-                                      if ((oldWeight - parsedWeight).abs() >
-                                          0.001) {
-                                        diffs.add(
-                                            'Weight: ${oldWeight}kg -> ${parsedWeight}kg');
-                                      }
-                                      final oldDob =
-                                          pet['date_of_birth']?.toString();
-                                      if (oldDob != newDob) {
-                                        diffs.add('DOB updated');
-                                      }
-
-                                      PetAuditService.instance
-                                          .logPetModification(
-                                        petId: petId.toString(),
-                                        petName: newName,
-                                        action: 'Profile Details Updated',
-                                        changesSummary: diffs.isEmpty
-                                            ? 'Profile details updated'
-                                            : diffs.join('; '),
-                                        modifiedByRole: 'Owner',
-                                      );
-
-                                      // Optimistically update in-memory pet state
-                                      setState(() {
-                                        _currentPet?['name'] = newName;
-                                        _currentPet?['color'] = newColor;
-                                        _currentPet?['weight'] = parsedWeight;
-                                        _currentPet?['date_of_birth'] = newDob;
-                                      });
-
-                                      if (context.mounted) {
-                                        Navigator.pop(context);
-                                        AppToast.success(context,
-                                            '$newName profile updated successfully! ✨');
-                                        _reloadPet();
-                                      }
-                                    } catch (err) {
-                                      setModalState(() {
-                                        isSubmitting = false;
-                                        errorMessage =
-                                            'Failed to save changes: $err';
-                                      });
-                                    }
-                                  },
-                            icon: isSubmitting
-                                ? const SizedBox(
-                                    width: 18,
-                                    height: 18,
-                                    child: CircularProgressIndicator(
-                                      strokeWidth: 2,
-                                      valueColor:
-                                          AlwaysStoppedAnimation<Color>(
-                                              Colors.white),
-                                    ),
-                                  )
-                                : const Icon(Icons.check_rounded, size: 20),
-                            label: Text(
-                              isSubmitting
-                                  ? 'Saving Changes...'
-                                  : 'Save Profile Changes',
-                              style: GoogleFonts.inter(
-                                  fontSize: 15, fontWeight: FontWeight.w700),
-                            ),
-                            style: ElevatedButton.styleFrom(
-                              backgroundColor: AppColors.primary,
-                              foregroundColor: Colors.white,
-                              shape: RoundedRectangleBorder(
-                                  borderRadius: BorderRadius.circular(16)),
-                              elevation: 0,
-                            ),
                           ),
-                        ),
-                      ],
+                        ],
+                      ),
                     ),
                   ),
-                ),
-              ],
-            ),
-          );
-        },
-      );
-    },
-  );
+                ],
+              ),
+            );
+          },
+        );
+      },
+    );
+  }
 }
-}
-

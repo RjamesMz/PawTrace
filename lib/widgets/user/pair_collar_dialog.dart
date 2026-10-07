@@ -24,8 +24,10 @@ Future<String?> showPairCollarDialog({
       return StatefulBuilder(
         builder: (context, setDialogState) {
           return Dialog(
-            insetPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 24),
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+            insetPadding:
+                const EdgeInsets.symmetric(horizontal: 20, vertical: 24),
+            shape:
+                RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
             child: Container(
               padding: const EdgeInsets.all(22),
               decoration: BoxDecoration(
@@ -59,8 +61,8 @@ Future<String?> showPairCollarDialog({
                             children: [
                               Text(
                                 currentCollarId == null
-                                    ? 'Pair GPS Collar'
-                                    : 'Manage GPS Collar',
+                                    ? 'Pair GPS '
+                                    : 'Manage GPS ',
                                 style: GoogleFonts.montserrat(
                                   fontSize: 18,
                                   fontWeight: FontWeight.w700,
@@ -105,7 +107,7 @@ Future<String?> showPairCollarDialog({
                           const SizedBox(width: 8),
                           Expanded(
                             child: Text(
-                              'Rule: 1 collar for 1 pet only. A collar cannot be paired with another pet while active.',
+                              'Rule: 1 gps for 1 pet only. A gps cannot be paired with another pet while active.',
                               style: GoogleFonts.inter(
                                 fontSize: 12,
                                 height: 1.35,
@@ -121,7 +123,7 @@ Future<String?> showPairCollarDialog({
 
                     // Input field
                     Text(
-                      'Collar Device ID / Serial',
+                      'GPS Device ID / Serial',
                       style: GoogleFonts.inter(
                         fontSize: 12,
                         fontWeight: FontWeight.w700,
@@ -221,16 +223,16 @@ Future<String?> showPairCollarDialog({
                                             .delete()
                                             .eq('gps_id', idToClean);
                                       } catch (locErr) {
-                                        debugPrint('[CollarUnpair] Notice deleting collar locations: $locErr');
+                                        debugPrint(
+                                            '[CollarUnpair] Notice deleting collar locations: $locErr');
                                       }
 
                                       // 2. Clear gps_id and all cached location coordinates from the pet's row
                                       await Supabase.instance.client
                                           .from('pets')
                                           .update({
-                                            'gps_id': null,
-                                          })
-                                          .eq('pet_id', petId);
+                                        'gps_id': null,
+                                      }).eq('pet_id', petId);
 
                                       if (context.mounted) {
                                         Navigator.pop(context, '__unpaired__');
@@ -269,7 +271,8 @@ Future<String?> showPairCollarDialog({
                             style: OutlinedButton.styleFrom(
                               foregroundColor: AppColors.onSurfaceVariant,
                               side: BorderSide(
-                                color: AppColors.outlineVariant.withOpacity(0.7),
+                                color:
+                                    AppColors.outlineVariant.withOpacity(0.7),
                               ),
                               shape: RoundedRectangleBorder(
                                 borderRadius: BorderRadius.circular(12),
@@ -278,7 +281,8 @@ Future<String?> showPairCollarDialog({
                             ),
                             child: Text(
                               'Cancel',
-                              style: GoogleFonts.inter(fontWeight: FontWeight.w700),
+                              style: GoogleFonts.inter(
+                                  fontWeight: FontWeight.w700),
                             ),
                           ),
                         ),
@@ -293,7 +297,8 @@ Future<String?> showPairCollarDialog({
                                     final enteredId = textCtrl.text.trim();
                                     if (enteredId.isEmpty) {
                                       setDialogState(() {
-                                        errorMessage = 'Please enter a Collar ID';
+                                        errorMessage =
+                                            'Please enter a Collar ID';
                                       });
                                       return;
                                     }
@@ -311,7 +316,8 @@ Future<String?> showPairCollarDialog({
 
                                     try {
                                       // 1. Verify 1 collar = 1 pet rule
-                                      final existingPet = await Supabase.instance.client
+                                      final existingPet = await Supabase
+                                          .instance.client
                                           .from('pets')
                                           .select('pet_id, name')
                                           .eq('gps_id', enteredId)
@@ -319,7 +325,8 @@ Future<String?> showPairCollarDialog({
                                           .maybeSingle();
 
                                       if (existingPet != null) {
-                                        final otherName = existingPet['name'] ?? 'another pet';
+                                        final otherName = existingPet['name'] ??
+                                            'another pet';
                                         setDialogState(() {
                                           isSubmitting = false;
                                           errorMessage =
@@ -335,16 +342,16 @@ Future<String?> showPairCollarDialog({
                                             .delete()
                                             .eq('gps_id', enteredId);
                                       } catch (locErr) {
-                                        debugPrint('[CollarPair] Notice clearing old collar locations: $locErr');
+                                        debugPrint(
+                                            '[CollarPair] Notice clearing old collar locations: $locErr');
                                       }
 
                                       // 3. Update pet row in Supabase and reset any stale location coordinates
                                       await Supabase.instance.client
                                           .from('pets')
                                           .update({
-                                            'gps_id': enteredId,
-                                          })
-                                          .eq('pet_id', petId);
+                                        'gps_id': enteredId,
+                                      }).eq('pet_id', petId);
 
                                       if (context.mounted) {
                                         Navigator.pop(context, enteredId);
@@ -352,7 +359,8 @@ Future<String?> showPairCollarDialog({
                                     } catch (e) {
                                       setDialogState(() {
                                         isSubmitting = false;
-                                        errorMessage = 'Error saving collar: $e';
+                                        errorMessage =
+                                            'Error saving collar: $e';
                                       });
                                     }
                                   },
@@ -371,12 +379,14 @@ Future<String?> showPairCollarDialog({
                                     height: 18,
                                     child: CircularProgressIndicator(
                                       strokeWidth: 2,
-                                      valueColor:
-                                          AlwaysStoppedAnimation<Color>(Colors.white),
+                                      valueColor: AlwaysStoppedAnimation<Color>(
+                                          Colors.white),
                                     ),
                                   )
                                 : Text(
-                                    currentCollarId == null ? 'Pair Collar' : 'Update',
+                                    currentCollarId == null
+                                        ? 'Pair Collar'
+                                        : 'Update',
                                     style: GoogleFonts.montserrat(
                                       fontWeight: FontWeight.w700,
                                     ),

@@ -151,14 +151,7 @@ class _ReportLostPetScreenState extends State<ReportLostPetScreen> {
       if (petId == null) throw Exception('Pet ID is missing.');
 
       final barangay = pet['barangay']?.toString() ?? 'Santa Ana';
-      final String lastSeenAddress;
-      if (_hasCollarGps) {
-        final coordString =
-            'Lat: ${_lastLat.toStringAsFixed(5)}, Lng: ${_lastLon.toStringAsFixed(5)}';
-        lastSeenAddress = '$barangay ($coordString)';
-      } else {
-        lastSeenAddress = barangay;
-      }
+      final String lastSeenAddress = barangay;
 
       // 1. Update status and color in 'pets' table
       final petUpdateData = <String, dynamic>{
@@ -581,13 +574,21 @@ class _ReportLostPetScreenState extends State<ReportLostPetScreen> {
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  Text(
-                    'GPS: ${_lastLat.toStringAsFixed(5)}, ${_lastLon.toStringAsFixed(5)}',
-                    style: GoogleFonts.inter(
-                      fontSize: 11,
-                      fontWeight: FontWeight.w600,
-                      color: AppColors.onSurfaceVariant,
-                    ),
+                  Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      const Icon(Icons.my_location_rounded,
+                          size: 13, color: Color(0xFF2E7D32)),
+                      const SizedBox(width: 4),
+                      Text(
+                        'Location detected',
+                        style: GoogleFonts.inter(
+                          fontSize: 11,
+                          fontWeight: FontWeight.w600,
+                          color: const Color(0xFF2E7D32),
+                        ),
+                      ),
+                    ],
                   ),
                   if (_lastRecordedAt != null)
                     Text(

@@ -193,7 +193,9 @@ Future<PetLocationResult> fetchPetLocation(Map<String, dynamic> pet) async {
 
   // Fallback barangay
   final barangay = pet['barangay']?.toString() ??
-      pet['users']?['barangay']?.toString() ??
+      (pet['users'] is Map ? pet['users']['barangay']?.toString() : null) ??
+      (pet['owner_id'] is Map ? pet['owner_id']['barangay']?.toString() : null) ??
+      (pet['owner'] is Map ? pet['owner']['barangay']?.toString() : null) ??
       '';
 
   if (rawAddress == null || rawAddress.isEmpty) {
@@ -209,6 +211,10 @@ Future<PetLocationResult> fetchPetLocation(Map<String, dynamic> pet) async {
   }
 
   final bool hasCoordinates = (lat != null && lon != null);
+  if (!hasCoordinates && !isLiveCollar) {
+    sourceLabel = 'No GPS Connected';
+    sourceColor = const Color(0xFF64748B);
+  }
   // Default to San Andres / Virac Catanduanes center if no GPS available
   final double finalLat = lat ?? 13.5938;
   final double finalLon = lon ?? 124.2381;
@@ -510,96 +516,8 @@ class _PetLocationMapDialogState extends State<PetLocationMapDialog> {
 
                   const SizedBox(height: 12),
 
-                  // 3. Interactive FlutterMap Container
-                  SizedBox(
-                    height: 250,
-                    child: Stack(
-                      children: [
-                        FlutterMap(
-                          mapController: _mapController,
-                          options: MapOptions(
-                            initialCenter: targetPoint,
-                            initialZoom: 16.0,
-                          ),
-                          children: [
-                            TileLayer(
-                              urlTemplate:
-                                  'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
-                              userAgentPackageName: 'com.pettrace.app',
-                            ),
-                            MarkerLayer(
-                              markers: [
-                                Marker(
-                                  point: targetPoint,
-                                  width: 140,
-                                  height: 80,
-                                  alignment: Alignment.topCenter,
-                                  child: FittedBox(
-                                    fit: BoxFit.scaleDown,
-                                    child: Column(
-                                      mainAxisSize: MainAxisSize.min,
-                                      children: [
-                                        Container(
-                                          padding: const EdgeInsets.symmetric(
-                                              horizontal: 8, vertical: 4),
-                                          decoration: BoxDecoration(
-                                            color: Colors.white,
-                                            borderRadius:
-                                                BorderRadius.circular(8),
-                                            boxShadow: [
-                                              BoxShadow(
-                                                color: Colors.black
-                                                    .withOpacity(0.18),
-                                                blurRadius: 6,
-                                                offset: const Offset(0, 2),
-                                              )
-                                            ],
-                                          ),
-                                          child: Text(
-                                            petName,
-                                            maxLines: 1,
-                                            overflow: TextOverflow.ellipsis,
-                                            style: GoogleFonts.inter(
-                                              fontSize: 12,
-                                              fontWeight: FontWeight.w700,
-                                              color: loc.sourceColor,
-                                            ),
-                                          ),
-                                        ),
-                                        Icon(
-                                          Icons.location_on,
-                                          color: loc.sourceColor,
-                                          size: 38,
-                                        ),
-                                      ],
-                                    ),
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ],
-                        ),
-
-                        // Map control: Recenter button
-                        Positioned(
-                          right: 12,
-                          bottom: 12,
-                          child: FloatingActionButton.small(
-                            heroTag: 'recenter_pet_map',
-                            onPressed: () {
-                              _mapController.move(targetPoint, 16.0);
-                            },
-                            backgroundColor: Colors.white,
-                            foregroundColor: AppColors.primary,
-                            elevation: 3,
-                            tooltip: 'Center on pet',
-                            child: const Icon(Icons.my_location_rounded,
-                                size: 18),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
+                  // 3. Interactive FlutterMap Container (or Blank / No GPS placeholder)
+                  _buildMapArea(loc, targetPoint, petName),
 
                   // 4. Details Section (Address, Coordinates, Notes)
                   Padding(
@@ -637,15 +555,17 @@ class _PetLocationMapDialogState extends State<PetLocationMapDialog> {
                                   ),
                                   const SizedBox(height: 3),
                                   Text(
-                                    'GPS: ${loc.lat.toStringAsFixed(5)}, ${loc.lon.toStringAsFixed(5)}${!loc.hasCoordinates ? ' (Approximate barangay center)' : ''}',
+                                    loc.hasCoordinates
+                                        ? 'GPS: ${loc.lat.toStringAsFixed(5)}, ${loc.lon.toStringAsFixed(5)}'
+                                        : 'GPS: No GPS coordinates connected',
                                     style: GoogleFonts.inter(
                                       fontSize: 12,
                                       color: loc.hasCoordinates
                                           ? AppColors.onSurfaceVariant
-                                          : const Color(0xFFD97706),
+                                          : const Color(0xFF64748B),
                                       fontWeight: loc.hasCoordinates
                                           ? FontWeight.w400
-                                          : FontWeight.w600,
+                                          : FontWeight.w500,
                                     ),
                                   ),
                                 ],
@@ -711,35 +631,37 @@ class _PetLocationMapDialogState extends State<PetLocationMapDialog> {
                             child: const Text('Close'),
                           ),
                         ),
-                        const SizedBox(width: 12),
-                        Expanded(
-                          flex: 2,
-                          child: ElevatedButton.icon(
-                            onPressed: () {
-                              Navigator.pop(context);
-                              Navigator.push(
-                                context,
-                                MaterialPageRoute(
-                                  builder: (_) => AdminPetTrackingMapScreen(
-                                    pet: widget.pet,
-                                    initialLocation: loc,
+                        if (loc.hasCoordinates || loc.isLiveCollar) ...[
+                          const SizedBox(width: 12),
+                          Expanded(
+                            flex: 2,
+                            child: ElevatedButton.icon(
+                              onPressed: () {
+                                Navigator.pop(context);
+                                Navigator.push(
+                                  context,
+                                  MaterialPageRoute(
+                                    builder: (_) => AdminPetTrackingMapScreen(
+                                      pet: widget.pet,
+                                      initialLocation: loc,
+                                    ),
                                   ),
+                                );
+                              },
+                              icon: const Icon(Icons.fullscreen_rounded, size: 18),
+                              label: const Text('Fullscreen Map'),
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: AppColors.primary,
+                                foregroundColor: Colors.white,
+                                padding: const EdgeInsets.symmetric(vertical: 12),
+                                elevation: 0,
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(12),
                                 ),
-                              );
-                            },
-                            icon: const Icon(Icons.fullscreen_rounded, size: 18),
-                            label: const Text('Fullscreen Map'),
-                            style: ElevatedButton.styleFrom(
-                              backgroundColor: AppColors.primary,
-                              foregroundColor: Colors.white,
-                              padding: const EdgeInsets.symmetric(vertical: 12),
-                              elevation: 0,
-                              shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(12),
                               ),
                             ),
                           ),
-                        ),
+                        ],
                       ],
                     ),
                   ),
@@ -748,6 +670,152 @@ class _PetLocationMapDialogState extends State<PetLocationMapDialog> {
             );
           },
         ),
+      ),
+    );
+  }
+
+  Widget _buildMapArea(
+      PetLocationResult loc, ll.LatLng targetPoint, String petName) {
+    if (!loc.hasCoordinates && !loc.isLiveCollar) {
+      return Container(
+        height: 220,
+        margin: const EdgeInsets.symmetric(horizontal: 20),
+        decoration: BoxDecoration(
+          color: const Color(0xFFF8FAFC),
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(color: const Color(0xFFE2E8F0)),
+        ),
+        child: Center(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(
+                padding: const EdgeInsets.all(14),
+                decoration: const BoxDecoration(
+                  color: Color(0xFFF1F5F9),
+                  shape: BoxShape.circle,
+                ),
+                child: const Icon(
+                  Icons.gps_off_rounded,
+                  size: 32,
+                  color: Color(0xFF94A3B8),
+                ),
+              ),
+              const SizedBox(height: 12),
+              Text(
+                'No GPS Connected',
+                style: GoogleFonts.montserrat(
+                  fontSize: 16,
+                  fontWeight: FontWeight.w700,
+                  color: const Color(0xFF334155),
+                ),
+              ),
+              const SizedBox(height: 6),
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 24),
+                child: Text(
+                  'This pet does not have an active GPS collar paired and no location coordinates were recorded for this report.',
+                  textAlign: TextAlign.center,
+                  style: GoogleFonts.inter(
+                    fontSize: 12,
+                    color: const Color(0xFF64748B),
+                    height: 1.4,
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+
+    return SizedBox(
+      height: 250,
+      child: Stack(
+        children: [
+          FlutterMap(
+            mapController: _mapController,
+            options: MapOptions(
+              initialCenter: targetPoint,
+              initialZoom: 16.0,
+            ),
+            children: [
+              TileLayer(
+                urlTemplate:
+                    'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
+                userAgentPackageName: 'com.pettrace.app',
+              ),
+              MarkerLayer(
+                markers: [
+                  Marker(
+                    point: targetPoint,
+                    width: 140,
+                    height: 80,
+                    alignment: Alignment.topCenter,
+                    child: FittedBox(
+                      fit: BoxFit.scaleDown,
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 8, vertical: 4),
+                            decoration: BoxDecoration(
+                              color: Colors.white,
+                              borderRadius:
+                                  BorderRadius.circular(8),
+                              boxShadow: [
+                                BoxShadow(
+                                  color: Colors.black
+                                      .withOpacity(0.18),
+                                  blurRadius: 6,
+                                  offset: const Offset(0, 2),
+                                )
+                              ],
+                            ),
+                            child: Text(
+                              petName,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: GoogleFonts.inter(
+                                fontSize: 12,
+                                fontWeight: FontWeight.w700,
+                                color: loc.sourceColor,
+                              ),
+                            ),
+                          ),
+                          Icon(
+                            Icons.location_on,
+                            color: loc.sourceColor,
+                            size: 38,
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
+
+          // Map control: Recenter button
+          Positioned(
+            right: 12,
+            bottom: 12,
+            child: FloatingActionButton.small(
+              heroTag: 'recenter_pet_map',
+              onPressed: () {
+                _mapController.move(targetPoint, 16.0);
+              },
+              backgroundColor: Colors.white,
+              foregroundColor: AppColors.primary,
+              elevation: 3,
+              tooltip: 'Center on pet',
+              child: const Icon(Icons.my_location_rounded,
+                  size: 18),
+            ),
+          ),
+        ],
       ),
     );
   }

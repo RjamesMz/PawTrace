@@ -66,6 +66,24 @@ class PetAuditService {
   // In-memory fallback cache so logs work immediately across the app
   static final List<PetAuditLog> _localAuditCache = [];
 
+  static List<PetAuditLog> get localAuditCache =>
+      List.unmodifiable(_localAuditCache);
+
+  static PetAuditLog? getLatestModificationForPet(String? petId) {
+    if (petId == null || petId.isEmpty) return null;
+    try {
+      final cleanId = petId.trim();
+      final matches = _localAuditCache.where(
+        (l) => l.petId.trim() == cleanId && l.action != 'Pet Registered',
+      ).toList();
+      if (matches.isNotEmpty) {
+        matches.sort((a, b) => b.timestamp.compareTo(a.timestamp));
+        return matches.first;
+      }
+    } catch (_) {}
+    return null;
+  }
+
   /// Records an audit log entry when a pet profile is modified.
   Future<void> logPetModification({
     required dynamic petId,
@@ -124,6 +142,17 @@ class PetAuditService {
     } catch (e) {
       debugPrint('[PetAuditService] Notice saving to pet_audit_logs: $e');
     }
+
+    // Also update pets table's updated_at timestamp so Last Modified displays immediately
+    try {
+      final petIdInt = int.tryParse(petIdStr);
+      final query = _client.from('pets');
+      if (petIdInt != null) {
+        await query.update({'updated_at': now.toIso8601String()}).eq('pet_id', petIdInt);
+      } else {
+        await query.update({'updated_at': now.toIso8601String()}).eq('pet_id', petIdStr);
+      }
+    } catch (_) {}
   }
 
   /// Fetches modification audit logs for a specific pet.

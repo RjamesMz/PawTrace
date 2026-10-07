@@ -23,6 +23,7 @@ class _NotificationBellButtonState extends State<NotificationBellButton> {
   @override
   void initState() {
     super.initState();
+    AlertService.instance.initRealtimeSubscription();
     AlertService.instance.refreshUnreadCount();
   }
 

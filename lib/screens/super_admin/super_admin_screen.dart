@@ -145,7 +145,7 @@ class _SuperAdminScreenState extends State<SuperAdminScreen> {
     try {
       final petsData = await _supabase
           .from('pets')
-          .select('barangay, status, is_lost')
+          .select('barangay, status')
           .neq('status', 'archived')
           .neq('status', 'Archived');
       final adminsData = await _supabase
@@ -160,9 +160,7 @@ class _SuperAdminScreenState extends State<SuperAdminScreen> {
         if (b.isEmpty) continue;
         petCounts[b] = (petCounts[b] ?? 0) + 1;
         final rawStatus = (p['status'] as String?)?.toLowerCase() ?? '';
-        final isLost = p['is_lost'] == true ||
-            rawStatus == 'lost' ||
-            rawStatus == 'missing';
+        final isLost = rawStatus == 'lost' || rawStatus == 'missing';
         if (isLost) {
           lostCounts[b] = (lostCounts[b] ?? 0) + 1;
         }

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:excel/excel.dart' hide Border;
 import '../../../core/app_colors.dart';
+import '../../../services/audit/pet_audit_service.dart';
 import '../../../services/export/file_export_service.dart';
 
 /// Helper to export filtered pets to an Excel (.xlsx) file.
@@ -112,7 +113,16 @@ class PetsExportService {
         }
 
         String modifiedStr = 'None yet';
-        final rawModified = p['updated_at'] ?? p['modified_at'];
+        var rawModified = p['updated_at'] ?? p['modified_at'];
+        final pid = (p['pet_id'] ?? p['id'] ?? '').toString();
+        if (rawModified == null ||
+            rawModified.toString().trim().isEmpty ||
+            rawModified.toString() == rawDate) {
+          final localAudit = PetAuditService.getLatestModificationForPet(pid);
+          if (localAudit != null) {
+            rawModified = localAudit.timestamp.toIso8601String();
+          }
+        }
         if (rawModified != null &&
             rawModified.toString().trim().isNotEmpty &&
             rawModified.toString() != rawDate) {

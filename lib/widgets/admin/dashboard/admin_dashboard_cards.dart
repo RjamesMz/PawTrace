@@ -2,12 +2,12 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../../../core/app_colors.dart';
 
-class BarangayAdminNewsCard extends StatelessWidget {
+class AdminNewsCard extends StatelessWidget {
   final Map<String, dynamic> post;
   final VoidCallback onTap;
   final VoidCallback onArchive;
 
-  const BarangayAdminNewsCard({
+  const AdminNewsCard({
     super.key,
     required this.post,
     required this.onTap,
@@ -148,11 +148,11 @@ class BarangayAdminNewsCard extends StatelessWidget {
   }
 }
 
-class BarangayAdminActivityItem extends StatelessWidget {
+class AdminActivityItem extends StatelessWidget {
   final Map<String, dynamic> activity;
   final String timeAgo;
 
-  const BarangayAdminActivityItem({
+  const AdminActivityItem({
     super.key,
     required this.activity,
     required this.timeAgo,
@@ -196,3 +196,7 @@ class BarangayAdminActivityItem extends StatelessWidget {
     );
   }
 }
+
+// Aliases for compatibility
+typedef BarangayAdminNewsCard = AdminNewsCard;
+typedef BarangayAdminActivityItem = AdminActivityItem;

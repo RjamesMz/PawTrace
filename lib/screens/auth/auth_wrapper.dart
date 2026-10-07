@@ -10,7 +10,7 @@ import '../../core/app_constants.dart';
 import 'login_screen.dart';
 import '../../widgets/common/change_password_dialog.dart';
 import '../../widgets/user/main_app_layout.dart';
-import '../admin/barangay_admin/barangay_admin_home_screen.dart';
+import '../admin/dashboard/admin_home_screen.dart';
 import '../super_admin/super_admin_screen.dart';
 
 /// Listens to Supabase auth state and redirects to the correct screen.
@@ -109,7 +109,7 @@ class _AuthWrapperState extends State<AuthWrapper> {
               return const SuperAdminScreen();
             }
             if (role == UserRole.admin) {
-              return const BarangayAdminHomeScreen();
+              return const AdminHomeScreen();
             }
 
             // Regular user on Web platform is restricted

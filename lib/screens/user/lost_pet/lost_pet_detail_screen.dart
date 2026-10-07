@@ -21,7 +21,8 @@ class _LostPetDetailScreenState extends State<LostPetDetailScreen> {
   bool _loadingOwner = false;
   bool _markingFound = false;
 
-  String get _currentUserId => Supabase.instance.client.auth.currentUser?.id ?? '';
+  String get _currentUserId =>
+      Supabase.instance.client.auth.currentUser?.id ?? '';
 
   @override
   void initState() {
@@ -35,7 +36,8 @@ class _LostPetDetailScreenState extends State<LostPetDetailScreen> {
       setState(() => _ownerData = embedded);
       return;
     }
-    final ownerId = widget.report['owner_id']?.toString() ?? widget.report['user_id']?.toString();
+    final ownerId = widget.report['owner_id']?.toString() ??
+        widget.report['user_id']?.toString();
     if (ownerId == null || ownerId.isEmpty) return;
     setState(() => _loadingOwner = true);
     try {
@@ -68,8 +70,7 @@ class _LostPetDetailScreenState extends State<LostPetDetailScreen> {
       if (petId != null && petId.isNotEmpty) {
         await Supabase.instance.client
             .from('pets')
-            .update({'status': 'active'})
-            .eq('pet_id', petId);
+            .update({'status': 'active'}).eq('pet_id', petId);
       }
 
       if (mounted) {
@@ -104,9 +105,12 @@ class _LostPetDetailScreenState extends State<LostPetDetailScreen> {
 
   String _ownerFullName() {
     if (_ownerData == null) return 'Unknown Owner';
-    return [_ownerData!['first_name'], _ownerData!['middle_name'], _ownerData!['surname'], _ownerData!['suffix']]
-        .where((s) => s != null && s.toString().trim().isNotEmpty)
-        .join(' ');
+    return [
+      _ownerData!['first_name'],
+      _ownerData!['middle_name'],
+      _ownerData!['surname'],
+      _ownerData!['suffix']
+    ].where((s) => s != null && s.toString().trim().isNotEmpty).join(' ');
   }
 
   String _ownerInitial() {
@@ -115,7 +119,9 @@ class _LostPetDetailScreenState extends State<LostPetDetailScreen> {
   }
 
   String _cleanAddress(String raw) {
-    return raw.replaceAll(RegExp(r'\s*\(?Lat:\s*[-\d.]+,\s*Lng:\s*[-\d.]+\)?'), '').trim();
+    return raw
+        .replaceAll(RegExp(r'\s*\(?Lat:\s*[-\d.]+,\s*Lng:\s*[-\d.]+\)?'), '')
+        .trim();
   }
 
   @override
@@ -125,8 +131,12 @@ class _LostPetDetailScreenState extends State<LostPetDetailScreen> {
     final species = petData?['species'] as String? ?? '';
     final breed = petData?['breed'] as String? ?? '';
     final color = petData?['color'] as String? ?? '';
-    final imageUrl = widget.report['photo_url'] as String? ?? petData?['photo_url'] as String? ?? '';
-    final rawAddress = widget.report['last_seen_address'] as String? ?? widget.report['barangay'] as String? ?? 'Calatagan';
+    final imageUrl = widget.report['photo_url'] as String? ??
+        petData?['photo_url'] as String? ??
+        '';
+    final rawAddress = widget.report['last_seen_address'] as String? ??
+        widget.report['barangay'] as String? ??
+        'Calatagan';
     final location = _cleanAddress(rawAddress);
     final description = widget.report['description'] as String? ?? '';
     final reportedAt = widget.report['reported_at'] as String?;
@@ -134,14 +144,16 @@ class _LostPetDetailScreenState extends State<LostPetDetailScreen> {
     double? lat = (widget.report['last_seen_lat'] as num?)?.toDouble();
     double? lon = (widget.report['last_seen_lon'] as num?)?.toDouble();
     if (lat == null || lon == null) {
-      final m = RegExp(r'Lat:\s*([-\d.]+),\s*Lng:\s*([-\d.]+)').firstMatch(rawAddress);
+      final m = RegExp(r'Lat:\s*([-\d.]+),\s*Lng:\s*([-\d.]+)')
+          .firstMatch(rawAddress);
       if (m != null) {
         lat = double.tryParse(m.group(1)!);
         lon = double.tryParse(m.group(2)!);
       }
     }
     final isOwner = _currentUserId.isNotEmpty &&
-        (_currentUserId == widget.report['owner_id']?.toString() || _currentUserId == widget.report['user_id']?.toString());
+        (_currentUserId == widget.report['owner_id']?.toString() ||
+            _currentUserId == widget.report['user_id']?.toString());
     final ownerPhone = (_ownerData?['phone'] as String? ?? '').trim();
 
     return Scaffold(
@@ -165,10 +177,12 @@ class _LostPetDetailScreenState extends State<LostPetDetailScreen> {
                                 Image.network(
                                   imageUrl,
                                   fit: BoxFit.cover,
-                                  errorBuilder: (_, __, ___) => const SizedBox(),
+                                  errorBuilder: (_, __, ___) =>
+                                      const SizedBox(),
                                 ),
                                 BackdropFilter(
-                                  filter: ImageFilter.blur(sigmaX: 18, sigmaY: 18),
+                                  filter:
+                                      ImageFilter.blur(sigmaX: 18, sigmaY: 18),
                                   child: Container(
                                     color: Colors.black.withOpacity(0.35),
                                   ),
@@ -177,7 +191,8 @@ class _LostPetDetailScreenState extends State<LostPetDetailScreen> {
                                   child: Image.network(
                                     imageUrl,
                                     fit: BoxFit.contain,
-                                    errorBuilder: (_, __, ___) => _placeholder(),
+                                    errorBuilder: (_, __, ___) =>
+                                        _placeholder(),
                                   ),
                                 ),
                               ],
@@ -188,7 +203,8 @@ class _LostPetDetailScreenState extends State<LostPetDetailScreen> {
                       top: MediaQuery.of(context).padding.top + 12,
                       right: 16,
                       child: Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 12, vertical: 6),
                         decoration: BoxDecoration(
                           color: AppColors.error,
                           borderRadius: BorderRadius.circular(999),
@@ -218,7 +234,8 @@ class _LostPetDetailScreenState extends State<LostPetDetailScreen> {
                   child: Container(
                     decoration: const BoxDecoration(
                       color: Colors.white,
-                      borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+                      borderRadius:
+                          BorderRadius.vertical(top: Radius.circular(24)),
                     ),
                     padding: const EdgeInsets.fromLTRB(20, 22, 20, 32),
                     child: Column(
@@ -241,16 +258,23 @@ class _LostPetDetailScreenState extends State<LostPetDetailScreen> {
                             if (species.isNotEmpty) ...[
                               const SizedBox(width: 10),
                               Container(
-                                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 5),
+                                padding: const EdgeInsets.symmetric(
+                                    horizontal: 12, vertical: 5),
                                 decoration: BoxDecoration(
                                   color: AppColors.primary.withOpacity(0.12),
                                   borderRadius: BorderRadius.circular(999),
-                                  border: Border.all(color: AppColors.primary.withOpacity(0.25)),
+                                  border: Border.all(
+                                      color:
+                                          AppColors.primary.withOpacity(0.25)),
                                 ),
                                 child: Row(
                                   mainAxisSize: MainAxisSize.min,
                                   children: [
-                                    Text(species.toLowerCase() == 'dog' ? '🐶' : '🐱', style: const TextStyle(fontSize: 13)),
+                                    Text(
+                                        species.toLowerCase() == 'dog'
+                                            ? '🐶'
+                                            : '🐱',
+                                        style: const TextStyle(fontSize: 13)),
                                     const SizedBox(width: 4),
                                     Text(
                                       species,
@@ -268,8 +292,12 @@ class _LostPetDetailScreenState extends State<LostPetDetailScreen> {
                         ),
                         const SizedBox(height: 6),
                         Text(
-                          [if (breed.isNotEmpty) breed, if (color.isNotEmpty) color].join(' · '),
-                          style: GoogleFonts.inter(fontSize: 14, color: AppColors.onSurfaceVariant),
+                          [
+                            if (breed.isNotEmpty) breed,
+                            if (color.isNotEmpty) color
+                          ].join(' · '),
+                          style: GoogleFonts.inter(
+                              fontSize: 14, color: AppColors.onSurfaceVariant),
                         ),
                         const SizedBox(height: 18),
                         const Divider(height: 1),
@@ -279,12 +307,14 @@ class _LostPetDetailScreenState extends State<LostPetDetailScreen> {
                         Row(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            const Icon(Icons.location_on_rounded, size: 18, color: AppColors.primary),
+                            const Icon(Icons.location_on_rounded,
+                                size: 18, color: AppColors.primary),
                             const SizedBox(width: 8),
                             Expanded(
                               child: Text(
                                 location,
-                                style: GoogleFonts.inter(fontSize: 14, color: AppColors.onSurface),
+                                style: GoogleFonts.inter(
+                                    fontSize: 14, color: AppColors.onSurface),
                               ),
                             ),
                           ],
@@ -292,11 +322,17 @@ class _LostPetDetailScreenState extends State<LostPetDetailScreen> {
                         const SizedBox(height: 8),
                         Row(
                           children: [
-                            Icon(Icons.access_time_rounded, size: 16, color: AppColors.onSurfaceVariant.withOpacity(0.7)),
+                            Icon(Icons.access_time_rounded,
+                                size: 16,
+                                color: AppColors.onSurfaceVariant
+                                    .withOpacity(0.7)),
                             const SizedBox(width: 8),
                             Text(
                               _timeAgo(reportedAt),
-                              style: GoogleFonts.inter(fontSize: 13, color: AppColors.onSurfaceVariant.withOpacity(0.8)),
+                              style: GoogleFonts.inter(
+                                  fontSize: 13,
+                                  color: AppColors.onSurfaceVariant
+                                      .withOpacity(0.8)),
                             ),
                           ],
                         ),
@@ -319,7 +355,8 @@ class _LostPetDetailScreenState extends State<LostPetDetailScreen> {
                                 style: GoogleFonts.inter(
                                   fontSize: 14,
                                   fontStyle: FontStyle.italic,
-                                  color: AppColors.onSurfaceVariant.withOpacity(0.55),
+                                  color: AppColors.onSurfaceVariant
+                                      .withOpacity(0.55),
                                 ),
                               ),
                         const SizedBox(height: 18),
@@ -331,14 +368,16 @@ class _LostPetDetailScreenState extends State<LostPetDetailScreen> {
                             ? const Center(
                                 child: Padding(
                                   padding: EdgeInsets.all(12),
-                                  child: CircularProgressIndicator(strokeWidth: 2, color: AppColors.primary),
+                                  child: CircularProgressIndicator(
+                                      strokeWidth: 2, color: AppColors.primary),
                                 ),
                               )
                             : Row(
                                 children: [
                                   CircleAvatar(
                                     radius: 24,
-                                    backgroundColor: AppColors.primary.withOpacity(0.15),
+                                    backgroundColor:
+                                        AppColors.primary.withOpacity(0.15),
                                     child: Text(
                                       _ownerInitial(),
                                       style: GoogleFonts.montserrat(
@@ -351,7 +390,8 @@ class _LostPetDetailScreenState extends State<LostPetDetailScreen> {
                                   const SizedBox(width: 14),
                                   Expanded(
                                     child: Column(
-                                      crossAxisAlignment: CrossAxisAlignment.start,
+                                      crossAxisAlignment:
+                                          CrossAxisAlignment.start,
                                       children: [
                                         Text(
                                           _ownerFullName(),
@@ -364,7 +404,10 @@ class _LostPetDetailScreenState extends State<LostPetDetailScreen> {
                                         if (ownerPhone.isNotEmpty)
                                           Text(
                                             ownerPhone,
-                                            style: GoogleFonts.inter(fontSize: 13, color: AppColors.onSurfaceVariant),
+                                            style: GoogleFonts.inter(
+                                                fontSize: 13,
+                                                color:
+                                                    AppColors.onSurfaceVariant),
                                           ),
                                       ],
                                     ),
@@ -378,13 +421,17 @@ class _LostPetDetailScreenState extends State<LostPetDetailScreen> {
                               child: ElevatedButton.icon(
                                 onPressed: ownerPhone.isNotEmpty
                                     ? () async {
-                                        final uri = Uri.parse('tel:$ownerPhone');
+                                        final uri =
+                                            Uri.parse('tel:$ownerPhone');
                                         if (await canLaunchUrl(uri)) {
                                           await launchUrl(uri);
                                         } else {
-                                          Clipboard.setData(ClipboardData(text: ownerPhone));
+                                          Clipboard.setData(
+                                              ClipboardData(text: ownerPhone));
                                           if (context.mounted) {
-                                            AppToast.show(context, 'Phone copied: $ownerPhone', icon: Icons.copy_rounded);
+                                            AppToast.show(context,
+                                                'Phone copied: $ownerPhone',
+                                                icon: Icons.copy_rounded);
                                           }
                                         }
                                       }
@@ -394,14 +441,18 @@ class _LostPetDetailScreenState extends State<LostPetDetailScreen> {
                                   fit: BoxFit.scaleDown,
                                   child: Text(
                                     'Contact Owner',
-                                    style: GoogleFonts.inter(fontWeight: FontWeight.w600, fontSize: 13),
+                                    style: GoogleFonts.inter(
+                                        fontWeight: FontWeight.w600,
+                                        fontSize: 13),
                                   ),
                                 ),
                                 style: ElevatedButton.styleFrom(
                                   backgroundColor: const Color(0xFF22C55E),
                                   foregroundColor: Colors.white,
-                                  padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 8),
-                                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                                  padding: const EdgeInsets.symmetric(
+                                      vertical: 14, horizontal: 8),
+                                  shape: RoundedRectangleBorder(
+                                      borderRadius: BorderRadius.circular(14)),
                                   elevation: 0,
                                 ),
                               ),
@@ -421,20 +472,26 @@ class _LostPetDetailScreenState extends State<LostPetDetailScreen> {
                                             ),
                                           ),
                                         )
-                                    : () => AppToast.show(context, 'No GPS coordinates available.', icon: Icons.location_off_rounded),
+                                    : () => AppToast.show(context,
+                                        'No GPS coordinates available.',
+                                        icon: Icons.location_off_rounded),
                                 icon: const Icon(Icons.map_rounded, size: 16),
                                 label: FittedBox(
                                   fit: BoxFit.scaleDown,
                                   child: Text(
                                     'View on Map',
-                                    style: GoogleFonts.inter(fontWeight: FontWeight.w600, fontSize: 13),
+                                    style: GoogleFonts.inter(
+                                        fontWeight: FontWeight.w600,
+                                        fontSize: 13),
                                   ),
                                 ),
                                 style: ElevatedButton.styleFrom(
                                   backgroundColor: AppColors.primary,
                                   foregroundColor: Colors.white,
-                                  padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 8),
-                                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                                  padding: const EdgeInsets.symmetric(
+                                      vertical: 14, horizontal: 8),
+                                  shape: RoundedRectangleBorder(
+                                      borderRadius: BorderRadius.circular(14)),
                                   elevation: 0,
                                 ),
                               ),
@@ -451,29 +508,31 @@ class _LostPetDetailScreenState extends State<LostPetDetailScreen> {
                                   ? const SizedBox(
                                       width: 16,
                                       height: 16,
-                                      child: CircularProgressIndicator(strokeWidth: 2, color: AppColors.error),
+                                      child: CircularProgressIndicator(
+                                          strokeWidth: 2,
+                                          color: AppColors.error),
                                     )
-                                  : const Icon(Icons.check_circle_outline_rounded, size: 18),
+                                  : const Icon(
+                                      Icons.check_circle_outline_rounded,
+                                      size: 18),
                               label: Text(
                                 _markingFound ? 'Updating…' : 'Mark as Found',
-                                style: GoogleFonts.inter(fontWeight: FontWeight.w600, fontSize: 13),
+                                style: GoogleFonts.inter(
+                                    fontWeight: FontWeight.w600, fontSize: 13),
                               ),
                               style: OutlinedButton.styleFrom(
                                 foregroundColor: AppColors.error,
-                                side: BorderSide(color: AppColors.error.withOpacity(0.6)),
-                                padding: const EdgeInsets.symmetric(vertical: 14),
-                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                                side: BorderSide(
+                                    color: AppColors.error.withOpacity(0.6)),
+                                padding:
+                                    const EdgeInsets.symmetric(vertical: 14),
+                                shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(14)),
                               ),
                             ),
                           ),
                         ],
                         const SizedBox(height: 24),
-                        Center(
-                          child: Text(
-                            'Report ID: $reportId',
-                            style: GoogleFonts.inter(fontSize: 11, color: AppColors.onSurfaceVariant.withOpacity(0.4)),
-                          ),
-                        ),
                       ],
                     ),
                   ),
@@ -499,7 +558,8 @@ class _LostPetDetailScreenState extends State<LostPetDetailScreen> {
                     ),
                   ],
                 ),
-                child: const Icon(Icons.arrow_back_rounded, color: AppColors.onSurface, size: 22),
+                child: const Icon(Icons.arrow_back_rounded,
+                    color: AppColors.onSurface, size: 22),
               ),
             ),
           ),

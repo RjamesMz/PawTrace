@@ -16,8 +16,8 @@ class AdminReportImageBanner extends StatelessWidget {
     super.key,
     required this.imageUrl,
     required this.petCondition,
-    required this.status,
-    required this.isArchived,
+    this.status = '',
+    this.isArchived = false,
     required this.isFound,
     this.onClose,
     this.isSideBySide = false,
@@ -204,29 +204,6 @@ class AdminReportImageBanner extends StatelessWidget {
                         ),
                       ),
                     ],
-                  ),
-                ),
-                const SizedBox(width: 8),
-
-                // Report Status Pill
-                Container(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-                  decoration: BoxDecoration(
-                    color: Colors.black.withOpacity(0.6),
-                    borderRadius: BorderRadius.circular(8),
-                    border: Border.all(color: Colors.white.withOpacity(0.2)),
-                  ),
-                  child: Text(
-                    status.toUpperCase(),
-                    style: GoogleFonts.inter(
-                      fontSize: 11,
-                      fontWeight: FontWeight.w700,
-                      color: isArchived
-                          ? const Color(0xFFCBD5E1)
-                          : const Color(0xFF60A5FA),
-                      letterSpacing: 0.5,
-                    ),
                   ),
                 ),
               ],

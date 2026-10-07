@@ -45,6 +45,7 @@ class _AdminPetTrackingMapScreenState extends State<AdminPetTrackingMapScreen> {
   int? _battery;
   bool _isLoading = true;
   bool _isPanelCollapsed = false;
+  Map<String, dynamic>? _fetchedUser;
 
   /// Returns true only if the collar ping was received within the last 180 seconds (3 minutes).
   bool get _isLiveGpsActive {
@@ -81,6 +82,7 @@ class _AdminPetTrackingMapScreenState extends State<AdminPetTrackingMapScreen> {
       _battery = widget.initialLocation!.battery;
     }
 
+    _loadOwnerInfo();
     _loadInitialLocation();
 
     if (_collarId != null && _collarId!.isNotEmpty) {
@@ -148,6 +150,66 @@ class _AdminPetTrackingMapScreenState extends State<AdminPetTrackingMapScreen> {
         _isLoading = false;
       });
       _mapController.move(ll.LatLng(_lat!, _lon!), 15.0);
+    }
+  }
+
+  Future<void> _loadOwnerInfo() async {
+    // 1. Check if user is already embedded in widget.pet
+    if (widget.pet['users'] is Map<String, dynamic>) {
+      _fetchedUser = widget.pet['users'] as Map<String, dynamic>;
+      if (mounted) setState(() {});
+      return;
+    }
+    if (widget.pet['owner_id'] is Map<String, dynamic>) {
+      _fetchedUser = widget.pet['owner_id'] as Map<String, dynamic>;
+      if (mounted) setState(() {});
+      return;
+    }
+    if (widget.pet['owner'] is Map<String, dynamic>) {
+      _fetchedUser = widget.pet['owner'] as Map<String, dynamic>;
+      if (mounted) setState(() {});
+      return;
+    }
+
+    // 2. Fetch by owner_id / user_id UUID string
+    final rawOwnerId = widget.pet['owner_id'] ??
+        widget.pet['user_id'] ??
+        (widget.pet['users'] is String ? widget.pet['users'] : null);
+    if (rawOwnerId is String && rawOwnerId.trim().isNotEmpty) {
+      try {
+        final res = await _supabase
+            .from('users')
+            .select()
+            .eq('user_id', rawOwnerId.trim())
+            .maybeSingle();
+        if (res != null && mounted) {
+          setState(() {
+            _fetchedUser = Map<String, dynamic>.from(res);
+          });
+          return;
+        }
+      } catch (e) {
+        debugPrint('[AdminTracking] Error fetching user by owner_id: $e');
+      }
+    }
+
+    // 3. Fallback: Query pet with joined users table
+    final petId = widget.pet['pet_id'] ?? widget.pet['id'];
+    if (petId != null) {
+      try {
+        final petRecord = await _supabase
+            .from('pets')
+            .select('*, users(*)')
+            .eq('pet_id', petId)
+            .maybeSingle();
+        if (petRecord != null && petRecord['users'] is Map && mounted) {
+          setState(() {
+            _fetchedUser = Map<String, dynamic>.from(petRecord['users']);
+          });
+        }
+      } catch (e) {
+        debugPrint('[AdminTracking] Error fetching pet with users: $e');
+      }
     }
   }
 
@@ -235,14 +297,30 @@ class _AdminPetTrackingMapScreenState extends State<AdminPetTrackingMapScreen> {
     final petStatus =
         (widget.pet['status']?.toString() ?? 'active').toLowerCase();
 
-    final u = widget.pet['users'];
+    final u = _fetchedUser ??
+        (widget.pet['users'] is Map<String, dynamic>
+            ? widget.pet['users'] as Map<String, dynamic>
+            : null) ??
+        (widget.pet['owner_id'] is Map<String, dynamic>
+            ? widget.pet['owner_id'] as Map<String, dynamic>
+            : null) ??
+        (widget.pet['owner'] is Map<String, dynamic>
+            ? widget.pet['owner'] as Map<String, dynamic>
+            : null);
+
     final ownerName = u != null
         ? [u['first_name'], u['middle_name'], u['surname'], u['suffix']]
             .where((s) => s != null && s.toString().trim().isNotEmpty)
             .join(' ')
-        : 'Unknown Owner';
-    final ownerPhone = u?['phone']?.toString() ?? '';
-    final ownerEmail = u?['email']?.toString() ?? '';
+        : (widget.pet['owner_name']?.toString() ?? 'Unknown Owner');
+    final ownerPhone = u?['phone']?.toString() ??
+        widget.pet['phone']?.toString() ??
+        widget.pet['owner_phone']?.toString() ??
+        '';
+    final ownerEmail = u?['email']?.toString() ??
+        widget.pet['email']?.toString() ??
+        widget.pet['owner_email']?.toString() ??
+        '';
     final barangay = widget.pet['barangay']?.toString() ??
         u?['barangay']?.toString() ??
         'Catanduanes';

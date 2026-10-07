@@ -10,28 +10,26 @@ import '../../../services/auth/auth_service.dart';
 import '../../../widgets/admin/admin_content_wrapper.dart';
 import '../../../widgets/admin/admin_layout.dart';
 import '../../../widgets/common/notification_bell_button.dart';
-import '../../../widgets/admin/stat_card.dart';
 import '../news/admin_news_detail_screen.dart';
-import '../pets/admin_pets_screen.dart';
-import '../reports/admin_reports_screen.dart';
-import '../user_management/user_management_screen.dart';
 import '../../../widgets/admin/web/admin_web_layout.dart';
-import '../../../widgets/admin/barangay_admin/barangay_admin_cards.dart';
-import '../../../widgets/admin/barangay_admin/barangay_admin_desktop_view.dart';
+import '../../../widgets/admin/dashboard/admin_dashboard_cards.dart';
+import '../../../widgets/admin/dashboard/admin_desktop_view.dart';
+import '../../../widgets/admin/dashboard/admin_dashboard_analytics_view.dart';
 
-/// Barangay Admin Home Screen — main dashboard visible when the admin taps Home.
+/// Admin Home Screen — main dashboard visible when the admin taps Home.
 ///
-/// Shows greeting, 4 stat cards, pending verification reports, AI match preview,
+/// Shows greeting, KPI cards, analytics trends, demographics, pending verification reports,
 /// and recent activity. All data scoped by the admin's assigned barangay.
-class BarangayAdminHomeScreen extends StatefulWidget {
-  const BarangayAdminHomeScreen({super.key});
+class AdminHomeScreen extends StatefulWidget {
+  const AdminHomeScreen({super.key});
 
   @override
-  State<BarangayAdminHomeScreen> createState() =>
-      _BarangayAdminHomeScreenState();
+  State<AdminHomeScreen> createState() => _AdminHomeScreenState();
 }
 
-class _BarangayAdminHomeScreenState extends State<BarangayAdminHomeScreen> {
+typedef BarangayAdminHomeScreen = AdminHomeScreen;
+
+class _AdminHomeScreenState extends State<AdminHomeScreen> {
   final _supabase = Supabase.instance.client;
 
   String _adminBarangay = '';
@@ -318,7 +316,13 @@ class _BarangayAdminHomeScreenState extends State<BarangayAdminHomeScreen> {
                             children: [
                               _buildGreeting(),
                               const SizedBox(height: 18),
-                              _buildStatCards(constraints.maxWidth),
+                              Padding(
+                                padding:
+                                    const EdgeInsets.symmetric(horizontal: 16),
+                                child: AdminDashboardAnalyticsView(
+                                  adminBarangay: _adminBarangay,
+                                ),
+                              ),
                               const SizedBox(height: 24),
                               _buildRecentActivity(),
                               const SizedBox(height: 20),
@@ -439,8 +443,8 @@ class _BarangayAdminHomeScreenState extends State<BarangayAdminHomeScreen> {
                 const SizedBox(height: 4),
                 Text(
                   _adminBarangay.isNotEmpty
-                      ? 'Brgy. $_adminBarangay • Barangay Admin'
-                      : 'Barangay Admin Dashboard',
+                      ? 'Brgy. $_adminBarangay • Admin Operations'
+                      : 'Admin Dashboard',
                   style: GoogleFonts.inter(
                     fontSize: 13,
                     color: Colors.white.withOpacity(0.9),
@@ -464,53 +468,7 @@ class _BarangayAdminHomeScreenState extends State<BarangayAdminHomeScreen> {
     );
   }
 
-  // ─── Stat Cards ──────────────────────────────────────────────────────────────
 
-  Widget _buildStatCards(double availableWidth) {
-    final isWide = availableWidth >= 900;
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 20),
-      child: StatCardGrid(
-        crossAxisCount: isWide ? 3 : 2,
-        childAspectRatio: isWide ? 1.4 : 1.3,
-        children: [
-          StatCard(
-            label: 'Registered Pets',
-            count: _registeredPets,
-            icon: Icons.pets,
-            color: AppColors.primary,
-            isLoading: _isLoading,
-            onTap: () => Navigator.push(
-              context,
-              MaterialPageRoute(builder: (_) => const AdminPetsScreen()),
-            ),
-          ),
-          StatCard(
-            label: 'Lost Reports',
-            count: _lostReports,
-            icon: Icons.flag_rounded,
-            color: AppColors.error,
-            isLoading: _isLoading,
-            onTap: () => Navigator.push(
-              context,
-              MaterialPageRoute(builder: (_) => const AdminReportsScreen()),
-            ),
-          ),
-          StatCard(
-            label: 'Total Users',
-            count: _registeredUsers,
-            icon: Icons.people_alt_rounded,
-            color: const Color(0xFF2563EB),
-            isLoading: _isLoading,
-            onTap: () => Navigator.push(
-              context,
-              MaterialPageRoute(builder: (_) => const UserManagementScreen()),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
 
   // ─── News Announcements Section ─────────────────────────────────────────────
 

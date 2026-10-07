@@ -228,6 +228,12 @@ class _NotificationsSheetState extends State<NotificationsSheet> {
                     ),
                   ),
                 IconButton(
+                  icon: const Icon(Icons.refresh, size: 20),
+                  tooltip: 'Refresh',
+                  color: AppColors.onSurfaceVariant,
+                  onPressed: _loadAlerts,
+                ),
+                IconButton(
                   icon: const Icon(Icons.close, size: 20),
                   color: AppColors.onSurfaceVariant,
                   onPressed: () => Navigator.pop(context),
@@ -575,6 +581,25 @@ class _NotificationsSheetState extends State<NotificationsSheet> {
                 fontSize: 13,
                 color: AppColors.onSurfaceVariant,
                 height: 1.4,
+              ),
+            ),
+            const SizedBox(height: 20),
+            OutlinedButton.icon(
+              onPressed: () async {
+                final ok = await AlertService.instance
+                    .sendTestNotificationToCurrentUser();
+                if (ok && mounted) {
+                  _loadAlerts();
+                }
+              },
+              icon: const Icon(Icons.notification_add_outlined, size: 16),
+              label: const Text('Send Test Alert'),
+              style: OutlinedButton.styleFrom(
+                foregroundColor: AppColors.primary,
+                side: const BorderSide(color: AppColors.primary),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(10),
+                ),
               ),
             ),
           ],
