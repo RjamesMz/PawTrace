@@ -674,13 +674,6 @@ class UserActionHandler {
                 final frontUrl = idData['id_front_url'] as String?;
                 final backUrl = idData['id_back_url'] as String?;
                 final uploadedAtRaw = idData['id_uploaded_at'] as String?;
-                final idType = idData['id_type']?.toString() ?? 'Not recorded';
-                final validationStatus =
-                    idData['validation_status']?.toString() ?? 'Not recorded';
-                final matchScore = idData['name_match_score'] is num
-                    ? '${(idData['name_match_score'] as num).toStringAsFixed(0)}%'
-                    : 'Not recorded';
-                final ocrText = idData['ocr_extracted_text']?.toString() ?? '';
                 final hasIds = idData['has_ids'] == true;
 
                 String formattedDate = 'Not recorded';
@@ -886,54 +879,12 @@ class UserActionHandler {
                                       'Upload Date', formattedDate),
                                   _idMetaItem(
                                       Icons.shield_outlined, 'Role', role),
-                                  _idMetaItem(
-                                      Icons.badge_outlined, 'ID Type', idType),
-                                  _idMetaItem(Icons.fact_check_outlined,
-                                      'Validation', validationStatus),
-                                  _idMetaItem(Icons.percent_rounded,
-                                      'Name Match', matchScore),
                                 ],
                               ),
                             ],
                           ),
                         ),
                       ),
-
-                      if (ocrText.isNotEmpty)
-                        Padding(
-                          padding: const EdgeInsets.fromLTRB(24, 0, 24, 20),
-                          child: Container(
-                            padding: const EdgeInsets.all(14),
-                            decoration: BoxDecoration(
-                              color: const Color(0xFFF8FAFC),
-                              borderRadius: BorderRadius.circular(14),
-                              border:
-                                  Border.all(color: const Color(0xFFE2E8F0)),
-                            ),
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text(
-                                  'OCR Extracted Text',
-                                  style: GoogleFonts.montserrat(
-                                    fontSize: 13,
-                                    fontWeight: FontWeight.w700,
-                                    color: const Color(0xFF1E293B),
-                                  ),
-                                ),
-                                const SizedBox(height: 6),
-                                SelectableText(
-                                  ocrText,
-                                  style: GoogleFonts.inter(
-                                    fontSize: 12,
-                                    height: 1.45,
-                                    color: const Color(0xFF475569),
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                        ),
 
                       // ID Images Preview
                       Padding(

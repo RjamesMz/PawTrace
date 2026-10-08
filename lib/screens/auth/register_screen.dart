@@ -9,6 +9,7 @@ import '../../core/app_routes.dart';
 import '../../core/app_toast.dart';
 import '../../services/auth/auth_service.dart';
 import '../../services/auth/id_validation_service.dart';
+import '../../services/auth/id_upload_edge_service.dart';
 import '../../services/auth/user_id_service.dart';
 
 /// Standalone Register / Sign-up screen for PawTrace.
@@ -55,6 +56,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
   String? _selectedIdType;
   bool _idUploadError = false;
   IdValidationResult? _idValidationResult;
+  User? _registrationUser;
 
   // ── Form key ───────────────────────────────────────────────────────────────
   final _formKey = GlobalKey<FormState>();
@@ -142,41 +144,44 @@ class _RegisterScreenState extends State<RegisterScreen> {
         return;
       }
 
-      // 1. Upload ID images
-      final frontUrl = await UserIdService.uploadIdImage(
-        email: email,
-        side: 'front',
-        bytes: _idFrontBytes!,
-        ext: _idFrontExt,
-      );
-      final backUrl = await UserIdService.uploadIdImage(
-        email: email,
-        side: 'back',
-        bytes: _idBackBytes!,
-        ext: _idBackExt,
-      );
+      // Create the authenticated account before touching private Storage.
+      final registrationUser = _registrationUser ??
+          await AuthService.instance.register(
+            firstName: firstName,
+            middleName: middleName.isEmpty ? null : middleName,
+            surname: surname,
+            suffix: _selectedSuffix,
+            email: email,
+            password: password,
+            phone: phone,
+            barangay: _selectedBarangay,
+          );
+      _registrationUser = registrationUser;
 
-      // 2. Register user with ID document metadata
-      await AuthService.instance.register(
-        firstName: firstName,
-        middleName: middleName.isEmpty ? null : middleName,
-        surname: surname,
-        suffix: _selectedSuffix,
-        email: email,
-        password: password,
-        phone: phone,
-        barangay: _selectedBarangay,
-        idFrontUrl: frontUrl,
-        idBackUrl: backUrl,
-        idType: _selectedIdType,
-        ocrExtractedText: validation.ocrExtractedText,
-        nameMatchScore: validation.nameMatchScore,
-        imageQuality:
-            'front:${validation.frontQuality};back:${validation.backQuality}',
-        validationStatus: validation.validationStatus,
-      );
+      // Upload ID images via Edge Function (bypasses RLS — no session required).
+      try {
+        await IdUploadEdgeService.uploadViaEdgeFunction(
+          userId: registrationUser.id,
+          frontBytes: _idFrontBytes!,
+          frontExt: _idFrontExt,
+          backBytes: _idBackBytes!,
+          backExt: _idBackExt,
+          idType: _selectedIdType,
+          ocrExtractedText: validation.ocrExtractedText,
+          nameMatchScore: validation.nameMatchScore,
+          imageQuality:
+              'front:${validation.frontQuality};back:${validation.backQuality}',
+        );
+      } catch (e) {
+        throw StateError(
+          'Your account was created, but the ID submission was not completed. '
+          'Please retry the ID upload. Details: $e',
+        );
+      }
+
       // Ensure the user signs out so they must verify their email before accessing
       await AuthService.instance.signOut();
+      _registrationUser = null;
       if (!mounted) return;
 
       // Show confirmation popup with spam folder warning

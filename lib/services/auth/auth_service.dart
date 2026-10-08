@@ -1,7 +1,6 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter/painting.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
-import 'user_id_service.dart';
 
 /// Roles a PawTrace user can hold.
 /// There are exactly two roles: [user] and [admin].
@@ -83,7 +82,7 @@ class AuthService {
   ///
   /// Also inserts a row into the `users` table with the supplied profile data.
   /// Throws [AuthException] on failure.
-  Future<void> register({
+  Future<User> register({
     required String firstName,
     required String surname,
     required String email,
@@ -93,17 +92,7 @@ class AuthService {
     String? suffix,
     String? address,
     String? barangay,
-    String? idFrontUrl,
-    String? idBackUrl,
-    String? idUploadedAt,
-    String? idType,
-    String? ocrExtractedText,
-    double? nameMatchScore,
-    String? imageQuality,
-    String? validationStatus,
   }) async {
-    final uploadedAt = idUploadedAt ?? DateTime.now().toIso8601String();
-
     // We send everything as user metadata. The database trigger will
     // read these fields and automatically insert them into public.users.
     final res = await _client.auth.signUp(
@@ -120,34 +109,19 @@ class AuthService {
         'barangay': barangay,
         'role': 'user',
         'status': 'unverified',
-        if (idFrontUrl != null) 'id_front_url': idFrontUrl,
-        if (idBackUrl != null) 'id_back_url': idBackUrl,
-        'id_uploaded_at': uploadedAt,
-        if (idType != null) 'id_type': idType,
-        if (ocrExtractedText != null) 'ocr_extracted_text': ocrExtractedText,
-        if (nameMatchScore != null) 'name_match_score': nameMatchScore,
-        if (imageQuality != null) 'image_quality': imageQuality,
-        if (validationStatus != null) 'validation_status': validationStatus,
       },
     );
 
-    final uid = res.user?.id;
-    if (idFrontUrl != null && idBackUrl != null) {
-      await UserIdService.saveUserIds(
-        userId: uid,
-        email: email,
-        frontUrl: idFrontUrl,
-        backUrl: idBackUrl,
-        uploadedAt: uploadedAt,
-        idType: idType,
-        ocrExtractedText: ocrExtractedText,
-        nameMatchScore: nameMatchScore,
-        imageQuality: imageQuality,
-        validationStatus: validationStatus,
-      );
+    final user = res.user;
+    if (user == null) {
+      throw StateError('Supabase did not return a user after signup.');
     }
+    // Note: currentSession may be null here when Supabase requires email
+    // confirmation before issuing a session. This is expected behavior —
+    // the user object is still valid and ID upload can proceed normally.
 
     _cachedRole = UserRole.user;
+    return user;
   }
 
   // ─── Sign Out ──────────────────────────────────────────────────────────────

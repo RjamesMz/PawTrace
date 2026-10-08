@@ -1,5 +1,3 @@
-import 'dart:convert';
-import 'dart:math';
 import 'package:flutter/foundation.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
@@ -10,59 +8,42 @@ class UserIdService {
   // In-memory cache for fast lookup and fallback across active session
   static final Map<String, Map<String, dynamic>> _memoryCache = {};
 
-  /// Uploads an ID image bytes to Supabase storage and returns the URL.
-  static Future<String?> uploadIdImage({
-    required String email,
+  /// Uploads one immutable ID side under the authenticated user's UID.
+  static Future<String> uploadIdImage({
+    required String userId,
     required String side, // 'front' or 'back'
     required Uint8List bytes,
     String ext = 'jpg',
   }) async {
-    final timestamp = DateTime.now().millisecondsSinceEpoch;
-    final random = Random().nextInt(999999).toString().padLeft(6, '0');
-    final sanitizedEmail = email.replaceAll(RegExp(r'[^a-zA-Z0-9]'), '_');
-    final storagePath =
-        'valid_ids/${sanitizedEmail}_${side}_${timestamp}_$random.$ext';
+    final storagePath = 'id-verification/$userId/$side';
+    const bucket = 'valid-ids';
+    await _supabase.storage.from(bucket).uploadBinary(
+          storagePath,
+          bytes,
+          fileOptions: FileOptions(
+            upsert: false,
+            contentType:
+                ext.toLowerCase() == 'png' ? 'image/png' : 'image/jpeg',
+          ),
+        );
 
-    const candidateBuckets = [
-      'valid-ids',
-      'id-documents',
-      'user-photos',
-      'avatars',
-      'pet-photos',
-    ];
+    debugPrint('Successfully uploaded ID $side for user $userId');
+    return 'storage://$bucket/$storagePath';
+  }
 
-    for (final bucket in candidateBuckets) {
-      try {
-        await _supabase.storage.from(bucket).uploadBinary(
-              storagePath,
-              bytes,
-              fileOptions: FileOptions(
-                upsert: true,
-                contentType:
-                    ext.toLowerCase() == 'png' ? 'image/png' : 'image/jpeg',
-              ),
-            );
-
-        final url = _supabase.storage.from(bucket).getPublicUrl(storagePath);
-        if (url.isNotEmpty) {
-          debugPrint(
-              'Successfully uploaded ID $side to bucket: $bucket ($url)');
-          return url;
-        }
-      } catch (e) {
-        debugPrint('Failed upload to bucket $bucket: $e');
-      }
-    }
-
-    // Fallback: convert to base64 data URI if storage bucket is unreachable
-    final base64Str = base64Encode(bytes);
-    final mime = ext.toLowerCase() == 'png' ? 'image/png' : 'image/jpeg';
-    return 'data:$mime;base64,$base64Str';
+  /// Removes an incomplete upload before an id_validations row exists.
+  static Future<void> deleteUploadedId(String reference) async {
+    if (!reference.startsWith('storage://')) return;
+    final separator = reference.indexOf('/', 'storage://'.length);
+    if (separator == -1) return;
+    final bucket = reference.substring('storage://'.length, separator);
+    final path = reference.substring(separator + 1);
+    await _supabase.storage.from(bucket).remove([path]);
   }
 
   /// Associates the uploaded ID URLs with the user in local cache and Supabase
   static Future<void> saveUserIds({
-    required String? userId,
+    required String userId,
     required String email,
     required String frontUrl,
     required String backUrl,
@@ -71,7 +52,6 @@ class UserIdService {
     String? ocrExtractedText,
     double? nameMatchScore,
     String? imageQuality,
-    String? validationStatus,
   }) async {
     final ts = uploadedAt ?? DateTime.now().toIso8601String();
     final record = {
@@ -84,31 +64,43 @@ class UserIdService {
       if (ocrExtractedText != null) 'ocr_extracted_text': ocrExtractedText,
       if (nameMatchScore != null) 'name_match_score': nameMatchScore,
       if (imageQuality != null) 'image_quality': imageQuality,
-      if (validationStatus != null) 'validation_status': validationStatus,
     };
 
-    // Save to in-memory session cache
-    if (userId != null && userId.isNotEmpty) {
-      _memoryCache[userId] = record;
-    }
-    _memoryCache[email.trim().toLowerCase()] = record;
-
-    // Try to update public.users table directly if column exists
-    if (userId != null && userId.isNotEmpty) {
+    // Persist ID data separately from the user's profile record.
+    if (userId.isNotEmpty) {
       try {
-        await _supabase.from('users').update({
+        await _supabase.from('id_validations').insert({
+          'user_id': userId,
+          'id_type': idType,
           'id_front_url': frontUrl,
           'id_back_url': backUrl,
-          'id_uploaded_at': ts,
-          'id_type': idType,
           'ocr_extracted_text': ocrExtractedText,
           'name_match_score': nameMatchScore,
           'image_quality': imageQuality,
-          'validation_status': validationStatus,
-        }).eq('user_id', userId);
+        });
       } catch (e) {
-        debugPrint('Note: public.users column update error: $e');
+        debugPrint('ID validation insert error: $e');
+        try {
+          final existing = await _supabase
+              .from('id_validations')
+              .select('id_front_url, id_back_url')
+              .eq('user_id', userId)
+              .maybeSingle();
+          if (existing?['id_front_url'] == frontUrl &&
+              existing?['id_back_url'] == backUrl) {
+            debugPrint('ID validation already persisted; continuing safely.');
+          } else {
+            rethrow;
+          }
+        } catch (_) {
+          rethrow;
+        }
       }
+    }
+
+    // Cache only after the database insert succeeds.
+    if (userId.isNotEmpty) {
+      _memoryCache[userId] = record;
     }
   }
 
@@ -125,7 +117,31 @@ class UserIdService {
     String? ocrExtractedText = user['ocr_extracted_text']?.toString();
     dynamic nameMatchScore = user['name_match_score'];
     String? imageQuality = user['image_quality']?.toString();
-    String? validationStatus = user['validation_status']?.toString();
+
+    // ID validation is stored separately from the user profile. Prefer the
+    // latest submission so resubmissions remain supported.
+    if (uid.isNotEmpty) {
+      try {
+        final validation = await _supabase
+            .from('id_validations')
+            .select()
+            .eq('user_id', uid)
+            .order('created_at', ascending: false)
+            .limit(1)
+            .maybeSingle();
+        if (validation != null) {
+          frontUrl = validation['id_front_url']?.toString();
+          backUrl = validation['id_back_url']?.toString();
+          uploadedAt = validation['created_at']?.toString();
+          idType = validation['id_type']?.toString();
+          ocrExtractedText = validation['ocr_extracted_text']?.toString();
+          nameMatchScore = validation['name_match_score'];
+          imageQuality = validation['image_quality']?.toString();
+        }
+      } catch (e) {
+        debugPrint('ID validation lookup error: $e');
+      }
+    }
 
     // Check user_metadata if available
     if (user['raw_user_meta_data'] is Map) {
@@ -137,7 +153,6 @@ class UserIdService {
       ocrExtractedText ??= meta['ocr_extracted_text']?.toString();
       nameMatchScore ??= meta['name_match_score'];
       imageQuality ??= meta['image_quality']?.toString();
-      validationStatus ??= meta['validation_status']?.toString();
     }
 
     // Check in-memory cache
@@ -161,11 +176,13 @@ class UserIdService {
         ocrExtractedText ??= cached['ocr_extracted_text']?.toString();
         nameMatchScore ??= cached['name_match_score'];
         imageQuality ??= cached['image_quality']?.toString();
-        validationStatus ??= cached['validation_status']?.toString();
       }
     }
 
     uploadedAt ??= user['created_at']?.toString();
+
+    frontUrl = await _resolveForAdmin(frontUrl);
+    backUrl = await _resolveForAdmin(backUrl);
 
     return {
       'id_front_url': frontUrl,
@@ -176,9 +193,27 @@ class UserIdService {
       'name_match_score':
           nameMatchScore is num ? nameMatchScore.toDouble() : null,
       'image_quality': imageQuality,
-      'validation_status': validationStatus,
       'has_ids': (frontUrl != null && frontUrl.isNotEmpty) ||
           (backUrl != null && backUrl.isNotEmpty),
     };
+  }
+
+  /// Converts private Storage references to short-lived URLs for authorized viewers.
+  static Future<String?> _resolveForAdmin(String? reference) async {
+    if (reference == null || !reference.startsWith('storage://')) {
+      return reference;
+    }
+
+    final separator = reference.indexOf('/', 'storage://'.length);
+    if (separator == -1) return null;
+
+    final bucket = reference.substring('storage://'.length, separator);
+    final path = reference.substring(separator + 1);
+    try {
+      return await _supabase.storage.from(bucket).createSignedUrl(path, 3600);
+    } catch (e) {
+      debugPrint('Failed to create signed ID URL: $e');
+      return null;
+    }
   }
 }

@@ -130,7 +130,8 @@ class _LegalScreenState extends State<LegalScreen>
         _buildSectionCard(
           number: '2',
           title: 'Information We Collect',
-          content: 'We collect information necessary to provide pet registration and recovery services:',
+          content:
+              'We collect information necessary to provide pet registration and recovery services:',
           bulletPoints: const [
             'Account Information: Name, email address, phone number, and barangay residence.',
             'Pet Profiles: Pet name, species, breed, color markings, weight, date of birth, and photos.',
@@ -218,7 +219,8 @@ class _LegalScreenState extends State<LegalScreen>
         _buildSectionCard(
           number: '2',
           title: 'User Accounts & Registration',
-          content: 'To use ${AppConstants.appName} features, you must maintain an active and verified account:',
+          content:
+              'To use ${AppConstants.appName} features, you must maintain an active and verified account:',
           bulletPoints: const [
             'You must provide accurate, current, and complete registration information.',
             'You are responsible for maintaining the confidentiality of your account credentials.',
@@ -260,7 +262,8 @@ class _LegalScreenState extends State<LegalScreen>
         _buildSectionCard(
           number: '6',
           title: 'Prohibited Conduct',
-          content: 'You agree not to engage in any of the following activities:',
+          content:
+              'You agree not to engage in any of the following activities:',
           bulletPoints: const [
             'Using the platform to stalk, harass, or track individuals without consent.',
             'Reverse engineering, decompiling, or disrupting the GPS telemetry ingestion API.',
@@ -305,8 +308,8 @@ class _LegalScreenState extends State<LegalScreen>
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Text(
                 title,
@@ -316,8 +319,10 @@ class _LegalScreenState extends State<LegalScreen>
                   color: AppColors.onSurface,
                 ),
               ),
+              const SizedBox(height: 8),
               Container(
-                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
                 decoration: BoxDecoration(
                   color: AppColors.secondaryContainer.withOpacity(0.4),
                   borderRadius: BorderRadius.circular(999),
