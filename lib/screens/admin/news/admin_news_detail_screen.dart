@@ -39,7 +39,7 @@ class AdminNewsDetailScreen extends StatelessWidget {
     final title = news['title'] as String? ?? 'Announcement';
     final summary = news['summary'] as String? ?? '';
     final category = news['category'] as String? ?? 'General Update';
-    final source = news['source'] as String? ?? 'PawTrace Updates';
+    final source = news['source'] as String? ?? 'PetTrace Updates';
     final imageUrl = news['image_url'] as String? ?? '';
     final dateFormatted = _formatDate(news['created_at']);
     final themeColor = _parseHexColor(news['accent_color']);

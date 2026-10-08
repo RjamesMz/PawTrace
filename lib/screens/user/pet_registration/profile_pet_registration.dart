@@ -5,6 +5,7 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../../core/app_colors.dart';
+import '../../../core/app_constants.dart';
 import '../../../core/app_routes.dart';
 import '../../../core/app_toast.dart';
 import '../../../services/ai/pet_embedding_service.dart';
@@ -39,6 +40,11 @@ class _ProfilePetRegistrationScreenState
   String _selectedBarangay = 'Calatagan';
   DateTime? _selectedDOB;
   bool _isDOBUnknown = false;
+
+  // AI Species Detection State
+  String? _detectedSpecies;
+  double? _detectedConfidence;
+  bool _isDetecting = false;
 
   // Multi-angle biometric photos
   File? _faceImage;
@@ -113,6 +119,8 @@ class _ProfilePetRegistrationScreenState
         switch (slot) {
           case PetPhotoSlot.face:
             _faceImage = imgFile;
+            _detectedSpecies = null;
+            _detectedConfidence = null;
             break;
           case PetPhotoSlot.leftBody:
             _leftBodyImage = imgFile;
@@ -128,16 +136,39 @@ class _ProfilePetRegistrationScreenState
 
       // Auto-detect species if the face photo was chosen
       if (slot == PetPhotoSlot.face) {
+        setState(() => _isDetecting = true);
         try {
           final detected =
               await PetEmbeddingService.instance.detectSpecies(imgFile);
-          if (detected['isDog'] == true && mounted) {
-            setState(() => _selectedSpecies = 'Dog');
-          } else if (detected['isCat'] == true && mounted) {
-            setState(() => _selectedSpecies = 'Cat');
+          if (mounted) {
+            final conf = (detected['confidence'] as num?)?.toDouble() ?? 0.0;
+            if (detected['isDog'] == true) {
+              setState(() {
+                _detectedSpecies = 'Dog';
+                _detectedConfidence = conf;
+                _selectedSpecies = 'Dog';
+                _selectedBreed = 'Aspin';
+                _otherBreedCtrl.clear();
+              });
+            } else if (detected['isCat'] == true) {
+              setState(() {
+                _detectedSpecies = 'Cat';
+                _detectedConfidence = conf;
+                _selectedSpecies = 'Cat';
+                _selectedBreed = 'Puspin';
+                _otherBreedCtrl.clear();
+              });
+            } else {
+              setState(() {
+                _detectedSpecies = (detected['label'] as String?) ?? 'Not a Pet';
+                _detectedConfidence = conf;
+              });
+            }
           }
         } catch (e) {
           debugPrint('[PetTrace] Auto-detect on photo pick: $e');
+        } finally {
+          if (mounted) setState(() => _isDetecting = false);
         }
       }
     }
@@ -148,6 +179,8 @@ class _ProfilePetRegistrationScreenState
       switch (slot) {
         case PetPhotoSlot.face:
           _faceImage = null;
+          _detectedSpecies = null;
+          _detectedConfidence = null;
           break;
         case PetPhotoSlot.leftBody:
           _leftBodyImage = null;
@@ -244,6 +277,77 @@ class _ProfilePetRegistrationScreenState
     }
   }
 
+  /// Handles manual species dropdown changes and blocks mismatch if photo is already verified.
+  Future<void> _handleSpeciesChange(String newSpecies) async {
+    // If a face photo is already uploaded and detected as the other species, prompt user
+    if (_faceImage != null &&
+        _detectedSpecies != null &&
+        (_detectedSpecies == 'Dog' || _detectedSpecies == 'Cat') &&
+        _detectedSpecies != newSpecies) {
+      final confText = _detectedConfidence != null && _detectedConfidence! > 0
+          ? ' (${(_detectedConfidence! * 100).toStringAsFixed(0)}% confidence)'
+          : '';
+      final confirmed = await showDialog<bool>(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+          title: Row(
+            children: [
+              const Icon(Icons.warning_amber_rounded, color: AppColors.error, size: 24),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  'Species Mismatch',
+                  style: GoogleFonts.montserrat(
+                    fontWeight: FontWeight.bold,
+                    fontSize: 16,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          content: Text(
+            'The uploaded front photo was identified by AI as a $_detectedSpecies$confText.\n\n'
+            'To register a $newSpecies, the current face photo must be replaced or removed.',
+            style: GoogleFonts.inter(fontSize: 14),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx, false),
+              child: Text('Keep $_detectedSpecies'),
+            ),
+            ElevatedButton(
+              style: ElevatedButton.styleFrom(
+                backgroundColor: AppColors.error,
+                foregroundColor: Colors.white,
+              ),
+              onPressed: () => Navigator.pop(ctx, true),
+              child: Text('Remove Photo & Switch to $newSpecies'),
+            ),
+          ],
+        ),
+      );
+
+      if (confirmed == true && mounted) {
+        setState(() {
+          _faceImage = null;
+          _detectedSpecies = null;
+          _detectedConfidence = null;
+          _selectedSpecies = newSpecies;
+          _selectedBreed = (newSpecies == 'Cat') ? 'Puspin' : 'Aspin';
+          _otherBreedCtrl.clear();
+        });
+      }
+      return;
+    }
+
+    setState(() {
+      _selectedSpecies = newSpecies;
+      _selectedBreed = (newSpecies == 'Cat') ? 'Puspin' : 'Aspin';
+      _otherBreedCtrl.clear();
+    });
+  }
+
   Future<void> _savePet() async {
     // Validate required fields
     final petName = _nameCtrl.text.trim();
@@ -306,6 +410,19 @@ class _ProfilePetRegistrationScreenState
       return;
     }
 
+    final selectedSpecies = _selectedSpecies!;
+
+    // Validate that selected breed strictly belongs to the chosen species
+    final validBreeds = selectedSpecies.toLowerCase() == 'cat'
+        ? AppConstants.catBreeds
+        : AppConstants.dogBreeds;
+    if (!validBreeds.contains(_selectedBreed)) {
+      _showError(
+        'Invalid breed: "$_selectedBreed" is not a valid $selectedSpecies breed. Please select a valid breed.',
+      );
+      return;
+    }
+
     setState(() => _isSaving = true);
 
     try {
@@ -316,16 +433,24 @@ class _ProfilePetRegistrationScreenState
         return;
       }
 
-      final selectedSpecies = _selectedSpecies!;
-      final isDog = detected['isDog'] == true;
-      final isCat = detected['isCat'] == true;
+      final detectedLabel = (detected['label'] ?? detected['species'] ?? '').toString();
+      final isDog = detected['isDog'] == true || detectedLabel.toLowerCase() == 'dog';
+      final isCat = detected['isCat'] == true || detectedLabel.toLowerCase() == 'cat';
 
-      final mismatch = (selectedSpecies.toLowerCase() == 'dog' && !isDog) ||
-          (selectedSpecies.toLowerCase() == 'cat' && !isCat);
+      final bool mismatch;
+      if (selectedSpecies.toLowerCase() == 'dog') {
+        mismatch = !isDog || isCat;
+      } else if (selectedSpecies.toLowerCase() == 'cat') {
+        mismatch = !isCat || isDog;
+      } else {
+        mismatch = true;
+      }
 
       if (mismatch) {
+        final detectedName = isCat ? 'Cat' : (isDog ? 'Dog' : detectedLabel);
         _showError(
-          'Species mismatch: You selected "$selectedSpecies" but AI detected "${detected['label']}". Please select the matching species or upload another photo.',
+          'Species mismatch: You selected "$selectedSpecies", but AI detected "$detectedName". '
+          'Please select "$detectedName" or upload a photo matching "$selectedSpecies".',
         );
         return;
       }
@@ -571,6 +696,79 @@ class _ProfilePetRegistrationScreenState
             onPickImage: _pickImage,
             onRemoveImage: _removePhoto,
           ),
+          if (_isDetecting) ...[
+            const SizedBox(height: 12),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+              decoration: BoxDecoration(
+                color: AppColors.primaryContainer.withOpacity(0.15),
+                borderRadius: BorderRadius.circular(10),
+              ),
+              child: Row(
+                children: [
+                  const SizedBox(
+                    width: 16,
+                    height: 16,
+                    child: CircularProgressIndicator(strokeWidth: 2),
+                  ),
+                  const SizedBox(width: 10),
+                  Text(
+                    'AI Analyzing photo species...',
+                    style: GoogleFonts.inter(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w500,
+                      color: AppColors.primary,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ] else if (_faceImage != null && _detectedSpecies != null) ...[
+            const SizedBox(height: 12),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+              decoration: BoxDecoration(
+                color: (_detectedSpecies == _selectedSpecies)
+                    ? AppColors.primaryContainer.withOpacity(0.15)
+                    : AppColors.errorContainer.withOpacity(0.2),
+                borderRadius: BorderRadius.circular(10),
+                border: Border.all(
+                  color: (_detectedSpecies == _selectedSpecies)
+                      ? AppColors.primary
+                      : AppColors.error,
+                  width: 1,
+                ),
+              ),
+              child: Row(
+                children: [
+                  Icon(
+                    (_detectedSpecies == _selectedSpecies)
+                        ? Icons.verified
+                        : Icons.warning_amber_rounded,
+                    size: 18,
+                    color: (_detectedSpecies == _selectedSpecies)
+                        ? AppColors.primary
+                        : AppColors.error,
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      (_detectedSpecies == _selectedSpecies)
+                          ? 'AI Verified: $_detectedSpecies detected (${(_detectedConfidence != null ? "${(_detectedConfidence! * 100).toStringAsFixed(0)}%" : "high")} confidence)'
+                          : 'Species Mismatch: AI detected a $_detectedSpecies, but form is set to $_selectedSpecies',
+                      style: GoogleFonts.inter(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w600,
+                        color: (_detectedSpecies == _selectedSpecies)
+                            ? AppColors.primary
+                            : AppColors.error,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
           const SizedBox(height: 20),
 
           // Name + species
@@ -587,12 +785,7 @@ class _ProfilePetRegistrationScreenState
               child: PetSpeciesDropdown(
                 selectedSpecies: _selectedSpecies,
                 onChanged: (v) {
-                  if (v == null) return;
-                  setState(() {
-                    _selectedSpecies = v;
-                    _selectedBreed = (v == 'Cat') ? 'Puspin' : 'Aspin';
-                    _otherBreedCtrl.clear();
-                  });
+                  if (v != null) _handleSpeciesChange(v);
                 },
               ),
             ),

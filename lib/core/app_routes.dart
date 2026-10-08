@@ -25,4 +25,7 @@ class AppRoutes {
   static const String verified = '/verified';
   static const String confirm = '/confirm';
   static const String authCallback = '/auth/callback';
+  static const String legal = '/legal';
+  static const String privacyPolicy = '/privacy-policy';
+  static const String termsOfService = '/terms-of-service';
 }

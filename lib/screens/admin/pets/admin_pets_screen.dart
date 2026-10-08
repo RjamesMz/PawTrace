@@ -51,14 +51,14 @@ class _AdminPetsScreenState extends State<AdminPetsScreen> {
   List<String> get _currentChipLabels {
     if (_tableSegmentIndex == 2) {
       return [
-        'All (${allPets.length})',
+        'All ($_totalCount)',
         'Active ($_activeCount)',
         'Lost ($_lostCount)',
         'Archived ($_archivedCount)'
       ];
     } else if (_tableSegmentIndex == 0) {
       return [
-        'All Active & Lost (${_activeCount + _lostCount})',
+        'All (${_activeCount + _lostCount})',
         'Active ($_activeCount)',
         'Lost ($_lostCount)'
       ];
@@ -126,7 +126,9 @@ class _AdminPetsScreenState extends State<AdminPetsScreen> {
         for (final row in auditLogsRes) {
           final pid = (row['pet_id'] ?? '').toString();
           final ts = (row['created_at'] ?? '').toString();
-          if (pid.isNotEmpty && ts.isNotEmpty && !latestAuditByPet.containsKey(pid)) {
+          if (pid.isNotEmpty &&
+              ts.isNotEmpty &&
+              !latestAuditByPet.containsKey(pid)) {
             latestAuditByPet[pid] = ts;
           }
         }
@@ -142,7 +144,8 @@ class _AdminPetsScreenState extends State<AdminPetsScreen> {
             if (latestAuditByPet.containsKey(pid)) {
               p['updated_at'] = latestAuditByPet[pid];
             } else {
-              final localLatest = PetAuditService.getLatestModificationForPet(pid);
+              final localLatest =
+                  PetAuditService.getLatestModificationForPet(pid);
               if (localLatest != null) {
                 p['updated_at'] = localLatest.timestamp.toIso8601String();
               }
@@ -155,7 +158,8 @@ class _AdminPetsScreenState extends State<AdminPetsScreen> {
           final pid = (p['pet_id'] ?? p['id'] ?? '').toString();
           final curUpdated = p['updated_at'] ?? p['modified_at'];
           if (curUpdated == null || curUpdated.toString().trim().isEmpty) {
-            final localLatest = PetAuditService.getLatestModificationForPet(pid);
+            final localLatest =
+                PetAuditService.getLatestModificationForPet(pid);
             if (localLatest != null) {
               p['updated_at'] = localLatest.timestamp.toIso8601String();
             }
@@ -499,17 +503,16 @@ class _AdminPetsScreenState extends State<AdminPetsScreen> {
     });
   }
 
-  Future<void> _exportToExcel() async {
-    await PetsExportService.exportPetsToExcel(context, filteredPets);
+  List<Map<String, dynamic>> get _currentExportPets {
+    if (_tableSegmentIndex == 0) return filteredActivePets;
+    if (_tableSegmentIndex == 1) return filteredArchivedPets;
+    return filteredPets;
   }
 
-  Future<void> _exportActiveToExcel() async {
-    await PetsExportService.exportPetsToExcel(context, filteredActivePets);
+  Future<void> _exportCurrentToExcel() async {
+    await PetsExportService.exportPetsToExcel(context, _currentExportPets);
   }
 
-  Future<void> _exportArchivedToExcel() async {
-    await PetsExportService.exportPetsToExcel(context, filteredArchivedPets);
-  }
 
   @override
   Widget build(BuildContext context) {
@@ -558,16 +561,6 @@ class _AdminPetsScreenState extends State<AdminPetsScreen> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        // Summary pills Row + Barangay Chip
-        Row(
-          children: [
-            _buildSummaryRow(),
-            const Spacer(),
-            _buildBarangayChip(),
-          ],
-        ),
-        const SizedBox(height: 16),
-
         // Search bar + optional Barangay dropdown for Super Admin
         Row(
           children: [
@@ -616,60 +609,81 @@ class _AdminPetsScreenState extends State<AdminPetsScreen> {
             ],
           ],
         ),
-        // Table View Segmented Switcher
-        Container(
-          padding: const EdgeInsets.all(4),
-          decoration: BoxDecoration(
-            color: const Color(0xFFF1F5F9),
-            borderRadius: BorderRadius.circular(12),
-            border: Border.all(color: const Color(0xFFE2E8F0)),
-          ),
-          child: SingleChildScrollView(
-            scrollDirection: Axis.horizontal,
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                _buildSegmentTab(
-                  index: 0,
-                  icon: Icons.pets_rounded,
-                  label: 'Active',
-                  count: filteredActivePets.length,
-                  activeColor: AppColors.primary,
+        const SizedBox(height: 16),
+
+        // Table View Segmented Switcher + Barangay Chip
+        Row(
+          children: [
+            Container(
+              padding: const EdgeInsets.all(4),
+              decoration: BoxDecoration(
+                color: const Color(0xFFF1F5F9),
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: const Color(0xFFE2E8F0)),
+              ),
+              child: SingleChildScrollView(
+                scrollDirection: Axis.horizontal,
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    _buildSegmentTab(
+                      index: 0,
+                      icon: Icons.pets_rounded,
+                      label: 'Registered',
+                      count: filteredActivePets.length,
+                      activeColor: AppColors.primary,
+                    ),
+                    const SizedBox(width: 6),
+                    _buildSegmentTab(
+                      index: 1,
+                      icon: Icons.archive_outlined,
+                      label: 'Archived Pets',
+                      count: filteredArchivedPets.length,
+                      activeColor: const Color(0xFF64748B),
+                    ),
+                  ],
                 ),
-                const SizedBox(width: 6),
-                _buildSegmentTab(
-                  index: 1,
-                  icon: Icons.archive_outlined,
-                  label: 'Archived Pets',
-                  count: filteredArchivedPets.length,
-                  activeColor: const Color(0xFF64748B),
-                ),
-                const SizedBox(width: 6),
-                _buildSegmentTab(
-                  index: 2,
-                  icon: Icons.table_rows_rounded,
-                  label: 'View Both',
-                  count:
-                      filteredActivePets.length + filteredArchivedPets.length,
-                  activeColor: const Color(0xFF0F172A),
-                ),
-              ],
+              ),
             ),
-          ),
+            const Spacer(),
+            _buildBarangayChip(),
+          ],
         ),
         const SizedBox(height: 18),
 
-        if (_tableSegmentIndex == 0) ...[
-          _buildFilterChips(),
-          const SizedBox(height: 16),
-          _buildActivePetsTableCard(),
-        ] else if (_tableSegmentIndex == 1) ...[
-          _buildArchivedPetsTableCard(),
-        ] else ...[
-          _buildFilterChips(),
-          const SizedBox(height: 16),
+        // Filter chips + Export button row (matching Report Management)
+        Row(
+          children: [
+            Expanded(child: _buildFilterChips()),
+            const SizedBox(width: 12),
+            ElevatedButton.icon(
+              onPressed:
+                  _currentExportPets.isEmpty ? null : _exportCurrentToExcel,
+              icon: const Icon(Icons.table_chart_outlined, size: 18),
+              label: Text('Export to Excel',
+                  style: GoogleFonts.inter(
+                      fontSize: 13, fontWeight: FontWeight.w600)),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: const Color(0xFF1D6F42),
+                foregroundColor: Colors.white,
+                disabledBackgroundColor: Colors.grey.shade300,
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(10)),
+                elevation: 0,
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 16),
+
+        if (_tableSegmentIndex == 0)
+          _buildActivePetsTableCard()
+        else if (_tableSegmentIndex == 1)
+          _buildArchivedPetsTableCard()
+        else
           _buildUnifiedAllPetsTableCard(),
-        ],
       ],
     );
   }
@@ -800,25 +814,6 @@ class _AdminPetsScreenState extends State<AdminPetsScreen> {
                 ],
               ),
               const Spacer(),
-              ElevatedButton.icon(
-                onPressed:
-                    filteredActivePets.isEmpty ? null : _exportActiveToExcel,
-                icon: const Icon(Icons.table_chart_outlined, size: 16),
-                label: Text('Export to Excel',
-                    style: GoogleFonts.inter(
-                        fontSize: 13, fontWeight: FontWeight.w600)),
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: const Color(0xFF1D6F42),
-                  foregroundColor: Colors.white,
-                  disabledBackgroundColor: Colors.grey.shade300,
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-                  shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(10)),
-                  elevation: 0,
-                ),
-              ),
-              const SizedBox(width: 8),
               IconButton(
                 icon: const Icon(Icons.refresh),
                 tooltip: 'Refresh',
@@ -988,24 +983,6 @@ class _AdminPetsScreenState extends State<AdminPetsScreen> {
                 ],
               ),
               const Spacer(),
-              ElevatedButton.icon(
-                onPressed: filteredPets.isEmpty ? null : _exportToExcel,
-                icon: const Icon(Icons.table_chart_outlined, size: 16),
-                label: Text('Export All to Excel',
-                    style: GoogleFonts.inter(
-                        fontSize: 13, fontWeight: FontWeight.w600)),
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: const Color(0xFF0F172A),
-                  foregroundColor: Colors.white,
-                  disabledBackgroundColor: Colors.grey.shade300,
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-                  shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(10)),
-                  elevation: 0,
-                ),
-              ),
-              const SizedBox(width: 8),
               IconButton(
                 icon: const Icon(Icons.refresh),
                 tooltip: 'Refresh',
@@ -1180,26 +1157,6 @@ class _AdminPetsScreenState extends State<AdminPetsScreen> {
                 ],
               ),
               const Spacer(),
-              ElevatedButton.icon(
-                onPressed: filteredArchivedPets.isEmpty
-                    ? null
-                    : _exportArchivedToExcel,
-                icon: const Icon(Icons.table_chart_outlined, size: 16),
-                label: Text('Export Archived to Excel',
-                    style: GoogleFonts.inter(
-                        fontSize: 13, fontWeight: FontWeight.w600)),
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: const Color(0xFF475569),
-                  foregroundColor: Colors.white,
-                  disabledBackgroundColor: Colors.grey.shade300,
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-                  shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(10)),
-                  elevation: 0,
-                ),
-              ),
-              const SizedBox(width: 8),
               IconButton(
                 icon: const Icon(Icons.refresh),
                 tooltip: 'Refresh',
@@ -1340,11 +1297,9 @@ class _AdminPetsScreenState extends State<AdminPetsScreen> {
           physics: const AlwaysScrollableScrollPhysics(),
           padding: const EdgeInsets.fromLTRB(20, 16, 20, 20),
           children: [
-            _buildBarangayChip(),
-            const SizedBox(height: 12),
-            _buildSummaryRow(),
-            const SizedBox(height: 14),
             _buildSearchBar(),
+            const SizedBox(height: 12),
+            _buildBarangayChip(),
             const SizedBox(height: 14),
             Container(
               padding: const EdgeInsets.all(4),
@@ -1392,7 +1347,9 @@ class _AdminPetsScreenState extends State<AdminPetsScreen> {
                 Expanded(child: _buildFilterChips()),
                 const SizedBox(width: 8),
                 IconButton.filled(
-                  onPressed: filteredPets.isEmpty ? null : _exportToExcel,
+                  onPressed: _currentExportPets.isEmpty
+                      ? null
+                      : _exportCurrentToExcel,
                   icon: const Icon(Icons.table_chart_outlined, size: 18),
                   tooltip: 'Export to Excel',
                   style: IconButton.styleFrom(
@@ -1438,11 +1395,9 @@ class _AdminPetsScreenState extends State<AdminPetsScreen> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    _buildBarangayChip(),
-                    const SizedBox(height: 12),
-                    _buildSummaryRow(),
-                    const SizedBox(height: 14),
                     _buildSearchBar(),
+                    const SizedBox(height: 12),
+                    _buildBarangayChip(),
                     const SizedBox(height: 14),
                     Container(
                       padding: const EdgeInsets.all(4),
@@ -1490,8 +1445,9 @@ class _AdminPetsScreenState extends State<AdminPetsScreen> {
                         Expanded(child: _buildFilterChips()),
                         const SizedBox(width: 12),
                         ElevatedButton.icon(
-                          onPressed:
-                              filteredPets.isEmpty ? null : _exportToExcel,
+                          onPressed: _currentExportPets.isEmpty
+                              ? null
+                              : _exportCurrentToExcel,
                           icon:
                               const Icon(Icons.table_chart_outlined, size: 18),
                           label: Text('Export to Excel',
@@ -1625,97 +1581,6 @@ class _AdminPetsScreenState extends State<AdminPetsScreen> {
           ),
         ),
       ],
-    );
-  }
-
-  Widget _buildSummaryRow() {
-    return SingleChildScrollView(
-      scrollDirection: Axis.horizontal,
-      child: Row(
-        children: [
-          _clickableSummaryPill(
-            text: 'Total: $_totalCount',
-            color: AppColors.primary,
-            isActive: _tableSegmentIndex == 2,
-            onTap: () {
-              setState(() {
-                _tableSegmentIndex = 2; // Both
-                _selectedChipIndex = 0;
-                _applyFilters();
-              });
-            },
-          ),
-          const SizedBox(width: 8),
-          _clickableSummaryPill(
-            text: 'Active: $_activeCount',
-            color: const Color(0xFF22C55E),
-            isActive: _tableSegmentIndex == 0 && _selectedChipIndex == 1,
-            onTap: () {
-              setState(() {
-                _tableSegmentIndex = 0; // Active table
-                _selectedChipIndex = 1; // Active only
-                _applyFilters();
-              });
-            },
-          ),
-          const SizedBox(width: 8),
-          _clickableSummaryPill(
-            text: 'Lost: $_lostCount',
-            color: AppColors.error,
-            isActive: _tableSegmentIndex == 0 && _selectedChipIndex == 2,
-            onTap: () {
-              setState(() {
-                _tableSegmentIndex = 0; // Active table
-                _selectedChipIndex = 2; // Lost only
-                _applyFilters();
-              });
-            },
-          ),
-          const SizedBox(width: 8),
-          _clickableSummaryPill(
-            text: 'Archived: $_archivedCount',
-            color: const Color(0xFF64748B),
-            isActive: _tableSegmentIndex == 1,
-            onTap: () {
-              setState(() {
-                _tableSegmentIndex = 1; // Archived table
-                _applyFilters();
-              });
-            },
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _clickableSummaryPill({
-    required String text,
-    required Color color,
-    required VoidCallback onTap,
-    bool isActive = false,
-  }) {
-    return InkWell(
-      onTap: onTap,
-      borderRadius: BorderRadius.circular(999),
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-        decoration: BoxDecoration(
-          color: isActive ? color.withOpacity(0.20) : color.withOpacity(0.10),
-          borderRadius: BorderRadius.circular(999),
-          border: Border.all(
-            color: isActive ? color : color.withOpacity(0.3),
-            width: isActive ? 1.8 : 1.0,
-          ),
-        ),
-        child: Text(
-          text,
-          style: GoogleFonts.inter(
-            fontSize: 12,
-            fontWeight: FontWeight.w700,
-            color: color,
-          ),
-        ),
-      ),
     );
   }
 

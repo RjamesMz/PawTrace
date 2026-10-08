@@ -238,13 +238,6 @@ class _AdminHomeScreenState extends State<AdminHomeScreen> {
     }
   }
 
-  String _greeting() {
-    final hour = DateTime.now().hour;
-    if (hour < 12) return 'Good morning';
-    if (hour < 17) return 'Good afternoon';
-    return 'Good evening';
-  }
-
   @override
   Widget build(BuildContext context) {
     if (ResponsiveBreakpoints.of(context).isDesktop) {
@@ -314,8 +307,6 @@ class _AdminHomeScreenState extends State<AdminHomeScreen> {
                           return Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
-                              _buildGreeting(),
-                              const SizedBox(height: 18),
                               Padding(
                                 padding:
                                     const EdgeInsets.symmetric(horizontal: 16),
@@ -377,8 +368,7 @@ class _AdminHomeScreenState extends State<AdminHomeScreen> {
           const SizedBox(width: 8),
           // Admin avatar
           InkWell(
-            onTap: () =>
-                Navigator.pushNamed(context, AppRoutes.adminSettings),
+            onTap: () => Navigator.pushNamed(context, AppRoutes.adminSettings),
             borderRadius: BorderRadius.circular(20),
             child: CircleAvatar(
               radius: 17,
@@ -388,9 +378,7 @@ class _AdminHomeScreenState extends State<AdminHomeScreen> {
                   : null,
               child: (_photoUrl == null || _photoUrl!.isEmpty)
                   ? Text(
-                      _adminName.isNotEmpty
-                          ? _adminName[0].toUpperCase()
-                          : 'A',
+                      _adminName.isNotEmpty ? _adminName[0].toUpperCase() : 'A',
                       style: GoogleFonts.montserrat(
                         fontSize: 14,
                         fontWeight: FontWeight.w700,
@@ -404,70 +392,6 @@ class _AdminHomeScreenState extends State<AdminHomeScreen> {
       ),
     );
   }
-
-  // ─── Greeting / Welcome Banner ───────────────────────────────────────────────
-
-  Widget _buildGreeting() {
-    return Container(
-      margin: const EdgeInsets.fromLTRB(16, 16, 16, 0),
-      padding: const EdgeInsets.all(20),
-      decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(20),
-        gradient: const LinearGradient(
-          colors: [Color(0xFFFF6600), Color(0xFFFF8C00)],
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-        ),
-        boxShadow: [
-          BoxShadow(
-            color: const Color(0xFFFF6600).withOpacity(0.3),
-            blurRadius: 16,
-            offset: const Offset(0, 6),
-          ),
-        ],
-      ),
-      child: Row(
-        children: [
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  '${_greeting()}, $_adminName',
-                  style: GoogleFonts.montserrat(
-                    fontSize: 18,
-                    fontWeight: FontWeight.bold,
-                    color: Colors.white,
-                  ),
-                ),
-                const SizedBox(height: 4),
-                Text(
-                  _adminBarangay.isNotEmpty
-                      ? 'Brgy. $_adminBarangay • Admin Operations'
-                      : 'Admin Dashboard',
-                  style: GoogleFonts.inter(
-                    fontSize: 13,
-                    color: Colors.white.withOpacity(0.9),
-                  ),
-                ),
-              ],
-            ),
-          ),
-          Container(
-            width: 52,
-            height: 52,
-            decoration: BoxDecoration(
-              color: Colors.white.withOpacity(0.2),
-              shape: BoxShape.circle,
-            ),
-            child: const Icon(Icons.pets_rounded,
-                color: Colors.white, size: 28),
-          ),
-        ],
-      ),
-    );
-  }
-
 
 
   // ─── News Announcements Section ─────────────────────────────────────────────
@@ -708,8 +632,8 @@ class _AdminHomeScreenState extends State<AdminHomeScreen> {
               padding: const EdgeInsets.fromLTRB(20, 0, 20, 8),
               child: BarangayAdminActivityItem(
                 activity: _recentActivity[i],
-                timeAgo: _formatTimeAgo(
-                    _recentActivity[i]['timestamp']?.toString()),
+                timeAgo:
+                    _formatTimeAgo(_recentActivity[i]['timestamp']?.toString()),
               ),
             ),
           ),

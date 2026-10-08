@@ -262,46 +262,23 @@ class _LoginScreenState extends State<LoginScreen> {
     final isWide = screenWidth >= 800;
 
     return Scaffold(
-      backgroundColor: AppColors.background,
+      backgroundColor: const Color(0xFFF1F5F9),
       body: Stack(
         children: [
           SafeArea(
             child: Center(
-              child: SingleChildScrollView(
-                padding: EdgeInsets.symmetric(
-                  horizontal: isWide ? 24 : 20,
-                  vertical: isWide ? 40 : 20,
-                ),
-                child: isWide
-                    ? ConstrainedBox(
-                        constraints: const BoxConstraints(maxWidth: 440),
-                        child: Container(
-                          padding: const EdgeInsets.symmetric(
-                              horizontal: 32, vertical: 36),
-                          decoration: BoxDecoration(
-                            color: Colors.white,
-                            borderRadius: BorderRadius.circular(24),
-                            border: Border.all(
-                              color: AppColors.outlineVariant.withOpacity(0.3),
-                            ),
-                            boxShadow: [
-                              BoxShadow(
-                                color: Colors.black.withOpacity(0.06),
-                                blurRadius: 24,
-                                offset: const Offset(0, 8),
-                              ),
-                            ],
-                          ),
-                          child: _buildFormContent(),
-                        ),
-                      )
-                    : _buildFormContent(),
-              ),
+              child: isWide
+                  ? _buildWebLayout()
+                  : SingleChildScrollView(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 20, vertical: 20),
+                      child: _buildFormContent(),
+                    ),
             ),
           ),
 
-          // Full-screen loading overlay
-          if (_isLoading)
+          // Loading overlay — mobile only (web uses inline indicator on card)
+          if (_isLoading && !isWide)
             Container(
               color: Colors.black.withOpacity(0.25),
               child: const Center(
@@ -312,6 +289,435 @@ class _LoginScreenState extends State<LoginScreen> {
               ),
             ),
         ],
+      ),
+    );
+  }
+
+  // ─── Web Split-Card Layout ─────────────────────────────────────────────────
+
+  Widget _buildWebLayout() {
+    return Center(
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 860, maxHeight: 560),
+        child: Stack(
+          clipBehavior: Clip.none,
+          children: [
+            Container(
+              margin: const EdgeInsets.all(24),
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(28),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withOpacity(0.10),
+                    blurRadius: 40,
+                    offset: const Offset(0, 16),
+                  ),
+                  BoxShadow(
+                    color: AppColors.primary.withOpacity(0.06),
+                    blurRadius: 60,
+                    offset: const Offset(0, 0),
+                  ),
+                ],
+              ),
+              child: Row(
+                children: [
+                  // ── Left decorative panel ─────────────────────────────
+                  Expanded(
+                    flex: 5,
+                    child: _buildWebLeftPanel(),
+                  ),
+                  // ── Right form panel ──────────────────────────────────
+                  Expanded(
+                    flex: 6,
+                    child: SingleChildScrollView(
+                      padding: const EdgeInsets.fromLTRB(40, 36, 40, 36),
+                      child: _buildWebFormPanel(),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            // Slim loading bar at the top of the card
+            if (_isLoading)
+              Positioned(
+                top: 24,
+                left: 24,
+                right: 24,
+                child: ClipRRect(
+                  borderRadius: const BorderRadius.vertical(
+                      top: Radius.circular(28)),
+                  child: LinearProgressIndicator(
+                    backgroundColor: Colors.transparent,
+                    color: AppColors.primary,
+                    minHeight: 3,
+                  ),
+                ),
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildWebLeftPanel() {
+    return ClipRRect(
+      borderRadius: const BorderRadius.horizontal(left: Radius.circular(28)),
+      child: Container(
+        decoration: const BoxDecoration(
+          gradient: LinearGradient(
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+            colors: [
+              Color(0xFFFF6600),
+              Color(0xFFFF8C00),
+              Color(0xFFE55A00),
+            ],
+          ),
+        ),
+        child: Stack(
+          children: [
+            // Decorative circles
+            Positioned(
+              top: -40,
+              left: -40,
+              child: Container(
+                width: 180,
+                height: 180,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  color: Colors.white.withOpacity(0.06),
+                ),
+              ),
+            ),
+            Positioned(
+              bottom: -30,
+              right: -30,
+              child: Container(
+                width: 140,
+                height: 140,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  color: Colors.white.withOpacity(0.07),
+                ),
+              ),
+            ),
+            Positioned(
+              bottom: 80,
+              left: -20,
+              child: Container(
+                width: 90,
+                height: 90,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  color: Colors.white.withOpacity(0.05),
+                ),
+              ),
+            ),
+            // Content
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 40),
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  // Brand name top-left
+                  Row(
+                    children: [
+                      Text(
+                        AppConstants.appName,
+                        style: GoogleFonts.montserrat(
+                          fontSize: 18,
+                          fontWeight: FontWeight.w800,
+                          color: Colors.white,
+                          letterSpacing: -0.3,
+                        ),
+                      ),
+                      const SizedBox(width: 6),
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 7, vertical: 2),
+                        decoration: BoxDecoration(
+                          color: Colors.white.withOpacity(0.2),
+                          borderRadius: BorderRadius.circular(5),
+                        ),
+                        child: Text(
+                          'ADMIN',
+                          style: GoogleFonts.inter(
+                            fontSize: 9,
+                            fontWeight: FontWeight.w800,
+                            color: Colors.white,
+                            letterSpacing: 1.0,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+
+                  // Center illustration area
+                  Expanded(
+                    child: Center(
+                      child: Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          // App logo badge
+                          Container(
+                            width: 150,
+                            height: 150,
+                            decoration: BoxDecoration(
+                              shape: BoxShape.circle,
+                              color: Colors.white,
+                              boxShadow: [
+                                BoxShadow(
+                                  color: Colors.black.withOpacity(0.20),
+                                  blurRadius: 28,
+                                  offset: const Offset(0, 10),
+                                ),
+                              ],
+                            ),
+                            padding: const EdgeInsets.all(24),
+                            child: Image.asset(
+                              AppConstants.logoAsset,
+                              fit: BoxFit.contain,
+                            ),
+                          ),
+                          const SizedBox(height: 20),
+                        ],
+                      ),
+                    ),
+                  ),
+
+                  // Bottom caption
+                  Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'Your Admin Dashboard',
+                        style: GoogleFonts.montserrat(
+                          fontSize: 19,
+                          fontWeight: FontWeight.w700,
+                          color: Colors.white,
+                        ),
+                      ),
+                      const SizedBox(height: 6),
+                      Text(
+                        'Manage pets, reports & community\nsafety from one place.',
+                        style: GoogleFonts.inter(
+                          fontSize: 12.5,
+                          color: Colors.white.withOpacity(0.75),
+                          height: 1.55,
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildWebFormPanel() {
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        // Heading
+        Text(
+          'Welcome to ${AppConstants.appName} Admin',
+          style: GoogleFonts.montserrat(
+            fontSize: 22,
+            fontWeight: FontWeight.w800,
+            color: const Color(0xFF0F172A),
+            height: 1.2,
+          ),
+        ),
+        const SizedBox(height: 6),
+        Text(
+          'Your Admin Dashboard',
+          style: GoogleFonts.inter(
+            fontSize: 13.5,
+            color: const Color(0xFF64748B),
+          ),
+        ),
+        const SizedBox(height: 28),
+
+        // Flash message
+        if (_flashMessage != null) ...[
+          _buildFlashMessageBanner(_flashMessage!),
+          const SizedBox(height: 20),
+        ],
+
+        // Email label + field
+        Text(
+          'Email Address',
+          style: GoogleFonts.inter(
+            fontSize: 13,
+            fontWeight: FontWeight.w600,
+            color: const Color(0xFF374151),
+          ),
+        ),
+        const SizedBox(height: 8),
+        _webInputField(
+          controller: _emailCtrl,
+          hint: 'admin@pettrace.ph',
+          icon: Icons.mail_outline_rounded,
+          keyboardType: TextInputType.emailAddress,
+        ),
+        const SizedBox(height: 18),
+
+        // Password label + field
+        Text(
+          'Password',
+          style: GoogleFonts.inter(
+            fontSize: 13,
+            fontWeight: FontWeight.w600,
+            color: const Color(0xFF374151),
+          ),
+        ),
+        const SizedBox(height: 8),
+        _webPasswordField(),
+        const SizedBox(height: 10),
+
+        // Forgot password row
+        Align(
+          alignment: Alignment.centerRight,
+          child: TextButton(
+            onPressed: _handleForgotPassword,
+            style: TextButton.styleFrom(
+              padding: EdgeInsets.zero,
+              minimumSize: Size.zero,
+              tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+            ),
+            child: Text(
+              'Forgot Password?',
+              style: GoogleFonts.inter(
+                fontSize: 12.5,
+                fontWeight: FontWeight.w600,
+                color: AppColors.primary,
+              ),
+            ),
+          ),
+        ),
+        const SizedBox(height: 22),
+
+        // Sign In button
+        SizedBox(
+          width: double.infinity,
+          height: 50,
+          child: ElevatedButton(
+            onPressed: _isLoading ? null : _handleLogin,
+            style: ElevatedButton.styleFrom(
+              backgroundColor: AppColors.primary,
+              foregroundColor: Colors.white,
+              elevation: 4,
+              shadowColor: AppColors.primary.withOpacity(0.4),
+              shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(14)),
+              textStyle: GoogleFonts.montserrat(
+                  fontSize: 15, fontWeight: FontWeight.w700),
+            ),
+            child: _isLoading
+                ? const SizedBox(
+                    width: 20,
+                    height: 20,
+                    child: CircularProgressIndicator(
+                        strokeWidth: 2.5, color: Colors.white),
+                  )
+                : const Text('Sign In'),
+          ),
+        ),
+        const SizedBox(height: 20),
+
+        // Footer note
+        Center(
+          child: Text(
+            'Admin accounts are managed by the Super Administrator.',
+            textAlign: TextAlign.center,
+            style: GoogleFonts.inter(
+              fontSize: 11.5,
+              color: const Color(0xFF94A3B8),
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _webInputField({
+    required TextEditingController controller,
+    required String hint,
+    required IconData icon,
+    TextInputType? keyboardType,
+  }) {
+    return TextField(
+      controller: controller,
+      keyboardType: keyboardType,
+      style: GoogleFonts.inter(fontSize: 14, color: const Color(0xFF0F172A)),
+      decoration: InputDecoration(
+        hintText: hint,
+        hintStyle:
+            GoogleFonts.inter(fontSize: 14, color: const Color(0xFFCBD5E1)),
+        prefixIcon: Icon(icon, color: const Color(0xFF94A3B8), size: 19),
+        filled: true,
+        fillColor: const Color(0xFFF8FAFC),
+        contentPadding:
+            const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+        border: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(12),
+          borderSide: const BorderSide(color: Color(0xFFE2E8F0)),
+        ),
+        enabledBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(12),
+          borderSide: const BorderSide(color: Color(0xFFE2E8F0)),
+        ),
+        focusedBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(12),
+          borderSide: const BorderSide(color: AppColors.primary, width: 2),
+        ),
+      ),
+    );
+  }
+
+  Widget _webPasswordField() {
+    return TextField(
+      controller: _passwordCtrl,
+      obscureText: _obscurePwd,
+      style: GoogleFonts.inter(fontSize: 14, color: const Color(0xFF0F172A)),
+      decoration: InputDecoration(
+        hintText: '••••••••',
+        hintStyle:
+            GoogleFonts.inter(fontSize: 14, color: const Color(0xFFCBD5E1)),
+        prefixIcon: const Icon(Icons.lock_outline_rounded,
+            color: Color(0xFF94A3B8), size: 19),
+        suffixIcon: IconButton(
+          icon: Icon(
+            _obscurePwd
+                ? Icons.visibility_outlined
+                : Icons.visibility_off_outlined,
+            color: const Color(0xFF94A3B8),
+            size: 19,
+          ),
+          onPressed: () => setState(() => _obscurePwd = !_obscurePwd),
+        ),
+        filled: true,
+        fillColor: const Color(0xFFF8FAFC),
+        contentPadding:
+            const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+        border: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(12),
+          borderSide: const BorderSide(color: Color(0xFFE2E8F0)),
+        ),
+        enabledBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(12),
+          borderSide: const BorderSide(color: Color(0xFFE2E8F0)),
+        ),
+        focusedBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(12),
+          borderSide: const BorderSide(color: AppColors.primary, width: 2),
+        ),
       ),
     );
   }
@@ -580,9 +986,52 @@ class _LoginScreenState extends State<LoginScreen> {
           mainAxisAlignment: MainAxisAlignment.center,
           children: features.map((f) => _featureItem(f.$1, f.$2)).toList(),
         ),
-        const SizedBox(height: 14),
+        const SizedBox(height: 16),
+        // ── Legal & Policies Links ──────────────────────────────
+        Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            GestureDetector(
+              onTap: () =>
+                  Navigator.pushNamed(context, AppRoutes.privacyPolicy),
+              child: Text(
+                'Privacy Policy',
+                style: GoogleFonts.inter(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w600,
+                  color: AppColors.primary,
+                  decoration: TextDecoration.underline,
+                ),
+              ),
+            ),
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 8),
+              child: Text(
+                '•',
+                style: TextStyle(
+                  color: AppColors.secondary.withOpacity(0.4),
+                  fontSize: 12,
+                ),
+              ),
+            ),
+            GestureDetector(
+              onTap: () =>
+                  Navigator.pushNamed(context, AppRoutes.termsOfService),
+              child: Text(
+                'Terms & Conditions',
+                style: GoogleFonts.inter(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w600,
+                  color: AppColors.primary,
+                  decoration: TextDecoration.underline,
+                ),
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 10),
         Text(
-          '© 2024 PetTrace Inc. Community-driven pet protection.',
+          '© 2026 ${AppConstants.appName}. Community-driven pet protection.',
           style: GoogleFonts.inter(
             fontSize: 11,
             color: AppColors.secondary.withOpacity(0.5),

@@ -30,6 +30,7 @@ class AdminWebLayout extends StatefulWidget {
 
 class _AdminWebLayoutState extends State<AdminWebLayout> {
   final _supabase = Supabase.instance.client;
+  static bool _isSidebarCollapsed = false;
 
   String _adminName = 'Admin';
   UserRole _role = UserRole.admin;
@@ -168,9 +169,11 @@ class _AdminWebLayoutState extends State<AdminWebLayout> {
       backgroundColor: const Color(0xFFF5F5F5),
       body: Row(
         children: [
-          // ── Fixed width 240px sidebar with #1A1F36 dark background ────────
-          Container(
-            width: 240,
+          // ── Collapsable sidebar with #1A1F36 dark background ────────
+          AnimatedContainer(
+            duration: const Duration(milliseconds: 250),
+            curve: Curves.easeInOut,
+            width: _isSidebarCollapsed ? 76 : 240,
             color: const Color(0xFF1A1F36),
             child: Column(
               children: [
@@ -179,84 +182,137 @@ class _AdminWebLayoutState extends State<AdminWebLayout> {
                   height: 70,
                   width: double.infinity,
                   color: AppColors.primary, // #FF6600
-                  padding: const EdgeInsets.symmetric(horizontal: 16),
-                  alignment: Alignment.centerLeft,
-                  child: Row(
-                    children: [
-                      AppConstants.buildLogoBadge(
-                        size: 10,
-                        backgroundColor: Colors.white,
-                        iconColor: AppColors.primary,
-                      ),
-                      const SizedBox(width: 12),
-                      Text(
-                        AppConstants.appName,
-                        style: GoogleFonts.montserrat(
-                          fontSize: 20,
-                          fontWeight: FontWeight.bold,
-                          color: Colors.white,
-                          letterSpacing: 0.5,
-                        ),
-                      ),
-                    ],
+                  padding: EdgeInsets.symmetric(
+                    horizontal: _isSidebarCollapsed ? 12 : 16,
                   ),
+                  alignment: Alignment.center,
+                  child: _isSidebarCollapsed
+                      ? Tooltip(
+                          message: AppConstants.appName,
+                          child: InkWell(
+                            onTap: () => setState(() => _isSidebarCollapsed = false),
+                            child: AppConstants.buildLogoBadge(
+                              size: 10,
+                              backgroundColor: Colors.white,
+                              iconColor: AppColors.primary,
+                            ),
+                          ),
+                        )
+                      : Row(
+                          children: [
+                            AppConstants.buildLogoBadge(
+                              size: 10,
+                              backgroundColor: Colors.white,
+                              iconColor: AppColors.primary,
+                            ),
+                            const SizedBox(width: 12),
+                            Expanded(
+                              child: Text(
+                                AppConstants.appName,
+                                style: GoogleFonts.montserrat(
+                                  fontSize: 20,
+                                  fontWeight: FontWeight.bold,
+                                  color: Colors.white,
+                                  letterSpacing: 0.5,
+                                ),
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            ),
+                            IconButton(
+                              icon: const Icon(
+                                Icons.menu_open_rounded,
+                                color: Colors.white,
+                                size: 20,
+                              ),
+                              tooltip: 'Collapse Sidebar',
+                              onPressed: () =>
+                                  setState(() => _isSidebarCollapsed = true),
+                            ),
+                          ],
+                        ),
                 ),
 
                 // Admin Info section below header
                 Padding(
-                  padding: const EdgeInsets.fromLTRB(16, 18, 16, 14),
-                  child: Row(
-                    children: [
-                      CircleAvatar(
-                        radius: 20,
-                        backgroundColor: AppColors.primary,
-                        backgroundImage:
-                            _photoUrl != null && _photoUrl!.isNotEmpty
-                                ? NetworkImage(_photoUrl!)
+                  padding: EdgeInsets.symmetric(
+                    horizontal: _isSidebarCollapsed ? 8 : 16,
+                    vertical: 14,
+                  ),
+                  child: _isSidebarCollapsed
+                      ? Tooltip(
+                          message:
+                              '$_adminName\n${_role == UserRole.superAdmin ? 'Super Admin' : 'Barangay Admin'}',
+                          child: CircleAvatar(
+                            radius: 20,
+                            backgroundColor: AppColors.primary,
+                            backgroundImage:
+                                _photoUrl != null && _photoUrl!.isNotEmpty
+                                    ? NetworkImage(_photoUrl!)
+                                    : null,
+                            child: (_photoUrl == null || _photoUrl!.isEmpty)
+                                ? Text(
+                                    _initial,
+                                    style: GoogleFonts.montserrat(
+                                      fontSize: 16,
+                                      fontWeight: FontWeight.bold,
+                                      color: Colors.white,
+                                    ),
+                                  )
                                 : null,
-                        child: (_photoUrl == null || _photoUrl!.isEmpty)
-                            ? Text(
-                                _initial,
-                                style: GoogleFonts.montserrat(
-                                  fontSize: 16,
-                                  fontWeight: FontWeight.bold,
-                                  color: Colors.white,
-                                ),
-                              )
-                            : null,
-                      ),
-                      const SizedBox(width: 12),
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
+                          ),
+                        )
+                      : Row(
                           children: [
-                            Text(
-                              _adminName,
-                              style: GoogleFonts.montserrat(
-                                fontSize: 13,
-                                fontWeight: FontWeight.w600,
-                                color: Colors.white,
-                              ),
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
+                            CircleAvatar(
+                              radius: 20,
+                              backgroundColor: AppColors.primary,
+                              backgroundImage:
+                                  _photoUrl != null && _photoUrl!.isNotEmpty
+                                      ? NetworkImage(_photoUrl!)
+                                      : null,
+                              child: (_photoUrl == null || _photoUrl!.isEmpty)
+                                  ? Text(
+                                      _initial,
+                                      style: GoogleFonts.montserrat(
+                                        fontSize: 16,
+                                        fontWeight: FontWeight.bold,
+                                        color: Colors.white,
+                                      ),
+                                    )
+                                  : null,
                             ),
-                            const SizedBox(height: 2),
-                            Text(
-                              _role == UserRole.superAdmin
-                                  ? 'Super Admin'
-                                  : 'Barangay Admin',
-                              style: GoogleFonts.inter(
-                                fontSize: 11,
-                                color: const Color(0xFF8B93A7),
+                            const SizedBox(width: 12),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    _adminName,
+                                    style: GoogleFonts.montserrat(
+                                      fontSize: 13,
+                                      fontWeight: FontWeight.w600,
+                                      color: Colors.white,
+                                    ),
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                                  const SizedBox(height: 2),
+                                  Text(
+                                    _role == UserRole.superAdmin
+                                        ? 'Super Admin'
+                                        : 'Barangay Admin',
+                                    style: GoogleFonts.inter(
+                                      fontSize: 11,
+                                      color: const Color(0xFF8B93A7),
+                                    ),
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                                ],
                               ),
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
                             ),
                           ],
                         ),
-                      ),
-                    ],
-                  ),
                 ),
 
                 const Divider(
@@ -275,30 +331,35 @@ class _AdminWebLayoutState extends State<AdminWebLayout> {
                         icon: Icons.dashboard_rounded,
                         label: 'Dashboard',
                         isSelected: widget.currentIndex == 0,
+                        isCollapsed: _isSidebarCollapsed,
                         onTap: () => _onNavSelected(0),
                       ),
                       _NavigationItem(
                         icon: Icons.pets_rounded,
                         label: 'Pets',
                         isSelected: widget.currentIndex == 1,
+                        isCollapsed: _isSidebarCollapsed,
                         onTap: () => _onNavSelected(1),
                       ),
                       _NavigationItem(
                         icon: Icons.flag_rounded,
                         label: 'Reports',
                         isSelected: widget.currentIndex == 2,
+                        isCollapsed: _isSidebarCollapsed,
                         onTap: () => _onNavSelected(2),
                       ),
                       _NavigationItem(
                         icon: Icons.group_rounded,
                         label: 'Users',
                         isSelected: widget.currentIndex == 3,
+                        isCollapsed: _isSidebarCollapsed,
                         onTap: () => _onNavSelected(3),
                       ),
                       _NavigationItem(
                         icon: Icons.settings_rounded,
                         label: 'Settings',
                         isSelected: widget.currentIndex == 4,
+                        isCollapsed: _isSidebarCollapsed,
                         onTap: () => _onNavSelected(4),
                       ),
                     ],
@@ -311,31 +372,89 @@ class _AdminWebLayoutState extends State<AdminWebLayout> {
                   color: Color(0x22FFFFFF),
                 ),
 
-                // Bottom Logout ListTile
+                // Bottom actions: Collapse toggle + Logout
                 Padding(
                   padding: const EdgeInsets.symmetric(vertical: 8),
-                  child: ListTile(
-                    contentPadding:
-                        const EdgeInsets.symmetric(horizontal: 16, vertical: 2),
-                    leading: const Icon(
-                      Icons.logout_rounded,
-                      color: Color(0xFFE57373),
-                      size: 22,
-                    ),
-                    title: Text(
-                      'Logout',
-                      style: GoogleFonts.inter(
-                        fontSize: 14,
-                        fontWeight: FontWeight.w600,
-                        color: const Color(0xFFE57373),
-                      ),
-                    ),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(8),
-                    ),
-                    hoverColor: Colors.white.withOpacity(0.06),
-                    onTap: _logout,
-                  ),
+                  child: _isSidebarCollapsed
+                      ? Column(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Tooltip(
+                              message: 'Expand Sidebar',
+                              child: IconButton(
+                                icon: const Icon(
+                                  Icons.keyboard_double_arrow_right_rounded,
+                                  color: Color(0xFF8B93A7),
+                                  size: 22,
+                                ),
+                                onPressed: () =>
+                                    setState(() => _isSidebarCollapsed = false),
+                              ),
+                            ),
+                            const SizedBox(height: 4),
+                            Tooltip(
+                              message: 'Logout',
+                              child: IconButton(
+                                icon: const Icon(
+                                  Icons.logout_rounded,
+                                  color: Color(0xFFE57373),
+                                  size: 22,
+                                ),
+                                onPressed: _logout,
+                              ),
+                            ),
+                          ],
+                        )
+                      : Column(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            ListTile(
+                              contentPadding: const EdgeInsets.symmetric(
+                                  horizontal: 16, vertical: 0),
+                              leading: const Icon(
+                                Icons.keyboard_double_arrow_left_rounded,
+                                color: Color(0xFF8B93A7),
+                                size: 22,
+                              ),
+                              title: Text(
+                                'Collapse Sidebar',
+                                style: GoogleFonts.inter(
+                                  fontSize: 13,
+                                  fontWeight: FontWeight.w500,
+                                  color: const Color(0xFF8B93A7),
+                                ),
+                              ),
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(8),
+                              ),
+                              hoverColor: Colors.white.withOpacity(0.06),
+                              onTap: () =>
+                                  setState(() => _isSidebarCollapsed = true),
+                            ),
+                            ListTile(
+                              contentPadding: const EdgeInsets.symmetric(
+                                  horizontal: 16, vertical: 0),
+                              leading: const Icon(
+                                Icons.logout_rounded,
+                                color: Color(0xFFE57373),
+                                size: 22,
+                              ),
+                              title: Text(
+                                'Logout',
+                                style: GoogleFonts.inter(
+                                  fontSize: 14,
+                                  fontWeight: FontWeight.w600,
+                                  color: const Color(0xFFE57373),
+                                ),
+                              ),
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(8),
+                              ),
+                              hoverColor: Colors.white.withOpacity(0.06),
+                              onTap: _logout,
+                            ),
+                          ],
+                        ),
                 ),
               ],
             ),
@@ -363,6 +482,26 @@ class _AdminWebLayoutState extends State<AdminWebLayout> {
                     ),
                     child: Row(
                       children: [
+                        // Toggle sidebar button in top bar
+                        IconButton(
+                          icon: Icon(
+                            _isSidebarCollapsed
+                                ? Icons.menu_rounded
+                                : Icons.menu_open_rounded,
+                            color: AppColors.onSurface,
+                            size: 24,
+                          ),
+                          tooltip: _isSidebarCollapsed
+                              ? 'Expand Sidebar'
+                              : 'Collapse Sidebar',
+                          onPressed: () {
+                            setState(() {
+                              _isSidebarCollapsed = !_isSidebarCollapsed;
+                            });
+                          },
+                        ),
+                        const SizedBox(width: 8),
+
                         // Current page title in Montserrat bold 20sp
                         Text(
                           _resolveTitle(),
@@ -436,10 +575,11 @@ class _AdminWebLayoutState extends State<AdminWebLayout> {
                     ),
                   ),
 
-                  // Body parameter wrapped in SingleChildScrollView with padding 24
+                  // Body parameter with optimized compact desktop padding
                   Expanded(
                     child: SingleChildScrollView(
-                      padding: const EdgeInsets.all(24),
+                      physics: const ClampingScrollPhysics(),
+                      padding: const EdgeInsets.fromLTRB(20, 14, 20, 14),
                       child: widget.body,
                     ),
                   ),
@@ -458,19 +598,58 @@ class _NavigationItem extends StatelessWidget {
   final IconData icon;
   final String label;
   final bool isSelected;
+  final bool isCollapsed;
   final VoidCallback onTap;
 
   const _NavigationItem({
     required this.icon,
     required this.label,
     required this.isSelected,
+    this.isCollapsed = false,
     required this.onTap,
   });
 
   @override
   Widget build(BuildContext context) {
     const activeColor = AppColors.primary; // #FF6600 orange
-    final inactiveColor = const Color(0xFF8B93A7);
+    const inactiveColor = Color(0xFF8B93A7);
+
+    if (isCollapsed) {
+      return Container(
+        margin: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+        child: Tooltip(
+          message: label,
+          preferBelow: false,
+          child: Material(
+            color: isSelected
+                ? activeColor.withOpacity(0.15)
+                : Colors.transparent,
+            borderRadius: BorderRadius.circular(10),
+            child: InkWell(
+              borderRadius: BorderRadius.circular(10),
+              onTap: onTap,
+              hoverColor: Colors.white.withOpacity(0.06),
+              child: Container(
+                height: 48,
+                alignment: Alignment.center,
+                decoration: BoxDecoration(
+                  borderRadius: BorderRadius.circular(10),
+                  border: isSelected
+                      ? Border.all(
+                          color: activeColor.withOpacity(0.3), width: 1)
+                      : null,
+                ),
+                child: Icon(
+                  icon,
+                  color: isSelected ? activeColor : inactiveColor,
+                  size: 22,
+                ),
+              ),
+            ),
+          ),
+        ),
+      );
+    }
 
     return Container(
       margin: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),

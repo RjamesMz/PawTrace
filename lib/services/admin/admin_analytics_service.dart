@@ -176,7 +176,25 @@ class AdminAnalyticsService {
       int totalNonArchived = 0;
 
       for (final p in petsList) {
-        final species = (p['species'] ?? '').toString().toLowerCase();
+        final status = (p['status'] ?? '').toString().toLowerCase().trim();
+        final isArchived = status == 'archived' ||
+            p['is_archived'] == true ||
+            p['archived'] == true;
+
+        if (isArchived) {
+          archivedPets++;
+          continue; // Exclude archived pets from active community demographics, species ratio, and collar pairings
+        }
+
+        if (status == 'lost') {
+          lostPets++;
+          totalNonArchived++;
+        } else {
+          activePets++;
+          totalNonArchived++;
+        }
+
+        final species = (p['species'] ?? '').toString().toLowerCase().trim();
         if (species == 'cat') {
           cats++;
         } else if (species == 'dog') {
@@ -185,19 +203,11 @@ class AdminAnalyticsService {
           otherSpecies++;
         }
 
-        final status = (p['status'] ?? '').toString().toLowerCase();
-        if (status == 'lost') {
-          lostPets++;
-          totalNonArchived++;
-        } else if (status == 'archived') {
-          archivedPets++;
-        } else {
-          activePets++;
-          totalNonArchived++;
-        }
-
         final collarId = p['gps_id']?.toString().trim();
-        if (collarId != null && collarId.isNotEmpty && collarId != 'null' && collarId != 'Not Paired') {
+        if (collarId != null &&
+            collarId.isNotEmpty &&
+            collarId != 'null' &&
+            collarId != 'Not Paired') {
           pairedPets++;
         }
       }

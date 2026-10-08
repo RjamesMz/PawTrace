@@ -875,6 +875,17 @@ class _UserManagementScreenState extends State<UserManagementScreen> {
               },
             ),
             ListTile(
+              leading:
+                  const Icon(Icons.badge_outlined, color: AppColors.primary),
+              title: Text('View ID',
+                  style: GoogleFonts.inter(
+                      fontSize: 14, fontWeight: FontWeight.w600)),
+              onTap: () {
+                Navigator.pop(context);
+                _handleUserAction('view_id', user);
+              },
+            ),
+            ListTile(
               leading: Icon(
                 isDeactivated
                     ? Icons.check_circle_outline_rounded

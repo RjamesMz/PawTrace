@@ -89,20 +89,6 @@ class _LostPetDetailScreenState extends State<LostPetDetailScreen> {
     }
   }
 
-  String _timeAgo(String? ts) {
-    if (ts == null || ts.isEmpty) return 'Recently';
-    try {
-      final diff = DateTime.now().difference(DateTime.parse(ts));
-      if (diff.inMinutes < 60) return '${diff.inMinutes}m ago';
-      if (diff.inHours < 24) return '${diff.inHours}h ago';
-      if (diff.inDays < 7) return '${diff.inDays}d ago';
-      if (diff.inDays < 30) return '${(diff.inDays / 7).floor()}w ago';
-      return '${(diff.inDays / 30).floor()}mo ago';
-    } catch (_) {
-      return 'Recently';
-    }
-  }
-
   String _ownerFullName() {
     if (_ownerData == null) return 'Unknown Owner';
     return [
@@ -139,8 +125,6 @@ class _LostPetDetailScreenState extends State<LostPetDetailScreen> {
         'Calatagan';
     final location = _cleanAddress(rawAddress);
     final description = widget.report['description'] as String? ?? '';
-    final reportedAt = widget.report['reported_at'] as String?;
-    final reportId = widget.report['report_id']?.toString() ?? '-';
     double? lat = (widget.report['last_seen_lat'] as num?)?.toDouble();
     double? lon = (widget.report['last_seen_lon'] as num?)?.toDouble();
     if (lat == null || lon == null) {
@@ -298,43 +282,6 @@ class _LostPetDetailScreenState extends State<LostPetDetailScreen> {
                           ].join(' · '),
                           style: GoogleFonts.inter(
                               fontSize: 14, color: AppColors.onSurfaceVariant),
-                        ),
-                        const SizedBox(height: 18),
-                        const Divider(height: 1),
-                        const SizedBox(height: 18),
-                        _label('LAST SEEN'),
-                        const SizedBox(height: 10),
-                        Row(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            const Icon(Icons.location_on_rounded,
-                                size: 18, color: AppColors.primary),
-                            const SizedBox(width: 8),
-                            Expanded(
-                              child: Text(
-                                location,
-                                style: GoogleFonts.inter(
-                                    fontSize: 14, color: AppColors.onSurface),
-                              ),
-                            ),
-                          ],
-                        ),
-                        const SizedBox(height: 8),
-                        Row(
-                          children: [
-                            Icon(Icons.access_time_rounded,
-                                size: 16,
-                                color: AppColors.onSurfaceVariant
-                                    .withOpacity(0.7)),
-                            const SizedBox(width: 8),
-                            Text(
-                              _timeAgo(reportedAt),
-                              style: GoogleFonts.inter(
-                                  fontSize: 13,
-                                  color: AppColors.onSurfaceVariant
-                                      .withOpacity(0.8)),
-                            ),
-                          ],
                         ),
                         const SizedBox(height: 18),
                         const Divider(height: 1),

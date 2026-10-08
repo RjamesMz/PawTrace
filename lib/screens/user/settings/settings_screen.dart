@@ -720,6 +720,35 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
           const SizedBox(height: 8),
 
+          // LEGAL & POLICIES SECTION
+          Padding(
+            padding: const EdgeInsets.fromLTRB(20, 12, 20, 8),
+            child: Text(
+              'LEGAL & POLICIES',
+              style: GoogleFonts.inter(
+                fontSize: 12,
+                fontWeight: FontWeight.w700,
+                color: AppColors.primaryContainer,
+                letterSpacing: 0.8,
+              ),
+            ),
+          ),
+          _buildSettingsTile(
+            icon: Icons.shield_outlined,
+            title: 'Privacy Policy',
+            subtitle: 'Data protection & location privacy',
+            onTap: () => Navigator.pushNamed(context, AppRoutes.privacyPolicy),
+          ),
+          _buildDivider(),
+          _buildSettingsTile(
+            icon: Icons.gavel_outlined,
+            title: 'Terms & Conditions',
+            subtitle: 'User agreement & GPS hardware rules',
+            onTap: () => Navigator.pushNamed(context, AppRoutes.termsOfService),
+          ),
+
+          const SizedBox(height: 8),
+
           Container(
             color: AppColors.error.withOpacity(0.05),
             padding: const EdgeInsets.only(bottom: 8),

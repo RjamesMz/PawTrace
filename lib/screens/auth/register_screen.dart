@@ -1,3 +1,5 @@
+import 'dart:typed_data';
+import 'package:image_picker/image_picker.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
@@ -6,6 +8,8 @@ import '../../core/app_constants.dart';
 import '../../core/app_routes.dart';
 import '../../core/app_toast.dart';
 import '../../services/auth/auth_service.dart';
+import '../../services/auth/id_validation_service.dart';
+import '../../services/auth/user_id_service.dart';
 
 /// Standalone Register / Sign-up screen for PawTrace.
 ///
@@ -37,12 +41,33 @@ class _RegisterScreenState extends State<RegisterScreen> {
   final _regPhoneCtrl = TextEditingController();
   String? _selectedSuffix;
   String? _selectedBarangay;
-  
+
   bool _obscureRegPwd = true;
   bool _obscureRegConfirm = true;
+  bool _agreeToTerms = false;
+  bool _hasViewedTerms = false;
+
+  // ── Valid ID uploads ───────────────────────────────────────────────────────
+  Uint8List? _idFrontBytes;
+  String _idFrontExt = 'jpg';
+  Uint8List? _idBackBytes;
+  String _idBackExt = 'jpg';
+  String? _selectedIdType;
+  bool _idUploadError = false;
+  IdValidationResult? _idValidationResult;
 
   // ── Form key ───────────────────────────────────────────────────────────────
   final _formKey = GlobalKey<FormState>();
+
+  Future<void> _openLegal(String route) async {
+    await Navigator.pushNamed(context, route);
+    if (mounted) {
+      setState(() {
+        _hasViewedTerms = true;
+        _agreeToTerms = true;
+      });
+    }
+  }
 
   @override
   void dispose() {
@@ -84,8 +109,54 @@ class _RegisterScreenState extends State<RegisterScreen> {
       return;
     }
 
-    setState(() => _isLoading = true);
+    if (_idFrontBytes == null || _idBackBytes == null) {
+      setState(() => _idUploadError = true);
+      _showError('Please upload both the front and back of your valid ID.');
+      return;
+    }
+
+    if (_selectedIdType == null) {
+      _showError('Please select the type of valid ID you are uploading.');
+      return;
+    }
+
+    if (!_agreeToTerms) {
+      _showError(
+          'Please check and agree to the Terms & Conditions and Privacy Policy.');
+      return;
+    }
+
+    setState(() {
+      _isLoading = true;
+    });
     try {
+      final validation = await IdValidationService.validate(
+        frontBytes: _idFrontBytes!,
+        backBytes: _idBackBytes!,
+        firstName: firstName,
+        surname: surname,
+      );
+      if (!validation.isUsableForRegistration) {
+        _idValidationResult = validation;
+        _showError(validation.message ?? 'Please review your ID photos.');
+        return;
+      }
+
+      // 1. Upload ID images
+      final frontUrl = await UserIdService.uploadIdImage(
+        email: email,
+        side: 'front',
+        bytes: _idFrontBytes!,
+        ext: _idFrontExt,
+      );
+      final backUrl = await UserIdService.uploadIdImage(
+        email: email,
+        side: 'back',
+        bytes: _idBackBytes!,
+        ext: _idBackExt,
+      );
+
+      // 2. Register user with ID document metadata
       await AuthService.instance.register(
         firstName: firstName,
         middleName: middleName.isEmpty ? null : middleName,
@@ -95,6 +166,14 @@ class _RegisterScreenState extends State<RegisterScreen> {
         password: password,
         phone: phone,
         barangay: _selectedBarangay,
+        idFrontUrl: frontUrl,
+        idBackUrl: backUrl,
+        idType: _selectedIdType,
+        ocrExtractedText: validation.ocrExtractedText,
+        nameMatchScore: validation.nameMatchScore,
+        imageQuality:
+            'front:${validation.frontQuality};back:${validation.backQuality}',
+        validationStatus: validation.validationStatus,
       );
       // Ensure the user signs out so they must verify their email before accessing
       await AuthService.instance.signOut();
@@ -259,7 +338,11 @@ class _RegisterScreenState extends State<RegisterScreen> {
     } catch (e) {
       _showError('Unexpected error: $e');
     } finally {
-      if (mounted) setState(() => _isLoading = false);
+      if (mounted) {
+        setState(() {
+          _isLoading = false;
+        });
+      }
     }
   }
 
@@ -343,8 +426,8 @@ class _RegisterScreenState extends State<RegisterScreen> {
                             icon: Icons.person_outline_rounded,
                             keyboardType: TextInputType.name,
                             textCapitalization: TextCapitalization.words,
-                            validator: (v) =>
-                                AuthService.validateName(v, fieldName: 'Last name'),
+                            validator: (v) => AuthService.validateName(v,
+                                fieldName: 'Last name'),
                           ),
                         ),
                         const SizedBox(width: 10),
@@ -366,7 +449,8 @@ class _RegisterScreenState extends State<RegisterScreen> {
                     _passwordField(
                       controller: _regPasswordCtrl,
                       hint: 'Password',
-                      helperText: 'At least 8 characters with letters & numbers',
+                      helperText:
+                          'At least 8 characters with letters & numbers',
                       obscure: _obscureRegPwd,
                       onToggle: () =>
                           setState(() => _obscureRegPwd = !_obscureRegPwd),
@@ -401,41 +485,173 @@ class _RegisterScreenState extends State<RegisterScreen> {
                     ),
                     const SizedBox(height: 12),
                     _buildBarangayDropdown(),
-                    const SizedBox(height: 24),
+                    const SizedBox(height: 20),
 
-                    // ── Create Account button ─────────────────────────────────
-                    SizedBox(
-                      width: double.infinity,
-                      height: 56,
-                      child: ElevatedButton(
-                        onPressed: _isLoading ? null : _handleRegister,
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: AppColors.primary,
-                          foregroundColor: Colors.white,
-                          elevation: 6,
-                          shadowColor: AppColors.primary.withOpacity(0.35),
-                          shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(16)),
-                          textStyle: GoogleFonts.montserrat(
-                              fontSize: 16, fontWeight: FontWeight.w700),
+                    // ── Valid ID Upload Section (Required) ───────────────────
+                    _buildIdTypeDropdown(),
+                    const SizedBox(height: 12),
+                    _buildValidIdSection(),
+                    const SizedBox(height: 18),
+
+                    // ── Terms & Conditions Checkbox ───────────────────────────
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 10, vertical: 10),
+                      decoration: BoxDecoration(
+                        color: _agreeToTerms
+                            ? AppColors.primaryContainer.withOpacity(0.12)
+                            : AppColors.surfaceContainerLow,
+                        borderRadius: BorderRadius.circular(14),
+                        border: Border.all(
+                          color: _agreeToTerms
+                              ? AppColors.primary.withOpacity(0.4)
+                              : AppColors.outlineVariant.withOpacity(0.5),
                         ),
-                        child: _isLoading
-                            ? const SizedBox(
-                                width: 22,
-                                height: 22,
-                                child: CircularProgressIndicator(
-                                    strokeWidth: 2.5, color: Colors.white),
-                              )
-                            : const Row(
-                                mainAxisAlignment: MainAxisAlignment.center,
+                      ),
+                      child: Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Checkbox(
+                            value: _agreeToTerms,
+                            activeColor: AppColors.primary,
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(5),
+                            ),
+                            materialTapTargetSize:
+                                MaterialTapTargetSize.shrinkWrap,
+                            visualDensity: VisualDensity.compact,
+                            onChanged: (val) {
+                              if (!_hasViewedTerms) {
+                                AppToast.show(
+                                  context,
+                                  'Please review the Terms & Conditions and Privacy Policy first.',
+                                  icon: Icons.info_outline_rounded,
+                                );
+                                _openLegal(AppRoutes.termsOfService);
+                                return;
+                              }
+                              setState(() => _agreeToTerms = val ?? false);
+                            },
+                          ),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: Padding(
+                              padding: const EdgeInsets.only(top: 2),
+                              child: Wrap(
+                                crossAxisAlignment: WrapCrossAlignment.center,
                                 children: [
-                                  Text('Create Account'),
-                                  SizedBox(width: 8),
-                                  Icon(Icons.arrow_forward_rounded, size: 20),
+                                  Text(
+                                    'I have read and agree to the ',
+                                    style: GoogleFonts.inter(
+                                      fontSize: 12.5,
+                                      color: AppColors.onSurface,
+                                      height: 1.4,
+                                    ),
+                                  ),
+                                  GestureDetector(
+                                    onTap: () =>
+                                        _openLegal(AppRoutes.termsOfService),
+                                    child: Text(
+                                      'Terms & Conditions',
+                                      style: GoogleFonts.inter(
+                                        fontSize: 12.5,
+                                        fontWeight: FontWeight.w700,
+                                        color: AppColors.primary,
+                                        decoration: TextDecoration.underline,
+                                      ),
+                                    ),
+                                  ),
+                                  Text(
+                                    ' and ',
+                                    style: GoogleFonts.inter(
+                                      fontSize: 12.5,
+                                      color: AppColors.onSurface,
+                                    ),
+                                  ),
+                                  GestureDetector(
+                                    onTap: () =>
+                                        _openLegal(AppRoutes.privacyPolicy),
+                                    child: Text(
+                                      'Privacy Policy',
+                                      style: GoogleFonts.inter(
+                                        fontSize: 12.5,
+                                        fontWeight: FontWeight.w700,
+                                        color: AppColors.primary,
+                                        decoration: TextDecoration.underline,
+                                      ),
+                                    ),
+                                  ),
+                                  Text(
+                                    '.',
+                                    style: GoogleFonts.inter(
+                                      fontSize: 12.5,
+                                      color: AppColors.onSurface,
+                                    ),
+                                  ),
                                 ],
                               ),
+                            ),
+                          ),
+                        ],
                       ),
                     ),
+                    const SizedBox(height: 20),
+
+                    // ── Create Account button ─────────────────────────────────
+                    Builder(builder: (context) {
+                      final hasBothIds =
+                          _idFrontBytes != null && _idBackBytes != null;
+                      final canSubmit =
+                          !_isLoading && _agreeToTerms && hasBothIds;
+
+                      return SizedBox(
+                        width: double.infinity,
+                        height: 56,
+                        child: ElevatedButton(
+                          onPressed: canSubmit ? _handleRegister : null,
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: AppColors.primary,
+                            foregroundColor: Colors.white,
+                            disabledBackgroundColor: const Color(0xFFE2E8F0),
+                            disabledForegroundColor: const Color(0xFF94A3B8),
+                            elevation: canSubmit ? 6 : 0,
+                            shadowColor: AppColors.primary.withOpacity(0.35),
+                            shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(16)),
+                            textStyle: GoogleFonts.montserrat(
+                                fontSize: 16, fontWeight: FontWeight.w700),
+                          ),
+                          child: _isLoading
+                              ? const SizedBox(
+                                  width: 22,
+                                  height: 22,
+                                  child: CircularProgressIndicator(
+                                      strokeWidth: 2.5, color: Colors.white),
+                                )
+                              : Row(
+                                  mainAxisAlignment: MainAxisAlignment.center,
+                                  children: [
+                                    Text(
+                                      'Create Account',
+                                      style: TextStyle(
+                                        color: _agreeToTerms
+                                            ? Colors.white
+                                            : const Color(0xFF94A3B8),
+                                      ),
+                                    ),
+                                    const SizedBox(width: 8),
+                                    Icon(
+                                      Icons.arrow_forward_rounded,
+                                      size: 20,
+                                      color: _agreeToTerms
+                                          ? Colors.white
+                                          : const Color(0xFF94A3B8),
+                                    ),
+                                  ],
+                                ),
+                        ),
+                      );
+                    }),
                     const SizedBox(height: 16),
 
                     // ── Login link ────────────────────────────────────────────
@@ -448,7 +664,8 @@ class _RegisterScreenState extends State<RegisterScreen> {
                               fontSize: 14, color: AppColors.secondary),
                         ),
                         GestureDetector(
-                          onTap: () => Navigator.pushReplacementNamed(context, AppRoutes.login),
+                          onTap: () => Navigator.pushReplacementNamed(
+                              context, AppRoutes.login),
                           child: Text(
                             'Login',
                             style: GoogleFonts.inter(
@@ -459,21 +676,6 @@ class _RegisterScreenState extends State<RegisterScreen> {
                           ),
                         ),
                       ],
-                    ),
-                    const SizedBox(height: 28),
-
-                    // ── Terms footer ──────────────────────────────────────────
-                    Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 12),
-                      child: Text(
-                        'By clicking "Create Account", you agree to PetTrace\'s Terms of Service and Privacy Policy.',
-                        textAlign: TextAlign.center,
-                        style: GoogleFonts.inter(
-                          fontSize: 11,
-                          color: AppColors.secondary.withOpacity(0.55),
-                          height: 1.5,
-                        ),
-                      ),
                     ),
                     const SizedBox(height: 32),
                   ],
@@ -557,6 +759,42 @@ class _RegisterScreenState extends State<RegisterScreen> {
               ))
           .toList(),
       onChanged: (v) => setState(() => _selectedBarangay = v),
+    );
+  }
+
+  Widget _buildIdTypeDropdown() {
+    return DropdownButtonFormField<String>(
+      isExpanded: true,
+      value: _selectedIdType,
+      validator: (value) => value == null ? 'Please select your ID type' : null,
+      decoration: InputDecoration(
+        hintText: 'Select ID Type',
+        hintStyle: GoogleFonts.inter(
+          fontSize: 15,
+          color: AppColors.secondary.withOpacity(0.55),
+        ),
+        prefixIcon: const Icon(Icons.badge_outlined,
+            color: AppColors.secondary, size: 20),
+        focusedBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(16),
+          borderSide: const BorderSide(color: AppColors.primary, width: 2),
+        ),
+      ),
+      icon: const Icon(Icons.expand_more_rounded, color: AppColors.secondary),
+      style: GoogleFonts.inter(fontSize: 15, color: AppColors.onSurface),
+      dropdownColor: AppColors.surfaceContainerLowest,
+      borderRadius: BorderRadius.circular(16),
+      items: const [
+        DropdownMenuItem(value: 'PhilSys ID', child: Text('PhilSys ID')),
+        DropdownMenuItem(
+            value: 'Driver License', child: Text('Driver License')),
+        DropdownMenuItem(value: 'Passport', child: Text('Passport')),
+        DropdownMenuItem(value: 'UMID', child: Text('UMID')),
+        DropdownMenuItem(value: 'PRC ID', child: Text('PRC ID')),
+        DropdownMenuItem(
+            value: 'Other Government ID', child: Text('Other Government ID')),
+      ],
+      onChanged: (value) => setState(() => _selectedIdType = value),
     );
   }
 
@@ -654,9 +892,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
             color: AppColors.secondary, size: 20),
         suffixIcon: IconButton(
           icon: Icon(
-            obscure
-                ? Icons.visibility_outlined
-                : Icons.visibility_off_outlined,
+            obscure ? Icons.visibility_outlined : Icons.visibility_off_outlined,
             color: AppColors.secondary,
             size: 20,
           ),
@@ -665,6 +901,411 @@ class _RegisterScreenState extends State<RegisterScreen> {
         focusedBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(16),
           borderSide: const BorderSide(color: AppColors.primary, width: 2),
+        ),
+      ),
+    );
+  }
+
+  // ══════════════════════════════════════════════════════════════════════════
+  //  VALID ID SECTION & IMAGE PICKER
+  // ══════════════════════════════════════════════════════════════════════════
+
+  Future<void> _pickIdImage({required bool isFront}) async {
+    final picker = ImagePicker();
+    final source = await showModalBottomSheet<ImageSource>(
+      context: context,
+      backgroundColor: Colors.white,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (ctx) => SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 20),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(
+                width: 40,
+                height: 4,
+                margin: const EdgeInsets.only(bottom: 16),
+                decoration: BoxDecoration(
+                  color: Colors.grey.shade300,
+                  borderRadius: BorderRadius.circular(2),
+                ),
+              ),
+              Text(
+                'Upload ${isFront ? "ID Front" : "ID Back"}',
+                style: GoogleFonts.montserrat(
+                  fontSize: 16,
+                  fontWeight: FontWeight.w700,
+                  color: AppColors.onSurface,
+                ),
+              ),
+              const SizedBox(height: 6),
+              Text(
+                'Choose image source for valid ID verification',
+                style: GoogleFonts.inter(
+                  fontSize: 12.5,
+                  color: AppColors.secondary,
+                ),
+              ),
+              const SizedBox(height: 16),
+              ListTile(
+                leading: Container(
+                  padding: const EdgeInsets.all(8),
+                  decoration: BoxDecoration(
+                    color: AppColors.primaryContainer.withOpacity(0.4),
+                    shape: BoxShape.circle,
+                  ),
+                  child: const Icon(Icons.camera_alt_rounded,
+                      color: AppColors.primary, size: 20),
+                ),
+                title: Text('Take Photo',
+                    style: GoogleFonts.inter(
+                        fontWeight: FontWeight.w600, fontSize: 14)),
+                subtitle: Text('Capture with device camera',
+                    style: GoogleFonts.inter(
+                        fontSize: 12, color: AppColors.secondary)),
+                onTap: () => Navigator.pop(ctx, ImageSource.camera),
+              ),
+              ListTile(
+                leading: Container(
+                  padding: const EdgeInsets.all(8),
+                  decoration: BoxDecoration(
+                    color: AppColors.primaryContainer.withOpacity(0.4),
+                    shape: BoxShape.circle,
+                  ),
+                  child: const Icon(Icons.photo_library_rounded,
+                      color: AppColors.primary, size: 20),
+                ),
+                title: Text('Choose from Gallery',
+                    style: GoogleFonts.inter(
+                        fontWeight: FontWeight.w600, fontSize: 14)),
+                subtitle: Text('Upload from files or photos',
+                    style: GoogleFonts.inter(
+                        fontSize: 12, color: AppColors.secondary)),
+                onTap: () => Navigator.pop(ctx, ImageSource.gallery),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+
+    if (source == null) return;
+
+    try {
+      final picked = await picker.pickImage(source: source, imageQuality: 85);
+      if (picked != null) {
+        final bytes = await picked.readAsBytes();
+        final ext = picked.name.contains('.')
+            ? picked.name.split('.').last.toLowerCase()
+            : 'jpg';
+        setState(() {
+          if (isFront) {
+            _idFrontBytes = bytes;
+            _idFrontExt = ext;
+          } else {
+            _idBackBytes = bytes;
+            _idBackExt = ext;
+          }
+          _idUploadError = false;
+        });
+      }
+    } catch (e) {
+      if (mounted) AppToast.error(context, 'Could not select image: $e');
+    }
+  }
+
+  Widget _buildValidIdSection() {
+    final hasFront = _idFrontBytes != null;
+    final hasBack = _idBackBytes != null;
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
+            const Icon(Icons.badge_outlined,
+                color: AppColors.primary, size: 20),
+            const SizedBox(width: 8),
+            Text(
+              'Valid Identification',
+              style: GoogleFonts.montserrat(
+                fontSize: 14.5,
+                fontWeight: FontWeight.w700,
+                color: AppColors.onSurface,
+              ),
+            ),
+            const SizedBox(width: 8),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
+              decoration: BoxDecoration(
+                color: AppColors.primary.withOpacity(0.12),
+                borderRadius: BorderRadius.circular(6),
+              ),
+              child: Text(
+                'Required',
+                style: GoogleFonts.inter(
+                  fontSize: 10,
+                  fontWeight: FontWeight.w700,
+                  color: AppColors.primary,
+                ),
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 4),
+        Text(
+          'Upload clear photos of both sides of your valid government ID.',
+          style: GoogleFonts.inter(
+            fontSize: 12,
+            color: AppColors.secondary,
+          ),
+        ),
+        const SizedBox(height: 12),
+        if (_idValidationResult != null) ...[
+          _buildValidationFeedback(_idValidationResult!),
+          const SizedBox(height: 12),
+        ],
+        LayoutBuilder(
+          builder: (context, constraints) {
+            final isNarrow = constraints.maxWidth < 400;
+            final cardFront = _buildIdUploadCard(
+              label: 'ID Front',
+              bytes: _idFrontBytes,
+              isFront: true,
+            );
+            final cardBack = _buildIdUploadCard(
+              label: 'ID Back',
+              bytes: _idBackBytes,
+              isFront: false,
+            );
+
+            if (isNarrow) {
+              return Column(
+                children: [
+                  cardFront,
+                  const SizedBox(height: 12),
+                  cardBack,
+                ],
+              );
+            }
+
+            return Row(
+              children: [
+                Expanded(child: cardFront),
+                const SizedBox(width: 12),
+                Expanded(child: cardBack),
+              ],
+            );
+          },
+        ),
+        if (_idUploadError && (!hasFront || !hasBack)) ...[
+          const SizedBox(height: 8),
+          Row(
+            children: [
+              const Icon(Icons.error_outline_rounded,
+                  size: 14, color: AppColors.error),
+              const SizedBox(width: 6),
+              Text(
+                'Both ID Front and ID Back images are required.',
+                style: GoogleFonts.inter(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w600,
+                  color: AppColors.error,
+                ),
+              ),
+            ],
+          ),
+        ],
+      ],
+    );
+  }
+
+  Widget _buildValidationFeedback(IdValidationResult result) {
+    final isPassed = result.validationStatus == 'passed';
+    final color = isPassed ? const Color(0xFF15803D) : const Color(0xFFB45309);
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: color.withOpacity(0.08),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: color.withOpacity(0.22)),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Icon(isPassed ? Icons.verified_rounded : Icons.info_outline_rounded,
+              color: color, size: 18),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              result.message ?? 'ID validation complete.',
+              style: GoogleFonts.inter(
+                  fontSize: 12, color: color, fontWeight: FontWeight.w600),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildIdUploadCard({
+    required String label,
+    required Uint8List? bytes,
+    required bool isFront,
+  }) {
+    final bool hasImage = bytes != null;
+
+    return Container(
+      decoration: BoxDecoration(
+        color: hasImage ? Colors.white : AppColors.surfaceContainerLow,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(
+          color: hasImage
+              ? AppColors.primary.withOpacity(0.5)
+              : (_idUploadError
+                  ? AppColors.error.withOpacity(0.6)
+                  : AppColors.outlineVariant.withOpacity(0.6)),
+          width: hasImage ? 1.5 : 1,
+        ),
+      ),
+      clipBehavior: Clip.antiAlias,
+      child: InkWell(
+        onTap: () => _pickIdImage(isFront: isFront),
+        borderRadius: BorderRadius.circular(16),
+        child: Padding(
+          padding: const EdgeInsets.all(12),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  Icon(
+                    hasImage
+                        ? Icons.check_circle_rounded
+                        : Icons.credit_card_rounded,
+                    size: 16,
+                    color:
+                        hasImage ? const Color(0xFF16A34A) : AppColors.primary,
+                  ),
+                  const SizedBox(width: 6),
+                  Text(
+                    label,
+                    style: GoogleFonts.inter(
+                      fontSize: 13,
+                      fontWeight: FontWeight.w700,
+                      color: AppColors.onSurface,
+                    ),
+                  ),
+                  const Spacer(),
+                  if (hasImage)
+                    InkWell(
+                      onTap: () {
+                        setState(() {
+                          if (isFront) {
+                            _idFrontBytes = null;
+                          } else {
+                            _idBackBytes = null;
+                          }
+                        });
+                      },
+                      borderRadius: BorderRadius.circular(999),
+                      child: const Padding(
+                        padding: EdgeInsets.all(2.0),
+                        child: Icon(Icons.close_rounded,
+                            size: 16, color: Color(0xFF94A3B8)),
+                      ),
+                    ),
+                ],
+              ),
+              const SizedBox(height: 8),
+              if (hasImage) ...[
+                ClipRRect(
+                  borderRadius: BorderRadius.circular(10),
+                  child: SizedBox(
+                    height: 100,
+                    width: double.infinity,
+                    child: Stack(
+                      fit: StackFit.expand,
+                      children: [
+                        Image.memory(bytes, fit: BoxFit.cover),
+                        Positioned(
+                          right: 6,
+                          bottom: 6,
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 8, vertical: 3),
+                            decoration: BoxDecoration(
+                              color: Colors.black.withOpacity(0.65),
+                              borderRadius: BorderRadius.circular(6),
+                            ),
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                const Icon(Icons.edit_rounded,
+                                    color: Colors.white, size: 11),
+                                const SizedBox(width: 4),
+                                Text(
+                                  'Change',
+                                  style: GoogleFonts.inter(
+                                    fontSize: 10.5,
+                                    fontWeight: FontWeight.w600,
+                                    color: Colors.white,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ] else ...[
+                Container(
+                  height: 100,
+                  width: double.infinity,
+                  decoration: BoxDecoration(
+                    color: Colors.white.withOpacity(0.7),
+                    borderRadius: BorderRadius.circular(10),
+                    border: Border.all(
+                      color: Colors.grey.shade300,
+                      style: BorderStyle.solid,
+                    ),
+                  ),
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Icon(
+                        Icons.add_a_photo_outlined,
+                        size: 26,
+                        color: AppColors.secondary.withOpacity(0.8),
+                      ),
+                      const SizedBox(height: 6),
+                      Text(
+                        'Upload $label',
+                        style: GoogleFonts.inter(
+                          fontSize: 12,
+                          fontWeight: FontWeight.w600,
+                          color: AppColors.primary,
+                        ),
+                      ),
+                      Text(
+                        'JPG / PNG accepted',
+                        style: GoogleFonts.inter(
+                          fontSize: 10,
+                          color: AppColors.secondary.withOpacity(0.7),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ],
+          ),
         ),
       ),
     );

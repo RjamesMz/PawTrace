@@ -98,6 +98,7 @@ class PetSpeciesDropdown extends StatelessWidget {
         const PetFormLabel(text: 'Species'),
         const SizedBox(height: 6),
         DropdownButtonFormField<String>(
+          key: ValueKey(selectedSpecies),
           isExpanded: true,
           value: selectedSpecies == 'Dog' || selectedSpecies == 'Cat'
               ? selectedSpecies
@@ -156,12 +157,20 @@ class PetBreedDropdown extends StatelessWidget {
         ? selectedBreed
         : (isCat ? 'Puspin' : 'Aspin');
 
+    // Ensure parent state is kept in sync if species changed and left breed mismatched
+    if (selectedBreed != effectiveValue) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        onBreedChanged(effectiveValue);
+      });
+    }
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         const PetFormLabel(text: 'Breed'),
         const SizedBox(height: 6),
         DropdownButtonFormField<String>(
+          key: ValueKey('${selectedSpecies}_$effectiveValue'),
           isExpanded: true,
           value: effectiveValue,
           items: breedList.map((breed) {

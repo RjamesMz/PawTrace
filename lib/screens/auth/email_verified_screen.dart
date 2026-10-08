@@ -141,7 +141,7 @@ class _EmailVerifiedScreenState extends State<EmailVerifiedScreen> {
                       ),
                     ),
                     child: Text(
-                      '🐾 PAWTRACE COMMUNITY',
+                      '🐾 PETTRACE COMMUNITY',
                       style: GoogleFonts.inter(
                         fontSize: 11,
                         fontWeight: FontWeight.w800,
@@ -195,8 +195,8 @@ class _EmailVerifiedScreenState extends State<EmailVerifiedScreen> {
                   // Subtitle
                   Text(
                     _userEmail != null && _userEmail!.isNotEmpty
-                        ? 'Your email ($_userEmail) has been successfully verified. Your PawTrace account is now active.'
-                        : 'Your email has been successfully verified! Your PawTrace account is now active and ready to keep pets safe.',
+                        ? 'Your email ($_userEmail) has been successfully verified. Your PetTrace account is now active.'
+                        : 'Your email has been successfully verified! Your PetTrace account is now active and ready to keep pets safe.',
                     textAlign: TextAlign.center,
                     style: GoogleFonts.inter(
                       fontSize: 14,

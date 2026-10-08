@@ -21,16 +21,16 @@ class LostVsFoundTrendChart extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.all(20),
+      padding: const EdgeInsets.fromLTRB(20, 16, 20, 16),
       decoration: BoxDecoration(
         color: Colors.white,
-        borderRadius: BorderRadius.circular(20),
+        borderRadius: BorderRadius.circular(16),
         border: Border.all(color: const Color(0xFFE2E8F0)),
         boxShadow: [
           BoxShadow(
             color: Colors.black.withOpacity(0.02),
-            blurRadius: 10,
-            offset: const Offset(0, 4),
+            blurRadius: 8,
+            offset: const Offset(0, 2),
           ),
         ],
       ),
@@ -46,7 +46,7 @@ class LostVsFoundTrendChart extends StatelessWidget {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     _buildTitle(),
-                    const SizedBox(height: 10),
+                    const SizedBox(height: 6),
                     _buildGranularitySegment(),
                   ],
                 );
@@ -60,7 +60,7 @@ class LostVsFoundTrendChart extends StatelessWidget {
               );
             },
           ),
-          const SizedBox(height: 14),
+          const SizedBox(height: 8),
 
           // Legend
           Row(
@@ -69,18 +69,18 @@ class LostVsFoundTrendChart extends StatelessWidget {
                 color: const Color(0xFFEA580C),
                 label: 'Reported Lost',
               ),
-              const SizedBox(width: 18),
+              const SizedBox(width: 14),
               _buildLegendItem(
                 color: const Color(0xFF16A34A),
                 label: 'Recovered / Found',
               ),
             ],
           ),
-          const SizedBox(height: 20),
+          const SizedBox(height: 12),
 
           // Chart Canvas
           SizedBox(
-            height: 230,
+            height: 250,
             child: isLoading
                 ? const Center(
                     child: CircularProgressIndicator(color: AppColors.primary),
@@ -90,7 +90,7 @@ class LostVsFoundTrendChart extends StatelessWidget {
                         child: Text(
                           'No incident records in this period',
                           style: GoogleFonts.inter(
-                            fontSize: 13,
+                            fontSize: 12,
                             color: const Color(0xFF94A3B8),
                           ),
                         ),
@@ -107,7 +107,7 @@ class LostVsFoundTrendChart extends StatelessWidget {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Text(
-          'Lost vs. Found Trends',
+          'Lost and Found',
           style: GoogleFonts.montserrat(
             fontSize: 16,
             fontWeight: FontWeight.w700,
@@ -200,154 +200,240 @@ class LostVsFoundTrendChart extends StatelessWidget {
     );
   }
 
+  static String _monthAbbr(DateTime date) {
+    const months = [
+      'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
+      'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'
+    ];
+    return months[date.month - 1];
+  }
+
   Widget _buildChart() {
-    final lostSpots = <FlSpot>[];
-    final foundSpots = <FlSpot>[];
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final chartWidth = constraints.maxWidth;
+        final total = trendData.length;
+        final pointWidth = total > 0 ? (chartWidth - 50) / total : chartWidth;
 
-    double maxY = 4;
-    for (int i = 0; i < trendData.length; i++) {
-      final point = trendData[i];
-      lostSpots.add(FlSpot(i.toDouble(), point.lostCount.toDouble()));
-      foundSpots.add(FlSpot(i.toDouble(), point.foundCount.toDouble()));
+        double maxDataY = 4;
+        for (int i = 0; i < trendData.length; i++) {
+          final point = trendData[i];
+          if (point.lostCount > maxDataY) maxDataY = point.lostCount.toDouble();
+          if (point.foundCount > maxDataY) maxDataY = point.foundCount.toDouble();
+        }
 
-      if (point.lostCount > maxY) maxY = point.lostCount.toDouble() + 1;
-      if (point.foundCount > maxY) maxY = point.foundCount.toDouble() + 1;
-    }
+        final double stepY;
+        if (maxDataY <= 4) {
+          stepY = 1.0;
+        } else if (maxDataY <= 10) {
+          stepY = 2.0;
+        } else if (maxDataY <= 25) {
+          stepY = 5.0;
+        } else if (maxDataY <= 50) {
+          stepY = 10.0;
+        } else {
+          stepY = (maxDataY / 4).ceilToDouble();
+        }
 
-    return LineChart(
-      LineChartData(
-        gridData: FlGridData(
-          show: true,
-          drawVerticalLine: false,
-          horizontalInterval: (maxY / 4).clamp(1.0, 100.0),
-          getDrawingHorizontalLine: (value) => const FlLine(
-            color: Color(0xFFF1F5F9),
-            strokeWidth: 1.2,
-          ),
-        ),
-        titlesData: FlTitlesData(
-          rightTitles:
-              const AxisTitles(sideTitles: SideTitles(showTitles: false)),
-          topTitles:
-              const AxisTitles(sideTitles: SideTitles(showTitles: false)),
-          leftTitles: AxisTitles(
-            sideTitles: SideTitles(
-              showTitles: true,
-              reservedSize: 28,
-              getTitlesWidget: (val, meta) {
-                if (val % 1 != 0) return const SizedBox.shrink();
-                return Text(
-                  val.toInt().toString(),
-                  style: GoogleFonts.inter(
-                    fontSize: 10.5,
-                    color: const Color(0xFF94A3B8),
+        final double maxY = ((maxDataY * 1.15) / stepY).ceil() * stepY;
+
+        final rodWidth = (pointWidth * 0.24).clamp(5.0, 14.0);
+
+        final barGroups = <BarChartGroupData>[];
+        for (int i = 0; i < trendData.length; i++) {
+          final point = trendData[i];
+          barGroups.add(
+            BarChartGroupData(
+              x: i,
+              barsSpace: 3,
+              barRods: [
+                BarChartRodData(
+                  toY: point.lostCount.toDouble(),
+                  color: const Color(0xFFEA580C),
+                  width: rodWidth,
+                  borderRadius: const BorderRadius.only(
+                    topLeft: Radius.circular(3),
+                    topRight: Radius.circular(3),
                   ),
-                );
-              },
+                ),
+                BarChartRodData(
+                  toY: point.foundCount.toDouble(),
+                  color: const Color(0xFF16A34A),
+                  width: rodWidth,
+                  borderRadius: const BorderRadius.only(
+                    topLeft: Radius.circular(3),
+                    topRight: Radius.circular(3),
+                  ),
+                ),
+              ],
             ),
-          ),
-          bottomTitles: AxisTitles(
-            sideTitles: SideTitles(
-              showTitles: true,
-              reservedSize: 26,
-              interval: 1.0,
-              getTitlesWidget: (val, meta) {
-                final int idx = val.toInt();
-                // Reject fractional ticks and out of range indices
-                if ((val - idx).abs() > 0.001) return const SizedBox.shrink();
-                final total = trendData.length;
-                if (idx < 0 || idx >= total) {
-                  return const SizedBox.shrink();
-                }
+          );
+        }
 
-                // Show evenly spaced labels without colliding into each other
-                final step = (total / 4).ceil().clamp(1, 10);
-                final isFirst = idx == 0;
-                final isLast = idx == total - 1;
+        return BarChart(
+          BarChartData(
+            alignment: BarChartAlignment.spaceAround,
+            maxY: maxY,
+            minY: 0,
+            gridData: FlGridData(
+              show: true,
+              drawVerticalLine: false,
+              drawHorizontalLine: true,
+              horizontalInterval: stepY,
+              checkToShowHorizontalLine: (value) => true,
+              getDrawingHorizontalLine: (value) => const FlLine(
+                color: Color(0xFFCBD5E1),
+                strokeWidth: 1.3,
+              ),
+            ),
+            titlesData: FlTitlesData(
+              rightTitles:
+                  const AxisTitles(sideTitles: SideTitles(showTitles: false)),
+              topTitles:
+                  const AxisTitles(sideTitles: SideTitles(showTitles: false)),
+              leftTitles: AxisTitles(
+                sideTitles: SideTitles(
+                  showTitles: true,
+                  reservedSize: 42,
+                  interval: stepY,
+                  getTitlesWidget: (val, meta) {
+                    if (val < 0 || val > maxY) return const SizedBox.shrink();
+                    return SideTitleWidget(
+                      axisSide: meta.axisSide,
+                      space: 8,
+                      child: Text(
+                        val.toInt().toString(),
+                        style: GoogleFonts.inter(
+                          fontSize: 11,
+                          fontWeight: FontWeight.w600,
+                          color: const Color(0xFF64748B),
+                        ),
+                      ),
+                    );
+                  },
+                ),
+              ),
+              bottomTitles: AxisTitles(
+                sideTitles: SideTitles(
+                  showTitles: true,
+                  reservedSize: 34,
+                  interval: 1.0,
+                  getTitlesWidget: (val, meta) {
+                    final int idx = val.toInt();
+                    if ((val - idx).abs() > 0.001) return const SizedBox.shrink();
+                    if (idx < 0 || idx >= total) {
+                      return const SizedBox.shrink();
+                    }
 
-                if (!isFirst && !isLast && (idx % step != 0)) {
-                  return const SizedBox.shrink();
-                }
+                    final point = trendData[idx];
 
-                // Prevent collision with the last label at the right boundary
-                if (!isLast && (total - 1 - idx) < step) {
-                  return const SizedBox.shrink();
-                }
+                    Widget labelWidget;
+                    if (currentGranularity == TrendGranularity.daily) {
+                      if (pointWidth >= 52) {
+                        labelWidget = Text(
+                          point.label,
+                          style: GoogleFonts.inter(
+                            fontSize: 10,
+                            fontWeight: FontWeight.w600,
+                            color: const Color(0xFF64748B),
+                          ),
+                        );
+                      } else if (pointWidth >= 28) {
+                        labelWidget = Column(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Text(
+                              _monthAbbr(point.date),
+                              style: GoogleFonts.inter(
+                                fontSize: 8.5,
+                                fontWeight: FontWeight.w500,
+                                color: const Color(0xFF94A3B8),
+                                height: 1.0,
+                              ),
+                            ),
+                            const SizedBox(height: 1),
+                            Text(
+                              point.date.day.toString().padLeft(2, '0'),
+                              style: GoogleFonts.inter(
+                                fontSize: 9.5,
+                                fontWeight: FontWeight.w700,
+                                color: const Color(0xFF475569),
+                                height: 1.0,
+                              ),
+                            ),
+                          ],
+                        );
+                      } else {
+                        labelWidget = Text(
+                          '${point.date.day}',
+                          style: GoogleFonts.inter(
+                            fontSize: 9,
+                            fontWeight: FontWeight.w600,
+                            color: const Color(0xFF64748B),
+                          ),
+                        );
+                      }
+                    } else {
+                      labelWidget = Text(
+                        point.label,
+                        style: GoogleFonts.inter(
+                          fontSize: pointWidth < 45 ? 9 : 10,
+                          fontWeight: FontWeight.w500,
+                          color: const Color(0xFF64748B),
+                        ),
+                      );
+                    }
 
-                return Padding(
-                  padding: const EdgeInsets.only(top: 6),
-                  child: Text(
-                    trendData[idx].label,
+                    return SideTitleWidget(
+                      axisSide: meta.axisSide,
+                      space: 6,
+                      child: labelWidget,
+                    );
+                  },
+                ),
+              ),
+            ),
+        borderData: FlBorderData(show: false),
+        barTouchData: BarTouchData(
+          enabled: true,
+          touchTooltipData: BarTouchTooltipData(
+            getTooltipColor: (group) => const Color(0xFF1E293B),
+            tooltipRoundedRadius: 8,
+            tooltipPadding:
+                const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+            getTooltipItem: (group, groupIndex, rod, rodIndex) {
+              final isLost = rodIndex == 0;
+              final idx = group.x;
+              final dateLabel = (idx >= 0 && idx < trendData.length)
+                  ? trendData[idx].label
+                  : '';
+              return BarTooltipItem(
+                '${isLost ? 'Lost' : 'Found'}: ${rod.toY.toInt()}\n',
+                GoogleFonts.inter(
+                  fontSize: 11,
+                  fontWeight: FontWeight.w700,
+                  color: isLost
+                      ? const Color(0xFFFB923C)
+                      : const Color(0xFF4ADE80),
+                ),
+                children: [
+                  TextSpan(
+                    text: dateLabel,
                     style: GoogleFonts.inter(
                       fontSize: 10,
-                      fontWeight: FontWeight.w500,
-                      color: const Color(0xFF64748B),
+                      fontWeight: FontWeight.w400,
+                      color: const Color(0xFF94A3B8),
                     ),
                   ),
-                );
-              },
-            ),
-          ),
-        ),
-        borderData: FlBorderData(show: false),
-        clipData: const FlClipData.all(),
-        minX: 0,
-        maxX: (trendData.length - 1).toDouble().clamp(0.0, 100.0),
-        minY: 0,
-        maxY: maxY,
-        lineTouchData: LineTouchData(
-          touchTooltipData: LineTouchTooltipData(
-            getTooltipItems: (touchedSpots) {
-              return touchedSpots.map((spot) {
-                final isLost = spot.barIndex == 0;
-                final idx = spot.x.toInt();
-                final dateLabel =
-                    (idx >= 0 && idx < trendData.length) ? trendData[idx].label : '';
-                return LineTooltipItem(
-                  '${isLost ? 'Lost' : 'Found'}: ${spot.y.toInt()} ($dateLabel)',
-                  GoogleFonts.inter(
-                    fontSize: 11,
-                    fontWeight: FontWeight.w600,
-                    color: Colors.white,
-                  ),
-                );
-              }).toList();
+                ],
+              );
             },
           ),
         ),
-        lineBarsData: [
-          // Lost curve
-          LineChartBarData(
-            spots: lostSpots,
-            isCurved: true,
-            curveSmoothness: 0.25,
-            preventCurveOverShooting: true,
-            color: const Color(0xFFEA580C),
-            barWidth: 3,
-            isStrokeCapRound: true,
-            dotData: const FlDotData(show: true),
-            belowBarData: BarAreaData(
-              show: true,
-              color: const Color(0xFFEA580C).withOpacity(0.12),
-            ),
-          ),
-          // Found curve
-          LineChartBarData(
-            spots: foundSpots,
-            isCurved: true,
-            curveSmoothness: 0.25,
-            preventCurveOverShooting: true,
-            color: const Color(0xFF16A34A),
-            barWidth: 3,
-            isStrokeCapRound: true,
-            dotData: const FlDotData(show: true),
-            belowBarData: BarAreaData(
-              show: true,
-              color: const Color(0xFF16A34A).withOpacity(0.12),
-            ),
-          ),
-        ],
+        barGroups: barGroups,
       ),
+    );
+      },
     );
   }
 }

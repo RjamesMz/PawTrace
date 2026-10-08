@@ -199,6 +199,16 @@ class UsersDataTableSource extends DataTableSource {
                       ),
                     ),
                     const PopupMenuItem(
+                      value: 'view_id',
+                      child: Row(
+                        children: [
+                          Icon(Icons.badge_outlined, size: 16, color: AppColors.primary),
+                          SizedBox(width: 8),
+                          Text('View ID'),
+                        ],
+                      ),
+                    ),
+                    const PopupMenuItem(
                       value: 'contact',
                       child: Row(
                         children: [

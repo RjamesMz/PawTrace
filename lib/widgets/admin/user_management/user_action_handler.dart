@@ -1,8 +1,10 @@
+import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../../core/app_colors.dart';
 import '../../../core/app_toast.dart';
+import '../../../services/auth/user_id_service.dart';
 
 /// Handles user actions such as viewing details and deactivating/reactivating accounts
 class UserActionHandler {
@@ -192,7 +194,9 @@ class UserActionHandler {
                         _buildDetailRow(
                           icon: Icons.verified_user_outlined,
                           label: 'Email Verification',
-                          value: isUserVerified ? 'Verified' : 'Pending Verification',
+                          value: isUserVerified
+                              ? 'Verified'
+                              : 'Pending Verification',
                           valueColor: isUserVerified
                               ? const Color(0xFF16A34A)
                               : const Color(0xFFD97706),
@@ -244,6 +248,8 @@ class UserActionHandler {
             : 'No phone number for $fullName',
         icon: Icons.phone_rounded,
       );
+    } else if (action == 'view_id') {
+      await _showViewIdDialog(context, user, onRefresh);
     } else if (action == 'delete' ||
         action == 'deactivate' ||
         action == 'toggle_status') {
@@ -371,8 +377,7 @@ class UserActionHandler {
                               const SizedBox(width: 12),
                               Expanded(
                                 child: Column(
-                                  crossAxisAlignment:
-                                      CrossAxisAlignment.start,
+                                  crossAxisAlignment: CrossAxisAlignment.start,
                                   children: [
                                     Text(
                                       fullName.isNotEmpty
@@ -478,8 +483,8 @@ class UserActionHandler {
                                 onPressed: () => Navigator.pop(ctx, false),
                                 style: OutlinedButton.styleFrom(
                                   foregroundColor: const Color(0xFF4B5563),
-                                  side:
-                                      const BorderSide(color: Color(0xFFD1D5DB)),
+                                  side: const BorderSide(
+                                      color: Color(0xFFD1D5DB)),
                                   padding:
                                       const EdgeInsets.symmetric(vertical: 13),
                                   shape: RoundedRectangleBorder(
@@ -617,5 +622,713 @@ class UserActionHandler {
       ),
     );
   }
-}
 
+  // ══════════════════════════════════════════════════════════════════════════
+  //  VIEW ID DIALOG (Authorized Admin Only)
+  // ══════════════════════════════════════════════════════════════════════════
+
+  static Future<void> _showViewIdDialog(
+    BuildContext context,
+    Map<String, dynamic> user,
+    Future<void> Function() onRefresh,
+  ) async {
+    final fName = user['first_name'] ?? '';
+    final sName = user['surname'] ?? '';
+    final fullName = '$fName $sName'.trim();
+    final phone = user['phone']?.toString() ?? '';
+    final email = user['email']?.toString() ?? '';
+    final barangay = user['barangay']?.toString() ?? 'Unspecified';
+    final role = (user['role'] ?? 'user').toString().toUpperCase();
+
+    final rawStatus = (user['status'] ?? 'unverified').toString().toLowerCase();
+    final isDeactivated =
+        rawStatus == 'deactivated' || rawStatus == 'de_activated';
+    final isUnverified = rawStatus == 'unverified' || rawStatus == 'pending';
+    final isVerified = !isDeactivated && !isUnverified;
+
+    await showDialog(
+      context: context,
+      barrierColor: Colors.black54,
+      builder: (ctx) => Dialog(
+        backgroundColor: Colors.transparent,
+        insetPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 24),
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 680),
+          child: Container(
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(24),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withOpacity(0.14),
+                  blurRadius: 36,
+                  offset: const Offset(0, 12),
+                ),
+              ],
+            ),
+            clipBehavior: Clip.antiAlias,
+            child: FutureBuilder<Map<String, dynamic>>(
+              future: UserIdService.getIdData(user),
+              builder: (context, snapshot) {
+                final idData = snapshot.data ?? {};
+                final frontUrl = idData['id_front_url'] as String?;
+                final backUrl = idData['id_back_url'] as String?;
+                final uploadedAtRaw = idData['id_uploaded_at'] as String?;
+                final idType = idData['id_type']?.toString() ?? 'Not recorded';
+                final validationStatus =
+                    idData['validation_status']?.toString() ?? 'Not recorded';
+                final matchScore = idData['name_match_score'] is num
+                    ? '${(idData['name_match_score'] as num).toStringAsFixed(0)}%'
+                    : 'Not recorded';
+                final ocrText = idData['ocr_extracted_text']?.toString() ?? '';
+                final hasIds = idData['has_ids'] == true;
+
+                String formattedDate = 'Not recorded';
+                if (uploadedAtRaw != null && uploadedAtRaw.isNotEmpty) {
+                  try {
+                    final dt = DateTime.parse(uploadedAtRaw).toLocal();
+                    const months = [
+                      'Jan',
+                      'Feb',
+                      'Mar',
+                      'Apr',
+                      'May',
+                      'Jun',
+                      'Jul',
+                      'Aug',
+                      'Sep',
+                      'Oct',
+                      'Nov',
+                      'Dec'
+                    ];
+                    final h = dt.hour == 0
+                        ? 12
+                        : (dt.hour > 12 ? dt.hour - 12 : dt.hour);
+                    final m = dt.minute.toString().padLeft(2, '0');
+                    final ampm = dt.hour < 12 ? 'AM' : 'PM';
+                    formattedDate =
+                        '${months[dt.month - 1]} ${dt.day}, ${dt.year} at $h:$m $ampm';
+                  } catch (_) {
+                    formattedDate = uploadedAtRaw;
+                  }
+                }
+
+                return SingleChildScrollView(
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      // Top Strip
+                      Container(
+                        height: 5,
+                        color: AppColors.primary,
+                      ),
+
+                      // Header
+                      Padding(
+                        padding: const EdgeInsets.fromLTRB(24, 20, 20, 14),
+                        child: Row(
+                          children: [
+                            Container(
+                              padding: const EdgeInsets.all(10),
+                              decoration: BoxDecoration(
+                                color:
+                                    AppColors.primaryContainer.withOpacity(0.4),
+                                borderRadius: BorderRadius.circular(12),
+                              ),
+                              child: const Icon(
+                                Icons.badge_rounded,
+                                color: AppColors.primary,
+                                size: 24,
+                              ),
+                            ),
+                            const SizedBox(width: 14),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    'Valid ID Verification',
+                                    style: GoogleFonts.montserrat(
+                                      fontSize: 18,
+                                      fontWeight: FontWeight.w700,
+                                      color: const Color(0xFF111827),
+                                    ),
+                                  ),
+                                  const SizedBox(height: 2),
+                                  Text(
+                                    'Submitted government identification documents',
+                                    style: GoogleFonts.inter(
+                                      fontSize: 12.5,
+                                      color: const Color(0xFF6B7280),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                            IconButton(
+                              icon: const Icon(Icons.close_rounded,
+                                  color: Color(0xFF94A3B8)),
+                              tooltip: 'Close',
+                              onPressed: () => Navigator.pop(ctx),
+                            ),
+                          ],
+                        ),
+                      ),
+                      const Divider(height: 1, color: Color(0xFFF3F4F6)),
+
+                      // Account Summary Card
+                      Padding(
+                        padding: const EdgeInsets.fromLTRB(24, 16, 24, 16),
+                        child: Container(
+                          padding: const EdgeInsets.all(16),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFFF8FAFC),
+                            borderRadius: BorderRadius.circular(16),
+                            border: Border.all(color: const Color(0xFFE2E8F0)),
+                          ),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Row(
+                                children: [
+                                  CircleAvatar(
+                                    radius: 22,
+                                    backgroundColor:
+                                        AppColors.primary.withOpacity(0.15),
+                                    child: Text(
+                                      (fullName.isNotEmpty
+                                              ? fullName[0]
+                                              : (email.isNotEmpty
+                                                  ? email[0]
+                                                  : 'U'))
+                                          .toUpperCase(),
+                                      style: GoogleFonts.montserrat(
+                                        fontSize: 16,
+                                        fontWeight: FontWeight.w800,
+                                        color: AppColors.primary,
+                                      ),
+                                    ),
+                                  ),
+                                  const SizedBox(width: 12),
+                                  Expanded(
+                                    child: Column(
+                                      crossAxisAlignment:
+                                          CrossAxisAlignment.start,
+                                      children: [
+                                        Text(
+                                          fullName.isNotEmpty
+                                              ? fullName
+                                              : 'Registered User',
+                                          style: GoogleFonts.montserrat(
+                                            fontSize: 15,
+                                            fontWeight: FontWeight.w700,
+                                            color: const Color(0xFF111827),
+                                          ),
+                                        ),
+                                        Text(
+                                          email.isNotEmpty ? email : phone,
+                                          style: GoogleFonts.inter(
+                                            fontSize: 12.5,
+                                            color: const Color(0xFF64748B),
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                  // Verification Badge
+                                  Container(
+                                    padding: const EdgeInsets.symmetric(
+                                        horizontal: 10, vertical: 4),
+                                    decoration: BoxDecoration(
+                                      color: isDeactivated
+                                          ? const Color(0xFFEF4444)
+                                              .withOpacity(0.12)
+                                          : (isVerified
+                                              ? const Color(0xFF22C55E)
+                                                  .withOpacity(0.12)
+                                              : const Color(0xFFF59E0B)
+                                                  .withOpacity(0.12)),
+                                      borderRadius: BorderRadius.circular(20),
+                                    ),
+                                    child: Text(
+                                      isDeactivated
+                                          ? 'DEACTIVATED'
+                                          : (isVerified
+                                              ? 'VERIFIED'
+                                              : 'UNVERIFIED'),
+                                      style: GoogleFonts.inter(
+                                        fontSize: 11,
+                                        fontWeight: FontWeight.w700,
+                                        color: isDeactivated
+                                            ? const Color(0xFFDC2626)
+                                            : (isVerified
+                                                ? const Color(0xFF16A34A)
+                                                : const Color(0xFFD97706)),
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                              const SizedBox(height: 12),
+                              const Divider(
+                                  height: 1, color: Color(0xFFE2E8F0)),
+                              const SizedBox(height: 10),
+                              Wrap(
+                                spacing: 16,
+                                runSpacing: 8,
+                                children: [
+                                  _idMetaItem(Icons.location_on_outlined,
+                                      'Barangay', 'Brgy. $barangay'),
+                                  _idMetaItem(Icons.phone_outlined, 'Phone',
+                                      phone.isNotEmpty ? phone : '-'),
+                                  _idMetaItem(Icons.calendar_today_outlined,
+                                      'Upload Date', formattedDate),
+                                  _idMetaItem(
+                                      Icons.shield_outlined, 'Role', role),
+                                  _idMetaItem(
+                                      Icons.badge_outlined, 'ID Type', idType),
+                                  _idMetaItem(Icons.fact_check_outlined,
+                                      'Validation', validationStatus),
+                                  _idMetaItem(Icons.percent_rounded,
+                                      'Name Match', matchScore),
+                                ],
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+
+                      if (ocrText.isNotEmpty)
+                        Padding(
+                          padding: const EdgeInsets.fromLTRB(24, 0, 24, 20),
+                          child: Container(
+                            padding: const EdgeInsets.all(14),
+                            decoration: BoxDecoration(
+                              color: const Color(0xFFF8FAFC),
+                              borderRadius: BorderRadius.circular(14),
+                              border:
+                                  Border.all(color: const Color(0xFFE2E8F0)),
+                            ),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  'OCR Extracted Text',
+                                  style: GoogleFonts.montserrat(
+                                    fontSize: 13,
+                                    fontWeight: FontWeight.w700,
+                                    color: const Color(0xFF1E293B),
+                                  ),
+                                ),
+                                const SizedBox(height: 6),
+                                SelectableText(
+                                  ocrText,
+                                  style: GoogleFonts.inter(
+                                    fontSize: 12,
+                                    height: 1.45,
+                                    color: const Color(0xFF475569),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+
+                      // ID Images Preview
+                      Padding(
+                        padding: const EdgeInsets.fromLTRB(24, 0, 24, 20),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              'Submitted Identification Cards',
+                              style: GoogleFonts.montserrat(
+                                fontSize: 14,
+                                fontWeight: FontWeight.w700,
+                                color: const Color(0xFF1E293B),
+                              ),
+                            ),
+                            const SizedBox(height: 12),
+                            if (snapshot.connectionState ==
+                                ConnectionState.waiting)
+                              const Center(
+                                child: Padding(
+                                  padding: EdgeInsets.all(40),
+                                  child: CircularProgressIndicator(
+                                      color: AppColors.primary),
+                                ),
+                              )
+                            else if (!hasIds)
+                              Container(
+                                width: double.infinity,
+                                padding: const EdgeInsets.all(32),
+                                decoration: BoxDecoration(
+                                  color: const Color(0xFFF8FAFC),
+                                  borderRadius: BorderRadius.circular(16),
+                                  border: Border.all(
+                                      color: const Color(0xFFE2E8F0)),
+                                ),
+                                child: Column(
+                                  children: [
+                                    Icon(Icons.no_accounts_outlined,
+                                        size: 46, color: Colors.grey.shade400),
+                                    const SizedBox(height: 10),
+                                    Text(
+                                      'No ID photos on file',
+                                      style: GoogleFonts.montserrat(
+                                        fontSize: 14.5,
+                                        fontWeight: FontWeight.w700,
+                                        color: const Color(0xFF475569),
+                                      ),
+                                    ),
+                                    const SizedBox(height: 4),
+                                    Text(
+                                      'This user registered before the valid ID upload requirement.',
+                                      style: GoogleFonts.inter(
+                                        fontSize: 12,
+                                        color: const Color(0xFF64748B),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              )
+                            else
+                              LayoutBuilder(
+                                builder: (context, constraints) {
+                                  final isWide = constraints.maxWidth >= 500;
+                                  final frontCard = _buildAdminIdCard(
+                                    context: context,
+                                    label: 'ID Front',
+                                    url: frontUrl,
+                                  );
+                                  final backCard = _buildAdminIdCard(
+                                    context: context,
+                                    label: 'ID Back',
+                                    url: backUrl,
+                                  );
+
+                                  if (isWide) {
+                                    return Row(
+                                      children: [
+                                        Expanded(child: frontCard),
+                                        const SizedBox(width: 14),
+                                        Expanded(child: backCard),
+                                      ],
+                                    );
+                                  }
+                                  return Column(
+                                    children: [
+                                      frontCard,
+                                      const SizedBox(height: 14),
+                                      backCard,
+                                    ],
+                                  );
+                                },
+                              ),
+                          ],
+                        ),
+                      ),
+
+                      // Footer Actions
+                      Container(
+                        padding: const EdgeInsets.fromLTRB(24, 14, 24, 20),
+                        decoration: const BoxDecoration(
+                          color: Color(0xFFF8FAFC),
+                          border: Border(
+                            top: BorderSide(color: Color(0xFFF1F5F9)),
+                          ),
+                        ),
+                        child: Row(
+                          mainAxisAlignment: MainAxisAlignment.end,
+                          children: [
+                            TextButton(
+                              onPressed: () => Navigator.pop(ctx),
+                              style: TextButton.styleFrom(
+                                padding: const EdgeInsets.symmetric(
+                                    horizontal: 18, vertical: 12),
+                                shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(10)),
+                              ),
+                              child: Text(
+                                'Close',
+                                style: GoogleFonts.inter(
+                                  fontWeight: FontWeight.w600,
+                                  color: const Color(0xFF64748B),
+                                ),
+                              ),
+                            ),
+                            if (isUnverified) ...[
+                              const SizedBox(width: 10),
+                              ElevatedButton.icon(
+                                onPressed: () async {
+                                  final uid = user['user_id']?.toString() ?? '';
+                                  if (uid.isNotEmpty) {
+                                    try {
+                                      await Supabase.instance.client
+                                          .from('users')
+                                          .update({'status': 'active'}).eq(
+                                              'user_id', uid);
+                                      if (context.mounted) {
+                                        AppToast.show(
+                                          context,
+                                          '$fullName is now marked as Verified.',
+                                          icon: Icons.check_circle_rounded,
+                                        );
+                                      }
+                                      if (ctx.mounted) {
+                                        Navigator.pop(ctx);
+                                      }
+                                      await onRefresh();
+                                    } catch (e) {
+                                      if (context.mounted) {
+                                        AppToast.error(context,
+                                            'Error verifying user: $e');
+                                      }
+                                    }
+                                  }
+                                },
+                                icon: const Icon(Icons.verified_user_rounded,
+                                    size: 16),
+                                label: Text(
+                                  'Mark as Verified',
+                                  style: GoogleFonts.inter(
+                                      fontWeight: FontWeight.w700),
+                                ),
+                                style: ElevatedButton.styleFrom(
+                                  backgroundColor: const Color(0xFF16A34A),
+                                  foregroundColor: Colors.white,
+                                  elevation: 0,
+                                  padding: const EdgeInsets.symmetric(
+                                      horizontal: 18, vertical: 12),
+                                  shape: RoundedRectangleBorder(
+                                      borderRadius: BorderRadius.circular(10)),
+                                ),
+                              ),
+                            ],
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                );
+              },
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  static Widget _idMetaItem(IconData icon, String label, String value) {
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Icon(icon, size: 14, color: const Color(0xFF64748B)),
+        const SizedBox(width: 5),
+        Text(
+          '$label: ',
+          style: GoogleFonts.inter(
+            fontSize: 12,
+            color: const Color(0xFF64748B),
+          ),
+        ),
+        Text(
+          value,
+          style: GoogleFonts.inter(
+            fontSize: 12,
+            fontWeight: FontWeight.w600,
+            color: const Color(0xFF0F172A),
+          ),
+        ),
+      ],
+    );
+  }
+
+  static Widget _buildAdminIdCard({
+    required BuildContext context,
+    required String label,
+    required String? url,
+  }) {
+    final hasUrl = url != null && url.isNotEmpty;
+
+    return Container(
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: const Color(0xFFCBD5E1)),
+      ),
+      clipBehavior: Clip.antiAlias,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          // Card Header
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+            color: const Color(0xFFF1F5F9),
+            child: Row(
+              children: [
+                const Icon(Icons.credit_card_rounded,
+                    size: 15, color: AppColors.primary),
+                const SizedBox(width: 6),
+                Text(
+                  label,
+                  style: GoogleFonts.inter(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w700,
+                    color: const Color(0xFF1E293B),
+                  ),
+                ),
+                const Spacer(),
+                if (hasUrl)
+                  InkWell(
+                    onTap: () => _showZoomableImageDialog(context, label, url),
+                    borderRadius: BorderRadius.circular(6),
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 6, vertical: 2),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          const Icon(Icons.fullscreen_rounded,
+                              size: 14, color: AppColors.primary),
+                          const SizedBox(width: 3),
+                          Text(
+                            'Zoom',
+                            style: GoogleFonts.inter(
+                              fontSize: 11,
+                              fontWeight: FontWeight.w600,
+                              color: AppColors.primary,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+              ],
+            ),
+          ),
+
+          // Image Preview Container
+          InkWell(
+            onTap: hasUrl
+                ? () => _showZoomableImageDialog(context, label, url)
+                : null,
+            child: SizedBox(
+              height: 180,
+              child: !hasUrl
+                  ? Center(
+                      child: Text(
+                        'Not provided',
+                        style: GoogleFonts.inter(
+                          fontSize: 12,
+                          color: const Color(0xFF94A3B8),
+                        ),
+                      ),
+                    )
+                  : url.startsWith('data:image')
+                      ? Image.memory(
+                          base64Decode(url.split(',').last),
+                          fit: BoxFit.contain,
+                        )
+                      : Image.network(
+                          url,
+                          fit: BoxFit.contain,
+                          loadingBuilder: (ctx, child, progress) {
+                            if (progress == null) return child;
+                            return const Center(
+                              child: SizedBox(
+                                width: 24,
+                                height: 24,
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 2,
+                                  color: AppColors.primary,
+                                ),
+                              ),
+                            );
+                          },
+                          errorBuilder: (_, __, ___) => Center(
+                            child: Column(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                const Icon(Icons.broken_image_rounded,
+                                    size: 32, color: Color(0xFFCBD5E1)),
+                                const SizedBox(height: 6),
+                                Text(
+                                  'Image unavailable',
+                                  style: GoogleFonts.inter(
+                                    fontSize: 11,
+                                    color: const Color(0xFF94A3B8),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  static void _showZoomableImageDialog(
+    BuildContext context,
+    String title,
+    String url,
+  ) {
+    showDialog(
+      context: context,
+      barrierColor: Colors.black87,
+      builder: (ctx) => Dialog(
+        backgroundColor: Colors.transparent,
+        insetPadding: const EdgeInsets.all(16),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Text(
+                  title,
+                  style: GoogleFonts.montserrat(
+                    fontSize: 16,
+                    fontWeight: FontWeight.w700,
+                    color: Colors.white,
+                  ),
+                ),
+                IconButton(
+                  icon: const Icon(Icons.close_rounded, color: Colors.white),
+                  onPressed: () => Navigator.pop(ctx),
+                ),
+              ],
+            ),
+            const SizedBox(height: 8),
+            Flexible(
+              child: ClipRRect(
+                borderRadius: BorderRadius.circular(16),
+                child: Container(
+                  color: Colors.black,
+                  child: InteractiveViewer(
+                    panEnabled: true,
+                    minScale: 0.5,
+                    maxScale: 4.0,
+                    child: url.startsWith('data:image')
+                        ? Image.memory(
+                            base64Decode(url.split(',').last),
+                            fit: BoxFit.contain,
+                          )
+                        : Image.network(
+                            url,
+                            fit: BoxFit.contain,
+                          ),
+                  ),
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}

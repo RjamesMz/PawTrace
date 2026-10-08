@@ -26,13 +26,13 @@ class PetDemographicsDonutCharts extends StatelessWidget {
   Widget build(BuildContext context) {
     return LayoutBuilder(
       builder: (context, constraints) {
-        final isWide = constraints.maxWidth >= 700;
+        final isWide = constraints.maxWidth >= 420;
         if (isWide) {
           return Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Expanded(child: _buildSpeciesDonutCard()),
-              const SizedBox(width: 16),
+              const SizedBox(width: 12),
               Expanded(child: _buildStatusDonutCard()),
             ],
           );
@@ -40,7 +40,7 @@ class PetDemographicsDonutCharts extends StatelessWidget {
         return Column(
           children: [
             _buildSpeciesDonutCard(),
-            const SizedBox(height: 16),
+            const SizedBox(height: 12),
             _buildStatusDonutCard(),
           ],
         );
@@ -53,17 +53,19 @@ class PetDemographicsDonutCharts extends StatelessWidget {
     final catPct = total > 0 ? (catCount / total * 100).round() : 0;
     final dogPct = total > 0 ? (dogCount / total * 100).round() : 0;
 
+    final otherPct = total > 0 ? (otherSpeciesCount / total * 100).round() : 0;
+
     return Container(
-      padding: const EdgeInsets.all(20),
+      padding: const EdgeInsets.fromLTRB(16, 14, 16, 16),
       decoration: BoxDecoration(
         color: Colors.white,
-        borderRadius: BorderRadius.circular(20),
+        borderRadius: BorderRadius.circular(16),
         border: Border.all(color: const Color(0xFFE2E8F0)),
         boxShadow: [
           BoxShadow(
             color: Colors.black.withOpacity(0.02),
-            blurRadius: 10,
-            offset: const Offset(0, 4),
+            blurRadius: 8,
+            offset: const Offset(0, 2),
           ),
         ],
       ),
@@ -76,13 +78,13 @@ class PetDemographicsDonutCharts extends StatelessWidget {
               Text(
                 'Species Ratio',
                 style: GoogleFonts.montserrat(
-                  fontSize: 15,
+                  fontSize: 13.5,
                   fontWeight: FontWeight.w700,
                   color: const Color(0xFF0F172A),
                 ),
               ),
               Container(
-                padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
+                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
                 decoration: BoxDecoration(
                   color: const Color(0xFFF1F5F9),
                   borderRadius: BorderRadius.circular(6),
@@ -90,7 +92,7 @@ class PetDemographicsDonutCharts extends StatelessWidget {
                 child: Text(
                   '$total Pets',
                   style: GoogleFonts.inter(
-                    fontSize: 11,
+                    fontSize: 10,
                     fontWeight: FontWeight.w600,
                     color: const Color(0xFF475569),
                   ),
@@ -98,36 +100,36 @@ class PetDemographicsDonutCharts extends StatelessWidget {
               ),
             ],
           ),
-          const SizedBox(height: 2),
+          const SizedBox(height: 1),
           Text(
             'Cat vs. Dog registered community balance',
             style: GoogleFonts.inter(
-              fontSize: 11.5,
+              fontSize: 10.5,
               color: const Color(0xFF64748B),
             ),
           ),
-          const SizedBox(height: 20),
+          const SizedBox(height: 14),
           SizedBox(
-            height: 160,
+            height: 150,
             child: total == 0
-                ? const Center(child: Text('No pets registered'))
+                ? const Center(child: Text('No pets registered', style: TextStyle(fontSize: 11)))
                 : Row(
                     children: [
                       Expanded(
                         flex: 5,
                         child: PieChart(
                           PieChartData(
-                            sectionsSpace: 3,
-                            centerSpaceRadius: 40,
+                            sectionsSpace: 2,
+                            centerSpaceRadius: 28,
                             sections: [
                               PieChartSectionData(
                                 color: const Color(0xFFF97316), // Orange Cat
                                 value:
                                     catCount > 0 ? catCount.toDouble() : 0.001,
                                 title: '$catPct%',
-                                radius: 28,
+                                radius: 20,
                                 titleStyle: GoogleFonts.inter(
-                                  fontSize: 11,
+                                  fontSize: 10,
                                   fontWeight: FontWeight.bold,
                                   color: Colors.white,
                                 ),
@@ -137,18 +139,30 @@ class PetDemographicsDonutCharts extends StatelessWidget {
                                 value:
                                     dogCount > 0 ? dogCount.toDouble() : 0.001,
                                 title: '$dogPct%',
-                                radius: 28,
+                                radius: 20,
                                 titleStyle: GoogleFonts.inter(
-                                  fontSize: 11,
+                                  fontSize: 10,
                                   fontWeight: FontWeight.bold,
                                   color: Colors.white,
                                 ),
                               ),
+                              if (otherSpeciesCount > 0)
+                                PieChartSectionData(
+                                  color: const Color(0xFF10B981), // Emerald
+                                  value: otherSpeciesCount.toDouble(),
+                                  title: '$otherPct%',
+                                  radius: 20,
+                                  titleStyle: GoogleFonts.inter(
+                                    fontSize: 10,
+                                    fontWeight: FontWeight.bold,
+                                    color: Colors.white,
+                                  ),
+                                ),
                             ],
                           ),
                         ),
                       ),
-                      const SizedBox(width: 12),
+                      const SizedBox(width: 8),
                       Expanded(
                         flex: 4,
                         child: Column(
@@ -160,12 +174,20 @@ class PetDemographicsDonutCharts extends StatelessWidget {
                               label: '🐱 Cats',
                               count: catCount,
                             ),
-                            const SizedBox(height: 12),
+                            const SizedBox(height: 8),
                             _buildLegendRow(
                               color: const Color(0xFF3B82F6),
                               label: '🐶 Dogs',
                               count: dogCount,
                             ),
+                            if (otherSpeciesCount > 0) ...[
+                              const SizedBox(height: 8),
+                              _buildLegendRow(
+                                color: const Color(0xFF10B981),
+                                label: '🐾 Other',
+                                count: otherSpeciesCount,
+                              ),
+                            ],
                           ],
                         ),
                       ),
@@ -184,16 +206,16 @@ class PetDemographicsDonutCharts extends StatelessWidget {
     final archPct = total > 0 ? (archivedPetCount / total * 100).round() : 0;
 
     return Container(
-      padding: const EdgeInsets.all(20),
+      padding: const EdgeInsets.fromLTRB(16, 14, 16, 16),
       decoration: BoxDecoration(
         color: Colors.white,
-        borderRadius: BorderRadius.circular(20),
+        borderRadius: BorderRadius.circular(16),
         border: Border.all(color: const Color(0xFFE2E8F0)),
         boxShadow: [
           BoxShadow(
             color: Colors.black.withOpacity(0.02),
-            blurRadius: 10,
-            offset: const Offset(0, 4),
+            blurRadius: 8,
+            offset: const Offset(0, 2),
           ),
         ],
       ),
@@ -206,13 +228,13 @@ class PetDemographicsDonutCharts extends StatelessWidget {
               Text(
                 'Pet Status Composition',
                 style: GoogleFonts.montserrat(
-                  fontSize: 15,
+                  fontSize: 13.5,
                   fontWeight: FontWeight.w700,
                   color: const Color(0xFF0F172A),
                 ),
               ),
               Container(
-                padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
+                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
                 decoration: BoxDecoration(
                   color: const Color(0xFFF1F5F9),
                   borderRadius: BorderRadius.circular(6),
@@ -220,7 +242,7 @@ class PetDemographicsDonutCharts extends StatelessWidget {
                 child: Text(
                   '$total Total',
                   style: GoogleFonts.inter(
-                    fontSize: 11,
+                    fontSize: 10,
                     fontWeight: FontWeight.w600,
                     color: const Color(0xFF475569),
                   ),
@@ -228,27 +250,27 @@ class PetDemographicsDonutCharts extends StatelessWidget {
               ),
             ],
           ),
-          const SizedBox(height: 2),
+          const SizedBox(height: 1),
           Text(
             'Safety, incident, and archive breakdown',
             style: GoogleFonts.inter(
-              fontSize: 11.5,
+              fontSize: 10.5,
               color: const Color(0xFF64748B),
             ),
           ),
-          const SizedBox(height: 20),
+          const SizedBox(height: 14),
           SizedBox(
-            height: 160,
+            height: 150,
             child: total == 0
-                ? const Center(child: Text('No pets registered'))
+                ? const Center(child: Text('No pets registered', style: TextStyle(fontSize: 11)))
                 : Row(
                     children: [
                       Expanded(
                         flex: 5,
                         child: PieChart(
                           PieChartData(
-                            sectionsSpace: 3,
-                            centerSpaceRadius: 40,
+                            sectionsSpace: 2,
+                            centerSpaceRadius: 28,
                             sections: [
                               PieChartSectionData(
                                 color: const Color(0xFF16A34A), // Green Active
@@ -256,9 +278,9 @@ class PetDemographicsDonutCharts extends StatelessWidget {
                                     ? activePetCount.toDouble()
                                     : 0.001,
                                 title: '$activePct%',
-                                radius: 28,
+                                radius: 20,
                                 titleStyle: GoogleFonts.inter(
-                                  fontSize: 11,
+                                  fontSize: 10,
                                   fontWeight: FontWeight.bold,
                                   color: Colors.white,
                                 ),
@@ -269,9 +291,9 @@ class PetDemographicsDonutCharts extends StatelessWidget {
                                     ? lostPetCount.toDouble()
                                     : 0.001,
                                 title: '$lostPct%',
-                                radius: 28,
+                                radius: 20,
                                 titleStyle: GoogleFonts.inter(
-                                  fontSize: 11,
+                                  fontSize: 10,
                                   fontWeight: FontWeight.bold,
                                   color: Colors.white,
                                 ),
@@ -283,9 +305,9 @@ class PetDemographicsDonutCharts extends StatelessWidget {
                                     ? archivedPetCount.toDouble()
                                     : 0.001,
                                 title: archPct > 0 ? '$archPct%' : '',
-                                radius: 28,
+                                radius: 20,
                                 titleStyle: GoogleFonts.inter(
-                                  fontSize: 11,
+                                  fontSize: 10,
                                   fontWeight: FontWeight.bold,
                                   color: Colors.white,
                                 ),
@@ -294,7 +316,7 @@ class PetDemographicsDonutCharts extends StatelessWidget {
                           ),
                         ),
                       ),
-                      const SizedBox(width: 12),
+                      const SizedBox(width: 8),
                       Expanded(
                         flex: 4,
                         child: Column(
@@ -306,13 +328,13 @@ class PetDemographicsDonutCharts extends StatelessWidget {
                               label: 'Active',
                               count: activePetCount,
                             ),
-                            const SizedBox(height: 8),
+                            const SizedBox(height: 4),
                             _buildLegendRow(
                               color: const Color(0xFFDC2626),
                               label: 'Lost',
                               count: lostPetCount,
                             ),
-                            const SizedBox(height: 8),
+                            const SizedBox(height: 4),
                             _buildLegendRow(
                               color: const Color(0xFF94A3B8),
                               label: 'Archived',

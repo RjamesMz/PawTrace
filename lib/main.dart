@@ -22,6 +22,7 @@ import 'screens/auth/email_verified_screen.dart';
 import 'screens/user/locate_pet/locate_my_pet.dart';
 import 'screens/user/my_pets/pet_profile_detail.dart';
 import 'screens/user/lost_pet/report_lost_pet.dart';
+import 'screens/legal/legal_screen.dart';
 
 // Screens - Admin
 import 'screens/admin/user_management/user_management_screen.dart';
@@ -138,6 +139,10 @@ class PetTraceApp extends StatelessWidget {
 
         // ─── Admin ────────────────────────────────────────────────────────────
         AppRoutes.postNews: (_) => const PostNewsScreen(),
+        // ─── Legal & Policies ─────────────────────────────────────────────────
+        AppRoutes.legal: (_) => const LegalScreen(),
+        AppRoutes.privacyPolicy: (_) => const LegalScreen(initialTab: LegalTab.privacy),
+        AppRoutes.termsOfService: (_) => const LegalScreen(initialTab: LegalTab.terms),
         // ─── Verification & Deep Link Callbacks ──────────────────────────────
         AppRoutes.verified: (_) => const EmailVerifiedScreen(),
         AppRoutes.confirm: (_) => const EmailVerifiedScreen(),
