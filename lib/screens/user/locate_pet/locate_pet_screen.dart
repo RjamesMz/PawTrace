@@ -6,6 +6,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../../core/app_colors.dart';
 import '../../../core/app_routes.dart';
 import '../../../core/app_toast.dart';
+import '../../../services/geo/no_signal_mask_service.dart';
 import '../../../widgets/user/pair_collar_dialog.dart';
 import '../../../widgets/user/locate_pet/pet_marker_widget.dart';
 import '../../../widgets/user/locate_pet/locate_pet_top_controls.dart';
@@ -60,6 +61,10 @@ class _LocatePetScreenState extends State<LocatePetScreen> {
   @override
   void initState() {
     super.initState();
+    NoSignalMaskService.instance.loadMask().then((_) {
+      if (mounted) setState(() {});
+    });
+
     currentCollarId = widget.pet['gps_id'] as String?;
     if (currentCollarId != null && currentCollarId!.isNotEmpty) {
       loadCollarLocation();
@@ -264,6 +269,10 @@ class _LocatePetScreenState extends State<LocatePetScreen> {
                                 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
                             userAgentPackageName: 'com.pettrace.app',
                           ),
+                          if (NoSignalMaskService.instance.isLoaded)
+                            PolygonLayer(
+                              polygons: NoSignalMaskService.instance.polygons,
+                            ),
                           if (hasCollar)
                             MarkerLayer(
                               markers: [

@@ -9,6 +9,7 @@ import 'package:url_launcher/url_launcher.dart';
 
 import '../../../core/app_colors.dart';
 import '../../../core/app_toast.dart';
+import '../../../services/geo/no_signal_mask_service.dart';
 import '../../../widgets/admin/pet_location_map_dialog.dart' show PetLocationResult;
 import '../../../widgets/common/photo_placeholder.dart';
 
@@ -46,6 +47,23 @@ class _AdminPetTrackingMapScreenState extends State<AdminPetTrackingMapScreen> {
   bool _isLoading = true;
   bool _isPanelCollapsed = false;
   Map<String, dynamic>? _fetchedUser;
+  bool _showNoSignalOverlay = true;
+  bool _isInNoSignal = false;
+  bool _wasInNoSignal = false;
+
+  void _checkSignalStatus(double? lat, double? lon) {
+    if (lat == null || lon == null) return;
+    final inNoSignal =
+        NoSignalMaskService.instance.isInsideNoSignalZone(lat, lon);
+    if (inNoSignal != _wasInNoSignal) {
+      _wasInNoSignal = inNoSignal;
+      if (mounted) {
+        setState(() {
+          _isInNoSignal = inNoSignal;
+        });
+      }
+    }
+  }
 
   /// Returns true only if the collar ping was received within the last 180 seconds (3 minutes).
   bool get _isLiveGpsActive {
@@ -84,6 +102,13 @@ class _AdminPetTrackingMapScreenState extends State<AdminPetTrackingMapScreen> {
 
     _loadOwnerInfo();
     _loadInitialLocation();
+
+    NoSignalMaskService.instance.loadMask().then((_) {
+      if (mounted) {
+        _checkSignalStatus(_lat, _lon);
+        setState(() {});
+      }
+    });
 
     if (_collarId != null && _collarId!.isNotEmpty) {
       _listenToCollarStream();
@@ -238,6 +263,7 @@ class _AdminPetTrackingMapScreenState extends State<AdminPetTrackingMapScreen> {
             _battery = (latest['battery_level'] ?? latest['battery']) as int?;
             _lastUpdated = latest['recorded_at']?.toString() ?? '';
           });
+          _checkSignalStatus(pLat, pLon);
           _mapController.move(ll.LatLng(pLat, pLon), 16.0);
         }
       },
@@ -354,6 +380,12 @@ class _AdminPetTrackingMapScreenState extends State<AdminPetTrackingMapScreen> {
                             'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
                         userAgentPackageName: 'com.pettrace.app',
                       ),
+                      // ── Catanduanes "No Signal" Overlay (#777, 0.55 opacity) ──
+                      if (_showNoSignalOverlay &&
+                          NoSignalMaskService.instance.isLoaded)
+                        PolygonLayer(
+                          polygons: NoSignalMaskService.instance.polygons,
+                        ),
                       MarkerLayer(
                         markers: [
                           Marker(
@@ -380,11 +412,13 @@ class _AdminPetTrackingMapScreenState extends State<AdminPetTrackingMapScreen> {
                                         ),
                                       ],
                                       border: Border.all(
-                                        color: isLive
-                                            ? const Color(0xFF16A34A)
-                                            : (hasCollar
-                                                ? const Color(0xFFD97706)
-                                                : AppColors.primary),
+                                        color: _isInNoSignal
+                                            ? const Color(0xFFDC2626)
+                                            : (isLive
+                                                ? const Color(0xFF16A34A)
+                                                : (hasCollar
+                                                    ? const Color(0xFFD97706)
+                                                    : AppColors.primary)),
                                         width: 1.5,
                                       ),
                                     ),
@@ -395,17 +429,19 @@ class _AdminPetTrackingMapScreenState extends State<AdminPetTrackingMapScreen> {
                                           width: 8,
                                           height: 8,
                                           decoration: BoxDecoration(
-                                            color: isLive
-                                                ? const Color(0xFF16A34A)
-                                                : (hasCollar
-                                                    ? const Color(0xFFD97706)
-                                                    : AppColors.primary),
+                                            color: _isInNoSignal
+                                                ? const Color(0xFFDC2626)
+                                                : (isLive
+                                                    ? const Color(0xFF16A34A)
+                                                    : (hasCollar
+                                                        ? const Color(0xFFD97706)
+                                                        : AppColors.primary)),
                                             shape: BoxShape.circle,
                                           ),
                                         ),
                                         const SizedBox(width: 6),
                                         Text(
-                                          petName,
+                                          _isInNoSignal ? '$petName (Low Signal)' : petName,
                                           style: GoogleFonts.inter(
                                             fontSize: 12,
                                             fontWeight: FontWeight.w700,
@@ -418,11 +454,13 @@ class _AdminPetTrackingMapScreenState extends State<AdminPetTrackingMapScreen> {
                                   Icon(
                                     Icons.location_on,
                                     size: 42,
-                                    color: isLive
-                                        ? const Color(0xFF16A34A)
-                                        : (hasCollar
-                                            ? const Color(0xFFD97706)
-                                            : AppColors.primary),
+                                    color: _isInNoSignal
+                                        ? const Color(0xFFDC2626)
+                                        : (isLive
+                                            ? const Color(0xFF16A34A)
+                                            : (hasCollar
+                                                ? const Color(0xFFD97706)
+                                                : AppColors.primary)),
                                   ),
                                 ],
                               ),
@@ -536,26 +574,99 @@ class _AdminPetTrackingMapScreenState extends State<AdminPetTrackingMapScreen> {
             ),
           ),
 
-          // ── 3. Floating Re-Center Button ──
+          // ── Signal Warning Banner ──
+          if (_isInNoSignal)
+            Positioned(
+              top: 76,
+              left: 16,
+              right: isWide ? 392 : 16,
+              child: Center(
+                child: Container(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFFEF2F2),
+                    borderRadius: BorderRadius.circular(999),
+                    border: Border.all(
+                      color: const Color(0xFFF87171),
+                      width: 1.5,
+                    ),
+                    boxShadow: [
+                      BoxShadow(
+                        color: const Color(0xFFDC2626).withOpacity(0.18),
+                        blurRadius: 14,
+                        offset: const Offset(0, 4),
+                      ),
+                    ],
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      const Icon(Icons.warning_amber_rounded,
+                          color: Color(0xFFDC2626), size: 18),
+                      const SizedBox(width: 8),
+                      Text(
+                        'Entering low or no signal area',
+                        style: GoogleFonts.inter(
+                          color: const Color(0xFF991B1B),
+                          fontWeight: FontWeight.w700,
+                          fontSize: 12.5,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+
+          // ── 3. Floating Re-Center & Signal Overlay Buttons ──
           Positioned(
             right: 16,
             bottom: isWide ? 24 : (_isPanelCollapsed ? 90 : 260),
-            child: Material(
-              color: Colors.white,
-              elevation: 4,
-              shadowColor: Colors.black26,
-              shape: const CircleBorder(),
-              child: InkWell(
-                customBorder: const CircleBorder(),
-                onTap: () {
-                  _mapController.move(targetPoint, 16.0);
-                },
-                child: const Padding(
-                  padding: EdgeInsets.all(12),
-                  child: Icon(Icons.my_location_rounded,
-                      color: AppColors.primary, size: 22),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Material(
+                  color: Colors.white,
+                  elevation: 4,
+                  shadowColor: Colors.black26,
+                  shape: const CircleBorder(),
+                  child: InkWell(
+                    customBorder: const CircleBorder(),
+                    onTap: _showCoverageLegendDialog,
+                    child: Padding(
+                      padding: const EdgeInsets.all(12),
+                      child: Icon(
+                        _showNoSignalOverlay
+                            ? Icons.layers_rounded
+                            : Icons.layers_clear_rounded,
+                        color: _showNoSignalOverlay
+                            ? AppColors.primary
+                            : Colors.grey,
+                        size: 22,
+                      ),
+                    ),
+                  ),
                 ),
-              ),
+                const SizedBox(height: 10),
+                Material(
+                  color: Colors.white,
+                  elevation: 4,
+                  shadowColor: Colors.black26,
+                  shape: const CircleBorder(),
+                  child: InkWell(
+                    customBorder: const CircleBorder(),
+                    onTap: () {
+                      _mapController.move(targetPoint, 16.0);
+                    },
+                    child: const Padding(
+                      padding: EdgeInsets.all(12),
+                      child: Icon(Icons.my_location_rounded,
+                          color: AppColors.primary, size: 22),
+                    ),
+                  ),
+                ),
+              ],
             ),
           ),
 
@@ -1119,6 +1230,108 @@ class _AdminPetTrackingMapScreenState extends State<AdminPetTrackingMapScreen> {
               ],
             ],
           ),
+        ),
+      ),
+    );
+  }
+
+  void _showCoverageLegendDialog() {
+    showDialog(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (context, setDlgState) => AlertDialog(
+          shape:
+              RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+          title: Row(
+            children: [
+              const Icon(Icons.cell_tower_rounded,
+                  color: AppColors.primary, size: 24),
+              const SizedBox(width: 8),
+              Text(
+                'Coverage Overlay',
+                style: GoogleFonts.montserrat(
+                    fontSize: 17, fontWeight: FontWeight.w700),
+              ),
+            ],
+          ),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              SwitchListTile(
+                contentPadding: EdgeInsets.zero,
+                activeColor: AppColors.primary,
+                title: const Text('No-signal areas',
+                    style:
+                        TextStyle(fontWeight: FontWeight.w600, fontSize: 14)),
+                value: _showNoSignalOverlay,
+                onChanged: (val) {
+                  setDlgState(() => _showNoSignalOverlay = val);
+                  setState(() => _showNoSignalOverlay = val);
+                },
+              ),
+              const Divider(),
+              const SizedBox(height: 8),
+              Row(
+                children: [
+                  Container(
+                    width: 18,
+                    height: 18,
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      border:
+                          Border.all(color: Colors.grey.shade400, width: 1.5),
+                      borderRadius: BorderRadius.circular(4),
+                    ),
+                  ),
+                  const SizedBox(width: 10),
+                  const Expanded(
+                    child: Text('Clear: Confirmed mobile internet',
+                        style: TextStyle(fontSize: 13)),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 8),
+              Row(
+                children: [
+                  Container(
+                    width: 18,
+                    height: 18,
+                    decoration: BoxDecoration(
+                      color: const Color(0x8C777777),
+                      border: Border.all(
+                          color: const Color(0xFF555555), width: 1.5),
+                      borderRadius: BorderRadius.circular(4),
+                    ),
+                  ),
+                  const SizedBox(width: 10),
+                  const Expanded(
+                    child: Text('Gray: Weak or no data',
+                        style: TextStyle(fontSize: 13)),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 12),
+              Text(
+                '* Note: Gray areas can mean "no tests were run here", not necessarily zero signal.',
+                style: TextStyle(
+                    fontSize: 11,
+                    color: Colors.grey.shade600,
+                    fontStyle: FontStyle.italic),
+              ),
+              const SizedBox(height: 8),
+              Text(
+                'Source: Speedtest by Ookla (CC BY-NC-SA 4.0)',
+                style: TextStyle(fontSize: 10.5, color: Colors.grey.shade500),
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx),
+              child: const Text('Close'),
+            ),
+          ],
         ),
       ),
     );

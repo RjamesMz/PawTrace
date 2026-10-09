@@ -1,0 +1,248 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>PawTrace — Live GPS Tracking</title>
+  
+  <!-- Fonts -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Montserrat:wght@700;800&display=swap" rel="stylesheet">
+  
+  <!-- Leaflet CSS -->
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="" />
+  
+  <style>
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+    html, body {
+      width: 100%;
+      height: 100%;
+      overflow: hidden;
+      font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+      background: #F8FAFC;
+    }
+    #map {
+      width: 100%;
+      height: 100%;
+      position: absolute;
+      top: 0;
+      left: 0;
+      z-index: 1;
+    }
+
+    /* Floating Header Card */
+    .header-card {
+      position: fixed;
+      top: 18px;
+      left: 18px;
+      z-index: 999;
+      background: rgba(255, 255, 255, 0.95);
+      backdrop-filter: blur(8px);
+      -webkit-backdrop-filter: blur(8px);
+      padding: 14px 18px;
+      border-radius: 18px;
+      box-shadow: 0 12px 30px -10px rgba(0, 0, 0, 0.12),
+                  0 0 0 1px rgba(0, 0, 0, 0.05);
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      max-width: calc(100vw - 36px);
+    }
+    .brand-icon {
+      width: 38px;
+      height: 38px;
+      background: #FFF7ED;
+      border: 1.5px solid #FFEDD5;
+      border-radius: 12px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: #FF6600;
+      font-size: 18px;
+    }
+    .brand-title {
+      font-family: 'Montserrat', sans-serif;
+      font-weight: 800;
+      font-size: 15px;
+      color: #111827;
+      letter-spacing: -0.3px;
+    }
+    .brand-subtitle {
+      font-size: 11.5px;
+      color: #64748B;
+      font-weight: 500;
+    }
+
+    /* Custom Pulsing Marker */
+    .live-marker-pin {
+      width: 32px;
+      height: 32px;
+      border-radius: 50%;
+      background: #16A34A;
+      border: 3px solid #FFFFFF;
+      box-shadow: 0 4px 14px rgba(0,0,0,0.3);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: white;
+      transition: background-color 0.4s ease, transform 0.2s ease;
+      position: relative;
+    }
+    .live-marker-pulse {
+      position: absolute;
+      width: 100%;
+      height: 100%;
+      border-radius: 50%;
+      background: inherit;
+      opacity: 0.6;
+      animation: pulseAnim 2s infinite;
+      z-index: -1;
+    }
+    @keyframes pulseAnim {
+      0% {
+        transform: scale(1);
+        opacity: 0.7;
+      }
+      100% {
+        transform: scale(2.4);
+        opacity: 0;
+      }
+    }
+  </style>
+</head>
+<body>
+
+  <!-- Map Container -->
+  <div id="map"></div>
+
+  <!-- Brand / Header Card -->
+  <div class="header-card">
+    <div class="brand-icon">🐾</div>
+    <div>
+      <div class="brand-title">PawTrace Live Tracking</div>
+      <div class="brand-subtitle" id="deviceStatusText">Live GPS Tracking — Catanduanes</div>
+    </div>
+  </div>
+
+  <!-- Leaflet JS -->
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
+
+  <!-- Supabase JS v2 -->
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+
+  <script>
+    // ─────────────────────────────────────────────────────────────────────────
+    // 1. INITIALIZE LEAFLET MAP
+    // ─────────────────────────────────────────────────────────────────────────
+    // Default center: Virac, Catanduanes, Philippines
+    const CATANDUANES_CENTER = [13.5938, 124.2381];
+    
+    const map = L.map('map', {
+      center: CATANDUANES_CENTER,
+      zoom: 12,
+      minZoom: 10,
+      maxZoom: 18,
+      zoomControl: false
+    });
+
+    // Reposition zoom control to top-right
+    L.control.zoom({ position: 'topright' }).addTo(map);
+
+    // Attribution
+    map.attributionControl.setPrefix(
+      '<a href="https://leafletjs.com" title="A JavaScript library for interactive maps">Leaflet</a>'
+    );
+    map.attributionControl.addAttribution(
+      '&copy; <a href="https://openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+    );
+
+    // Base Tile Layer (OpenStreetMap)
+    L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
+      maxZoom: 19,
+      attribution: ''
+    }).addTo(map);
+
+    // ─────────────────────────────────────────────────────────────────────────
+    // 2. LIVE TRACKING MARKER
+    // ─────────────────────────────────────────────────────────────────────────
+    let currentMarker = null;
+
+    function createMarkerIcon() {
+      const iconHtml = `
+        <div class="live-marker-pin">
+          <div class="live-marker-pulse"></div>
+          <svg width="16" height="16" fill="currentColor" viewBox="0 0 24 24">
+            <path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zm0 9.5c-1.38 0-2.5-1.12-2.5-2.5s1.12-2.5 2.5-2.5 2.5 1.12 2.5 2.5-1.12 2.5-2.5 2.5z"/>
+          </svg>
+        </div>
+      `;
+      return L.divIcon({
+        className: 'custom-live-marker',
+        html: iconHtml,
+        iconSize: [32, 32],
+        iconAnchor: [16, 16],
+        popupAnchor: [0, -18]
+      });
+    }
+
+    // Initialize marker at default location
+    currentMarker = L.marker(CATANDUANES_CENTER, {
+      icon: createMarkerIcon(),
+      draggable: true
+    }).addTo(map);
+
+    currentMarker.bindPopup(`
+      <div style="font-family: 'Inter', sans-serif; padding: 2px 4px;">
+        <strong style="color: #FF6600;">PawTrace Live Collar</strong><br>
+        <span style="font-size: 12px; color: #475569;">Tracking device location in real time.</span>
+      </div>
+    `);
+
+    // ─────────────────────────────────────────────────────────────────────────
+    // 3. POSITION UPDATE HANDLER
+    // ─────────────────────────────────────────────────────────────────────────
+    function onDevicePositionUpdated(lat, lng, accuracy = 0) {
+      const newLatLng = L.latLng(lat, lng);
+      currentMarker.setLatLng(newLatLng);
+    }
+
+    // Drag listener on marker for interactive testing
+    currentMarker.on('drag', function(e) {
+      const pos = e.target.getLatLng();
+      onDevicePositionUpdated(pos.lat, pos.lng);
+    });
+
+    // ─────────────────────────────────────────────────────────────────────────
+    // 4. REALTIME SUPABASE / LIVE GPS STREAM INTEGRATION
+    // ─────────────────────────────────────────────────────────────────────────
+    const SUPABASE_URL = 'https://lxkwugncakjbnffwphuq.supabase.co';
+    const SUPABASE_ANON = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imx4a3d1Z25jYWtqYm5mZndwaHVxIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODU0MDk1MTMsImV4cCI6MjEwMDk4NTUxM30.NSpJuFtDnoOKKRrl__P6oVUizqJ1SMShrXpJfwu1ObQ';
+
+    if (window.supabase) {
+      try {
+        const sbClient = supabase.createClient(SUPABASE_URL, SUPABASE_ANON);
+        sbClient
+          .channel('public:gps_locations')
+          .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'gps_locations' }, (payload) => {
+            const row = payload.new;
+            if (row && row.lat != null && row.lon != null) {
+              onDevicePositionUpdated(parseFloat(row.lat), parseFloat(row.lon));
+              map.panTo([parseFloat(row.lat), parseFloat(row.lon)]);
+            }
+          })
+          .subscribe();
+      } catch (sbErr) {
+        console.warn('[PawTrace] Supabase connection optional:', sbErr);
+      }
+    }
+
+    // Initial position
+    onDevicePositionUpdated(CATANDUANES_CENTER[0], CATANDUANES_CENTER[1]);
+  </script>
+</body>
+</html>

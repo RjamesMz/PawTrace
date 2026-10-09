@@ -57,6 +57,48 @@ class RecentReportsDataTableSource extends DataTableSource {
       }
     }
 
+    // Found Date & Time resolution
+    String formattedFoundDate = '';
+    String formattedFoundTime = '';
+    if (isFound) {
+      String? rawFound = report['found_at']?.toString() ??
+          report['resolved_at']?.toString() ??
+          report['updated_at']?.toString() ??
+          report['archived_at']?.toString();
+      if (rawFound == null && pet is Map) {
+        rawFound = pet['updated_at']?.toString() ??
+            pet['modified_at']?.toString() ??
+            pet['found_at']?.toString();
+      }
+      // If no explicit resolution timestamp, fallback to reported_at / created_at
+      rawFound ??= report['reported_at']?.toString() ??
+          report['created_at']?.toString();
+
+      if (rawFound != null && rawFound.isNotEmpty) {
+        try {
+          final dt = DateTime.parse(rawFound).toLocal();
+          formattedFoundDate = '${dt.month}/${dt.day}/${dt.year}';
+          final hour =
+              dt.hour == 0 ? 12 : (dt.hour > 12 ? dt.hour - 12 : dt.hour);
+          final minute = dt.minute.toString().padLeft(2, '0');
+          final period = dt.hour < 12 ? 'AM' : 'PM';
+          formattedFoundTime = '$hour:$minute $period';
+        } catch (_) {
+          formattedFoundDate = rawFound;
+        }
+      }
+    }
+
+    String? foundPhotoUrl = isFound
+        ? (report['found_photo_url']?.toString() ??
+            (pet is Map ? pet['found_photo_url']?.toString() : null))
+        : null;
+    if (isFound && (foundPhotoUrl == null || foundPhotoUrl.isEmpty)) {
+      final desc = (report['description'] ?? '').toString();
+      final m = RegExp(r'\[Found Verification Photo\]:\s*(https?://[^\s]+)').firstMatch(desc);
+      if (m != null) foundPhotoUrl = m.group(1);
+    }
+
     final isEven = index % 2 == 0;
 
     return DataRow.byIndex(
@@ -103,16 +145,110 @@ class RecentReportsDataTableSource extends DataTableSource {
           location,
           style: GoogleFonts.inter(fontSize: 13),
         )),
-        // Date Reported
-        DataCell(Text(
-          formattedDate,
-          style: GoogleFonts.inter(fontSize: 13),
-        )),
-        // Time Reported
-        DataCell(Text(
-          formattedTime,
-          style: GoogleFonts.inter(fontSize: 13),
-        )),
+        // Date & Time Reported (Compressed)
+        DataCell(
+          Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(
+                formattedDate.isNotEmpty ? formattedDate : '-',
+                style: GoogleFonts.inter(
+                  fontSize: 12.5,
+                  fontWeight: FontWeight.w600,
+                  color: const Color(0xFF1E293B),
+                ),
+              ),
+              if (formattedTime.isNotEmpty) ...[
+                const SizedBox(height: 2),
+                Text(
+                  formattedTime,
+                  style: GoogleFonts.inter(
+                    fontSize: 11,
+                    color: const Color(0xFF64748B),
+                  ),
+                ),
+              ],
+            ],
+          ),
+        ),
+        // Found Date & Time (New Column)
+        DataCell(
+          isFound
+              ? Builder(
+                  builder: (context) => Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(
+                        formattedFoundDate.isNotEmpty ? formattedFoundDate : '-',
+                        style: GoogleFonts.inter(
+                          fontSize: 12,
+                          fontWeight: FontWeight.w600,
+                          color: const Color(0xFF16A34A),
+                        ),
+                      ),
+                      const SizedBox(height: 2),
+                      Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          if (formattedFoundTime.isNotEmpty)
+                            Text(
+                              formattedFoundTime,
+                              style: GoogleFonts.inter(
+                                fontSize: 11,
+                                color: const Color(0xFF64748B),
+                              ),
+                            ),
+                          if (foundPhotoUrl != null && foundPhotoUrl.isNotEmpty) ...[
+                            if (formattedFoundTime.isNotEmpty) const SizedBox(width: 5),
+                            InkWell(
+                              onTap: () => _showPhotoLightbox(context, foundPhotoUrl!, petName),
+                              borderRadius: BorderRadius.circular(5),
+                              child: Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1.5),
+                                decoration: BoxDecoration(
+                                  color: const Color(0xFF16A34A).withOpacity(0.12),
+                                  borderRadius: BorderRadius.circular(5),
+                                  border: Border.all(
+                                    color: const Color(0xFF16A34A).withOpacity(0.35),
+                                    width: 0.8,
+                                  ),
+                                ),
+                                child: Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    const Icon(Icons.camera_alt_rounded, size: 10, color: Color(0xFF16A34A)),
+                                    const SizedBox(width: 3),
+                                    Text(
+                                      'Pic',
+                                      style: GoogleFonts.inter(
+                                        fontSize: 9.5,
+                                        fontWeight: FontWeight.w700,
+                                        color: const Color(0xFF16A34A),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ),
+                          ],
+                        ],
+                      ),
+                    ],
+                  ),
+                )
+              : Text(
+                  '—',
+                  style: GoogleFonts.inter(
+                    fontSize: 13,
+                    color: const Color(0xFF94A3B8),
+                    fontWeight: FontWeight.w500,
+                  ),
+                ),
+        ),
         // Pet Status Chip (LOST or FOUND)
         DataCell(
           Container(
@@ -158,6 +294,120 @@ class RecentReportsDataTableSource extends DataTableSource {
           ),
         ),
       ],
+    );
+  }
+
+  static void _showPhotoLightbox(
+      BuildContext context, String url, String petName) {
+    showDialog(
+      context: context,
+      builder: (ctx) => Dialog(
+        backgroundColor: Colors.transparent,
+        insetPadding: const EdgeInsets.all(16),
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 520),
+          child: Container(
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(20),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withOpacity(0.25),
+                  blurRadius: 30,
+                  offset: const Offset(0, 10),
+                ),
+              ],
+            ),
+            clipBehavior: Clip.antiAlias,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(16, 14, 12, 12),
+                  child: Row(
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.all(6),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFF16A34A).withOpacity(0.12),
+                          shape: BoxShape.circle,
+                        ),
+                        child: const Icon(Icons.verified_rounded,
+                            size: 18, color: Color(0xFF16A34A)),
+                      ),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              'Found Verification Photo',
+                              style: GoogleFonts.montserrat(
+                                fontSize: 15,
+                                fontWeight: FontWeight.w700,
+                                color: const Color(0xFF0F172A),
+                              ),
+                            ),
+                            Text(
+                              'Proof captured upon recovery of $petName',
+                              style: GoogleFonts.inter(
+                                fontSize: 12,
+                                color: const Color(0xFF64748B),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      IconButton(
+                        icon: const Icon(Icons.close_rounded, size: 20),
+                        onPressed: () => Navigator.pop(ctx),
+                      ),
+                    ],
+                  ),
+                ),
+                ConstrainedBox(
+                  constraints: const BoxConstraints(maxHeight: 380),
+                  child: Image.network(
+                    url,
+                    fit: BoxFit.contain,
+                    errorBuilder: (_, __, ___) => Container(
+                      height: 180,
+                      color: const Color(0xFFF1F5F9),
+                      child: const Center(
+                        child: Icon(Icons.broken_image_rounded,
+                            size: 40, color: Color(0xFF94A3B8)),
+                      ),
+                    ),
+                  ),
+                ),
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(16, 10, 16, 14),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.end,
+                    children: [
+                      ElevatedButton(
+                        onPressed: () => Navigator.pop(ctx),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: const Color(0xFF16A34A),
+                          foregroundColor: Colors.white,
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(10),
+                          ),
+                        ),
+                        child: Text(
+                          'Close',
+                          style: GoogleFonts.inter(fontWeight: FontWeight.w600),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
     );
   }
 

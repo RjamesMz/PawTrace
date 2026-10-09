@@ -8,6 +8,7 @@ import '../../../core/navigation_helpers.dart';
 import '../../../widgets/user/bottom_nav_bar.dart';
 import '../../../widgets/user/pair_collar_dialog.dart';
 import '../../../services/audit/pet_audit_service.dart';
+import '../../../widgets/user/lost_pet/mark_found_camera_sheet.dart';
 import '../locate_pet/locate_pet_screen.dart';
 
 /// Pet Profile Detail screen – detailed individual pet profile view.
@@ -86,26 +87,73 @@ class _PetProfileDetailScreenState extends State<PetProfileDetailScreen> {
     final petId = pet['pet_id'];
     if (petId == null) return;
 
+    // Fetch active lost report id if any for reportId reference
+    String reportId = petId.toString();
+    try {
+      final activeReport = await Supabase.instance.client
+          .from('lost_reports')
+          .select('report_id')
+          .eq('pet_id', petId)
+          .eq('status', 'active')
+          .maybeSingle();
+      if (activeReport != null && activeReport['report_id'] != null) {
+        reportId = activeReport['report_id'].toString();
+      }
+    } catch (_) {}
+
+    // Prompt user to capture live photo of the found pet
+    final foundPhotoUrl = await MarkFoundCameraSheet.show(
+      context,
+      petName: pet['name']?.toString() ?? 'your pet',
+      reportId: reportId,
+    );
+    if (foundPhotoUrl == null) return; // User cancelled
+
     setState(() => _isMarkingFound = true);
+    final nowIso = DateTime.now().toIso8601String();
     try {
       // 1. Update pet status back to active in Supabase
-      await Supabase.instance.client
-          .from('pets')
-          .update({'status': 'active'}).eq('pet_id', petId);
+      try {
+        await Supabase.instance.client
+            .from('pets')
+            .update({
+              'status': 'active',
+              'found_photo_url': foundPhotoUrl,
+            })
+            .eq('pet_id', petId);
+      } catch (_) {
+        await Supabase.instance.client
+            .from('pets')
+            .update({'status': 'active'}).eq('pet_id', petId);
+      }
 
       // 2. Soft-archive the active lost report for this pet (preserve data history)
-      await Supabase.instance.client
-          .from('lost_reports')
-          .update({
-            'status': 'archived',
-          })
-          .eq('pet_id', petId)
-          .eq('status', 'active');
+      try {
+        await Supabase.instance.client
+            .from('lost_reports')
+            .update({
+              'status': 'archived',
+              'found_at': nowIso,
+              'found_photo_url': foundPhotoUrl,
+            })
+            .eq('pet_id', petId)
+            .eq('status', 'active');
+      } catch (_) {
+        await Supabase.instance.client
+            .from('lost_reports')
+            .update({
+              'status': 'archived',
+              'found_at': nowIso,
+            })
+            .eq('pet_id', petId)
+            .eq('status', 'active');
+      }
 
       // Update in-memory state immediately so UI updates right away
       if (mounted) {
         setState(() {
           _currentPet?['status'] = 'active';
+          _currentPet?['found_photo_url'] = foundPhotoUrl;
         });
       }
 
@@ -114,7 +162,7 @@ class _PetProfileDetailScreenState extends State<PetProfileDetailScreen> {
         petId: petId.toString(),
         petName: pet['name']?.toString() ?? 'Pet',
         action: 'Status Changed: Found (Active)',
-        changesSummary: 'Pet marked as found. Open lost reports archived.',
+        changesSummary: 'Pet marked as found with photo verification. Open lost reports archived.',
         modifiedByRole: 'Owner',
       );
 

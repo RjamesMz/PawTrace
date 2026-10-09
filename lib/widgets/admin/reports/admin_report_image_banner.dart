@@ -2,8 +2,11 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 
 /// Hero image banner for an incident report, supporting both side-by-side and stacked modes.
-class AdminReportImageBanner extends StatelessWidget {
+/// If a verification photo of the found pet exists, allows the admin to toggle between
+/// the original lost report photo and the newly captured found verification photo.
+class AdminReportImageBanner extends StatefulWidget {
   final String imageUrl;
+  final String? foundPhotoUrl;
   final String petCondition;
   final String status;
   final bool isArchived;
@@ -15,6 +18,7 @@ class AdminReportImageBanner extends StatelessWidget {
   const AdminReportImageBanner({
     super.key,
     required this.imageUrl,
+    this.foundPhotoUrl,
     required this.petCondition,
     this.status = '',
     this.isArchived = false,
@@ -23,6 +27,13 @@ class AdminReportImageBanner extends StatelessWidget {
     this.isSideBySide = false,
     this.height,
   });
+
+  @override
+  State<AdminReportImageBanner> createState() => _AdminReportImageBannerState();
+}
+
+class _AdminReportImageBannerState extends State<AdminReportImageBanner> {
+  bool _showFoundPhoto = false;
 
   Widget _buildPlaceholder() {
     return Container(
@@ -66,7 +77,13 @@ class AdminReportImageBanner extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final bannerHeight = height ?? (isSideBySide ? double.infinity : 220.0);
+    final bannerHeight =
+        widget.height ?? (widget.isSideBySide ? double.infinity : 220.0);
+    final hasFoundPhoto = widget.isFound &&
+        widget.foundPhotoUrl != null &&
+        widget.foundPhotoUrl!.isNotEmpty;
+    final currentImage =
+        (_showFoundPhoto && hasFoundPhoto) ? widget.foundPhotoUrl! : widget.imageUrl;
 
     return SizedBox(
       height: bannerHeight,
@@ -75,9 +92,9 @@ class AdminReportImageBanner extends StatelessWidget {
         fit: StackFit.expand,
         children: [
           // Full height/width image or placeholder
-          imageUrl.isNotEmpty
+          currentImage.isNotEmpty
               ? Image.network(
-                  imageUrl,
+                  currentImage,
                   fit: BoxFit.cover,
                   errorBuilder: (_, __, ___) => _buildPlaceholder(),
                 )
@@ -91,9 +108,9 @@ class AdminReportImageBanner extends StatelessWidget {
                   begin: Alignment.topCenter,
                   end: Alignment.bottomCenter,
                   colors: [
-                    Colors.black.withOpacity(0.4),
+                    Colors.black.withOpacity(0.45),
                     Colors.transparent,
-                    Colors.black.withOpacity(0.7),
+                    Colors.black.withOpacity(0.75),
                   ],
                   stops: const [0.0, 0.4, 1.0],
                 ),
@@ -108,17 +125,27 @@ class AdminReportImageBanner extends StatelessWidget {
             child: Container(
               padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
               decoration: BoxDecoration(
-                color: Colors.black.withOpacity(0.45),
+                color: (_showFoundPhoto && hasFoundPhoto)
+                    ? const Color(0xFF16A34A).withOpacity(0.85)
+                    : Colors.black.withOpacity(0.45),
                 borderRadius: BorderRadius.circular(20),
                 border: Border.all(color: Colors.white.withOpacity(0.2)),
               ),
               child: Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  const Icon(Icons.pets, size: 12, color: Colors.white),
+                  Icon(
+                    (_showFoundPhoto && hasFoundPhoto)
+                        ? Icons.verified_rounded
+                        : Icons.pets,
+                    size: 12,
+                    color: Colors.white,
+                  ),
                   const SizedBox(width: 4),
                   Text(
-                    'LOST PET REPORT',
+                    (_showFoundPhoto && hasFoundPhoto)
+                        ? 'FOUND VERIFICATION PHOTO'
+                        : 'LOST PET REPORT',
                     style: GoogleFonts.inter(
                       fontSize: 10,
                       fontWeight: FontWeight.w700,
@@ -132,14 +159,14 @@ class AdminReportImageBanner extends StatelessWidget {
           ),
 
           // Top-Right Close Button
-          if (onClose != null)
+          if (widget.onClose != null)
             Positioned(
               top: 12,
               right: 12,
               child: Material(
                 color: Colors.transparent,
                 child: InkWell(
-                  onTap: onClose,
+                  onTap: widget.onClose,
                   borderRadius: BorderRadius.circular(20),
                   child: Container(
                     width: 34,
@@ -156,6 +183,83 @@ class AdminReportImageBanner extends StatelessWidget {
               ),
             ),
 
+          // Photo Switcher Chips (when both photos exist)
+          if (hasFoundPhoto)
+            Positioned(
+              top: 50,
+              left: 14,
+              child: Container(
+                padding: const EdgeInsets.all(3),
+                decoration: BoxDecoration(
+                  color: Colors.black.withOpacity(0.6),
+                  borderRadius: BorderRadius.circular(20),
+                  border: Border.all(color: Colors.white.withOpacity(0.2)),
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    GestureDetector(
+                      onTap: () => setState(() => _showFoundPhoto = false),
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 9, vertical: 4),
+                        decoration: BoxDecoration(
+                          color: !_showFoundPhoto
+                              ? Colors.white
+                              : Colors.transparent,
+                          borderRadius: BorderRadius.circular(16),
+                        ),
+                        child: Text(
+                          'Lost Photo',
+                          style: GoogleFonts.inter(
+                            fontSize: 10.5,
+                            fontWeight: FontWeight.w700,
+                            color: !_showFoundPhoto
+                                ? Colors.black
+                                : Colors.white.withOpacity(0.85),
+                          ),
+                        ),
+                      ),
+                    ),
+                    GestureDetector(
+                      onTap: () => setState(() => _showFoundPhoto = true),
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 9, vertical: 4),
+                        decoration: BoxDecoration(
+                          color: _showFoundPhoto
+                              ? const Color(0xFF22C55E)
+                              : Colors.transparent,
+                          borderRadius: BorderRadius.circular(16),
+                        ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(
+                              Icons.camera_alt_rounded,
+                              size: 11,
+                              color: _showFoundPhoto
+                                  ? Colors.white
+                                  : Colors.white.withOpacity(0.85),
+                            ),
+                            const SizedBox(width: 3),
+                            Text(
+                              'Found Pic',
+                              style: GoogleFonts.inter(
+                                fontSize: 10.5,
+                                fontWeight: FontWeight.w700,
+                                color: Colors.white,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+
           // Bottom Badges (Condition + Status)
           Positioned(
             bottom: 14,
@@ -168,13 +272,13 @@ class AdminReportImageBanner extends StatelessWidget {
                   padding:
                       const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
                   decoration: BoxDecoration(
-                    color: isFound
+                    color: widget.isFound
                         ? const Color(0xFF10B981)
                         : const Color(0xFFEF4444),
                     borderRadius: BorderRadius.circular(8),
                     boxShadow: [
                       BoxShadow(
-                        color: (isFound
+                        color: (widget.isFound
                                 ? const Color(0xFF10B981)
                                 : const Color(0xFFEF4444))
                             .withOpacity(0.4),
@@ -187,7 +291,7 @@ class AdminReportImageBanner extends StatelessWidget {
                     mainAxisSize: MainAxisSize.min,
                     children: [
                       Icon(
-                        isFound
+                        widget.isFound
                             ? Icons.check_circle_rounded
                             : Icons.campaign_rounded,
                         size: 13,
@@ -195,7 +299,7 @@ class AdminReportImageBanner extends StatelessWidget {
                       ),
                       const SizedBox(width: 4),
                       Text(
-                        petCondition,
+                        widget.petCondition,
                         style: GoogleFonts.inter(
                           fontSize: 11,
                           fontWeight: FontWeight.w800,

@@ -169,6 +169,24 @@ class AdminReportCard extends StatelessWidget {
         final useSideBySide = constraints.maxWidth >= 580 ||
             (isDialog && MediaQuery.of(context).size.width >= 650);
 
+        final String? foundAt = isFound
+            ? (report['found_at']?.toString() ??
+                report['resolved_at']?.toString() ??
+                report['updated_at']?.toString() ??
+                (petData?['updated_at']?.toString() ??
+                    petData?['modified_at']?.toString()))
+            : null;
+
+        String? foundPhotoUrl = isFound
+            ? (report['found_photo_url']?.toString() ??
+                petData?['found_photo_url']?.toString())
+            : null;
+        if (isFound && (foundPhotoUrl == null || foundPhotoUrl.isEmpty)) {
+          final desc = (report['description'] ?? '').toString();
+          final m = RegExp(r'\[Found Verification Photo\]:\s*(https?://[^\s]+)').firstMatch(desc);
+          if (m != null) foundPhotoUrl = m.group(1);
+        }
+
         final detailsContent = AdminReportDetailsContent(
           petName: petName,
           petSubtitles: petSubtitles,
@@ -184,10 +202,14 @@ class AdminReportCard extends StatelessWidget {
           formatTime: formatTime,
           hasGps: hasGps,
           onViewMap: hasGps ? handleViewMap : null,
+          foundAt: foundAt,
+          foundPhotoUrl: foundPhotoUrl,
+          isFound: isFound,
         );
 
         final imageBanner = AdminReportImageBanner(
           imageUrl: imageUrl,
+          foundPhotoUrl: foundPhotoUrl,
           petCondition: petCondition,
           status: status,
           isArchived: isArchived,

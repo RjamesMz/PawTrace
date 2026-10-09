@@ -100,44 +100,77 @@ class PetEmbeddingService {
 
   /// Posts [imageFile] as multipart to [path] and returns the decoded JSON.
   ///
-  /// Throws [PetTraceServerException] when the server cannot be reached
-  /// (connection refused, timeout, or non-200 response).
+  /// Includes automatic retry for cold starts, transient socket resets, and
+  /// temporary gateway hiccups so users don't see false "server down" alerts.
+  /// Throws [PetTraceServerException] when the server genuinely cannot be reached.
   Future<Map<String, dynamic>> _post(String path, File imageFile) async {
-    try {
-      final request = http.MultipartRequest('POST', await _uri(path));
-      request.files.add(
-        await http.MultipartFile.fromPath('file', imageFile.path),
-      );
-      final streamed = await request.send().timeout(const Duration(seconds: 30));
-      final body = await streamed.stream.bytesToString();
-      if (streamed.statusCode != 200) {
-        debugPrint('[PetTrace] Server error ${streamed.statusCode}: $body');
-        throw PetTraceServerException(
-            'Server returned status ${streamed.statusCode}.');
-      }
-      return jsonDecode(body) as Map<String, dynamic>;
-    } on PetTraceServerException {
-      rethrow;
-    } on SocketException catch (e) {
-      debugPrint('[PetTrace] Connection refused ($path): $e');
-      throw const PetTraceServerException(
-          'Could not connect to the AI server. It may be offline.');
-    } on http.ClientException catch (e) {
-      debugPrint('[PetTrace] HTTP client error ($path): $e');
-      throw const PetTraceServerException(
-          'Could not connect to the AI server. It may be offline.');
-    } catch (e) {
-      // Only convert timeout errors to PetTraceServerException.
-      // All other errors (e.g. FormatException) propagate as-is so they
-      // don't wrongly trigger the "server under maintenance" dialog.
-      final msg = e.toString();
-      debugPrint('[PetTrace] Server call failed ($path): $msg');
-      if (msg.contains('TimeoutException') || msg.contains('timed out')) {
+    const int maxAttempts = 2;
+    for (int attempt = 1; attempt <= maxAttempts; attempt++) {
+      try {
+        final uri = await _uri(path);
+        final request = http.MultipartRequest('POST', uri);
+        request.files.add(
+          await http.MultipartFile.fromPath('file', imageFile.path),
+        );
+        final streamed =
+            await request.send().timeout(const Duration(seconds: 35));
+        final body = await streamed.stream.bytesToString();
+        if (streamed.statusCode != 200) {
+          debugPrint('[PetTrace] Server error ${streamed.statusCode}: $body');
+          if (attempt < maxAttempts &&
+              (streamed.statusCode == 502 ||
+                  streamed.statusCode == 503 ||
+                  streamed.statusCode == 504)) {
+            debugPrint(
+                '[PetTrace] Gateway/cold start (${streamed.statusCode}) on attempt $attempt/$maxAttempts. Retrying in 1.2s...');
+            await Future.delayed(const Duration(milliseconds: 1200));
+            continue;
+          }
+          throw PetTraceServerException(
+              'Server returned status ${streamed.statusCode}.');
+        }
+        return jsonDecode(body) as Map<String, dynamic>;
+      } on SocketException catch (e) {
+        debugPrint(
+            '[PetTrace] SocketException ($path, attempt $attempt/$maxAttempts): $e');
+        if (attempt < maxAttempts) {
+          debugPrint('[PetTrace] Retrying after socket disconnect in 1.2s...');
+          await Future.delayed(const Duration(milliseconds: 1200));
+          continue;
+        }
         throw const PetTraceServerException(
-            'The AI server did not respond in time. Please try again.');
+            'Could not connect to the AI server. It may be offline.');
+      } on http.ClientException catch (e) {
+        debugPrint(
+            '[PetTrace] HTTP client error ($path, attempt $attempt/$maxAttempts): $e');
+        if (attempt < maxAttempts) {
+          debugPrint('[PetTrace] Retrying after client error in 1.2s...');
+          await Future.delayed(const Duration(milliseconds: 1200));
+          continue;
+        }
+        throw const PetTraceServerException(
+            'Could not connect to the AI server. It may be offline.');
+      } catch (e) {
+        if (e is PetTraceServerException) {
+          rethrow;
+        }
+        final msg = e.toString();
+        debugPrint(
+            '[PetTrace] Server call failed ($path, attempt $attempt/$maxAttempts): $msg');
+        if (msg.contains('TimeoutException') || msg.contains('timed out')) {
+          if (attempt < maxAttempts) {
+            debugPrint('[PetTrace] Timeout on attempt $attempt, retrying...');
+            await Future.delayed(const Duration(milliseconds: 1000));
+            continue;
+          }
+          throw const PetTraceServerException(
+              'The AI server did not respond in time. Please try again.');
+        }
+        rethrow;
       }
-      rethrow; // not a connectivity problem — let it surface normally
     }
+    throw const PetTraceServerException(
+        'Could not connect to the AI server. It may be offline.');
   }
 
   // ── Public API ────────────────────────────────────────────────────────────

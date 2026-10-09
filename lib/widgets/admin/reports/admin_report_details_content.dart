@@ -18,6 +18,9 @@ class AdminReportDetailsContent extends StatelessWidget {
 
   final bool hasGps;
   final VoidCallback? onViewMap;
+  final String? foundAt;
+  final String? foundPhotoUrl;
+  final bool isFound;
 
   const AdminReportDetailsContent({
     super.key,
@@ -35,6 +38,9 @@ class AdminReportDetailsContent extends StatelessWidget {
     this.onClose,
     this.hasGps = false,
     this.onViewMap,
+    this.foundAt,
+    this.foundPhotoUrl,
+    this.isFound = false,
   });
 
   @override
@@ -99,6 +105,14 @@ class AdminReportDetailsContent extends StatelessWidget {
 
         // Date & Time Row
         _buildDateTimeRow(),
+        if (isFound && foundAt != null && foundAt!.isNotEmpty) ...[
+          const SizedBox(height: 10),
+          _buildFoundDateTimeRow(),
+        ],
+        if (isFound && foundPhotoUrl != null && foundPhotoUrl!.isNotEmpty) ...[
+          const SizedBox(height: 10),
+          _buildFoundPhotoCard(context, foundPhotoUrl!),
+        ],
         const SizedBox(height: 10),
 
         // Owner Card
@@ -396,6 +410,191 @@ class AdminReportDetailsContent extends StatelessWidget {
           ),
         ),
       ],
+    );
+  }
+
+  Widget _buildFoundDateTimeRow() {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+      decoration: BoxDecoration(
+        color: const Color(0xFFF0FDF4),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: const Color(0xFFBBF7D0)),
+      ),
+      child: Row(
+        children: [
+          Container(
+            padding: const EdgeInsets.all(6),
+            decoration: BoxDecoration(
+              color: const Color(0xFF22C55E).withOpacity(0.15),
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: const Icon(Icons.check_circle_rounded,
+                size: 16, color: Color(0xFF16A34A)),
+          ),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'FOUND DATE & TIME',
+                  style: GoogleFonts.inter(
+                    fontSize: 9,
+                    fontWeight: FontWeight.w700,
+                    letterSpacing: 0.5,
+                    color: const Color.fromARGB(255, 0, 0, 0),
+                  ),
+                ),
+                const SizedBox(height: 1),
+                Text(
+                  '${formatDate(foundAt)} at ${formatTime(foundAt)}',
+                  style: GoogleFonts.inter(
+                    fontSize: 12.5,
+                    fontWeight: FontWeight.w600,
+                    color: const Color.fromARGB(255, 0, 0, 0),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildFoundPhotoCard(BuildContext context, String url) {
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: const Color(0xFFF0FDF4),
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: const Color(0xFFBBF7D0)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3.5),
+                decoration: BoxDecoration(
+                  color: const Color(0xFF16A34A),
+                  borderRadius: BorderRadius.circular(6),
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const Icon(Icons.verified_rounded, size: 12, color: Colors.white),
+                    const SizedBox(width: 4),
+                    Text(
+                      'FOUND PET VERIFICATION PHOTO',
+                      style: GoogleFonts.inter(
+                        fontSize: 9.5,
+                        fontWeight: FontWeight.w700,
+                        letterSpacing: 0.5,
+                        color: Colors.white,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const Spacer(),
+              Text(
+                'Captured by owner',
+                style: GoogleFonts.inter(
+                  fontSize: 11,
+                  fontWeight: FontWeight.w600,
+                  color: const Color(0xFF15803D),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 10),
+          GestureDetector(
+            onTap: () => _showPhotoDialog(context, url),
+            child: ClipRRect(
+              borderRadius: BorderRadius.circular(10),
+              child: Stack(
+                children: [
+                  Image.network(
+                    url,
+                    height: 170,
+                    width: double.infinity,
+                    fit: BoxFit.cover,
+                    errorBuilder: (_, __, ___) => Container(
+                      height: 120,
+                      color: const Color(0xFFDCFCE7),
+                      child: const Center(
+                        child: Icon(Icons.broken_image_rounded, color: Color(0xFF16A34A)),
+                      ),
+                    ),
+                  ),
+                  Positioned(
+                    bottom: 8,
+                    right: 8,
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                      decoration: BoxDecoration(
+                        color: Colors.black.withOpacity(0.68),
+                        borderRadius: BorderRadius.circular(20),
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          const Icon(Icons.zoom_in_rounded, size: 14, color: Colors.white),
+                          const SizedBox(width: 4),
+                          Text(
+                            'Click to enlarge',
+                            style: GoogleFonts.inter(
+                              fontSize: 11,
+                              color: Colors.white,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _showPhotoDialog(BuildContext context, String url) {
+    showDialog(
+      context: context,
+      builder: (ctx) => Dialog(
+        backgroundColor: Colors.transparent,
+        insetPadding: const EdgeInsets.all(16),
+        child: Stack(
+          alignment: Alignment.topRight,
+          children: [
+            ClipRRect(
+              borderRadius: BorderRadius.circular(16),
+              child: Image.network(
+                url,
+                fit: BoxFit.contain,
+              ),
+            ),
+            Padding(
+              padding: const EdgeInsets.all(8.0),
+              child: IconButton(
+                icon: const Icon(Icons.close_rounded, color: Colors.white, size: 24),
+                style: IconButton.styleFrom(
+                  backgroundColor: Colors.black54,
+                  padding: const EdgeInsets.all(6),
+                ),
+                onPressed: () => Navigator.pop(ctx),
+              ),
+            ),
+          ],
+        ),
+      ),
     );
   }
 

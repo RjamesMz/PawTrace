@@ -3,6 +3,7 @@ import 'package:flutter_map/flutter_map.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:latlong2/latlong.dart' as ll;
 import '../../../core/app_colors.dart';
+import '../../../services/geo/no_signal_mask_service.dart';
 
 /// Simple Map Screen for displaying a lost pet's last reported location.
 class LostPetMapScreen extends StatelessWidget {
@@ -46,6 +47,10 @@ class LostPetMapScreen extends StatelessWidget {
                 urlTemplate: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
                 userAgentPackageName: 'com.pettrace.app',
               ),
+              if (NoSignalMaskService.instance.isLoaded)
+                PolygonLayer(
+                  polygons: NoSignalMaskService.instance.polygons,
+                ),
               MarkerLayer(
                 markers: [
                   Marker(

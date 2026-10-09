@@ -401,14 +401,16 @@ class _AdminReportsScreenState extends State<AdminReportsScreen> {
                     ],
                   ),
                   rowsPerPage: 10,
+                  dataRowMinHeight: 58,
+                  dataRowMaxHeight: 66,
                   showFirstLastButtons: true,
                   columns: const [
                     DataColumn(label: Text('Photo')),
                     DataColumn(label: Text('Pet Name')),
                     DataColumn(label: Text('Owner')),
                     DataColumn(label: Text('Location')),
-                    DataColumn(label: Text('Date Reported')),
-                    DataColumn(label: Text('Time Reported')),
+                    DataColumn(label: Text('Date & Time Reported')),
+                    DataColumn(label: Text('Found Date & Time')),
                     DataColumn(label: Text('Status')),
                     DataColumn(label: Text('Action')),
                   ],
@@ -1143,6 +1145,8 @@ class _AdminReportsScreenState extends State<AdminReportsScreen> {
         'Barangay',
         'Date Reported',
         'Time Reported',
+        'Date Found',
+        'Time Found',
         'Pet Status',
         'Archive Status',
         'Where Pet Last Seen',
@@ -1158,7 +1162,7 @@ class _AdminReportsScreenState extends State<AdminReportsScreen> {
             sheet.cell(CellIndex.indexByColumnRow(columnIndex: c, rowIndex: 0));
         cell.value = TextCellValue(headers[c]);
         cell.cellStyle = headerStyle;
-        sheet.setColumnWidth(c, c == 10 ? 32 : 20);
+        sheet.setColumnWidth(c, c == 12 ? 32 : 20);
       }
 
       // ── Data rows ────────────────────────────────────────────────
@@ -1226,6 +1230,43 @@ class _AdminReportsScreenState extends State<AdminReportsScreen> {
           } catch (_) {}
         }
 
+        String foundDateStr = '', foundTimeStr = '';
+        if (isFound) {
+          String? rawFound = report['found_at']?.toString() ??
+              report['resolved_at']?.toString() ??
+              report['updated_at']?.toString();
+          if (rawFound == null && pet is Map) {
+            rawFound =
+                pet['updated_at']?.toString() ?? pet['modified_at']?.toString();
+          }
+          if (rawFound != null && rawFound.isNotEmpty) {
+            try {
+              final dt = DateTime.parse(rawFound).toLocal();
+              const months = [
+                'Jan',
+                'Feb',
+                'Mar',
+                'Apr',
+                'May',
+                'Jun',
+                'Jul',
+                'Aug',
+                'Sep',
+                'Oct',
+                'Nov',
+                'Dec'
+              ];
+              foundDateStr = '${months[dt.month - 1]} ${dt.day}, ${dt.year}';
+              final h =
+                  dt.hour == 0 ? 12 : (dt.hour > 12 ? dt.hour - 12 : dt.hour);
+              final m = dt.minute.toString().padLeft(2, '0');
+              foundTimeStr = '$h:$m ${dt.hour < 12 ? 'AM' : 'PM'}';
+            } catch (_) {
+              foundDateStr = rawFound;
+            }
+          }
+        }
+
         final rowData = [
           petName,
           breed,
@@ -1235,6 +1276,8 @@ class _AdminReportsScreenState extends State<AdminReportsScreen> {
           barangay,
           dateStr,
           timeStr,
+          foundDateStr.isNotEmpty ? foundDateStr : '-',
+          foundTimeStr.isNotEmpty ? foundTimeStr : '-',
           petCondition,
           archiveStatus,
           whereLastSeen,

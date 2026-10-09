@@ -1,5 +1,6 @@
 import 'dart:io';
 import 'dart:ui' show ImageFilter;
+import 'package:camera/camera.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
@@ -12,7 +13,7 @@ import '../../../widgets/user/ai_scan/ai_scan_widgets.dart';
 
 export '../../../widgets/user/ai_scan/ai_scan_widgets.dart';
 
-/// AI Scan screen – pick or photograph a pet and find visual matches.
+/// AI Scan screen – live camera view for direct pet scanning and visual matches.
 class AiScanScreen extends StatefulWidget {
   const AiScanScreen({super.key});
 
@@ -21,8 +22,17 @@ class AiScanScreen extends StatefulWidget {
 }
 
 class _AiScanScreenState extends State<AiScanScreen>
-    with SingleTickerProviderStateMixin {
+    with SingleTickerProviderStateMixin, WidgetsBindingObserver {
   late final AnimationController _pulseCtrl;
+
+  // Live Camera state (Back camera only)
+  List<CameraDescription> _cameras = [];
+  CameraController? _cameraController;
+  bool _isCameraInitialized = false;
+  bool _isCameraPermissionDenied = false;
+  bool _isCapturing = false;
+  bool _isTorchOn = false;
+  bool _isSwitchingToLive = false;
 
   File? _pickedImage;
   bool _scanning = false;
@@ -36,21 +46,252 @@ class _AiScanScreenState extends State<AiScanScreen>
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     _pulseCtrl = AnimationController(
       vsync: this,
       duration: const Duration(seconds: 2),
     )..repeat(reverse: true);
+    _initCamera();
   }
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     _pulseCtrl.dispose();
+    _disposeCamera();
     super.dispose();
   }
 
-  Future<void> _pickImage(ImageSource source) async {
+  bool _isConfiguringCamera = false;
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    final cameraController = _cameraController;
+    if (cameraController == null) return;
+
+    bool isReady = false;
     try {
-      final picked = await _picker.pickImage(source: source, imageQuality: 85);
+      isReady = cameraController.value.isInitialized;
+    } catch (_) {
+      isReady = false;
+    }
+    if (!isReady) return;
+
+    if (state == AppLifecycleState.paused) {
+      _disposeCamera();
+    } else if (state == AppLifecycleState.resumed && _pickedImage == null) {
+      _setupBackCamera();
+    }
+  }
+
+  Future<void> _disposeCamera() async {
+    final controller = _cameraController;
+    _cameraController = null;
+    _isCameraInitialized = false;
+    if (mounted) setState(() {});
+    if (controller != null) {
+      try {
+        await controller.dispose();
+      } catch (_) {}
+    }
+  }
+
+  Future<void> _initCamera() async {
+    try {
+      final cameras = await availableCameras();
+      if (!mounted) return;
+      if (cameras.isEmpty) {
+        setState(() => _isCameraInitialized = false);
+        return;
+      }
+      _cameras = cameras;
+      await _setupBackCamera();
+    } on CameraException catch (e) {
+      debugPrint('CameraException on init: ${e.code} - ${e.description}');
+      if (!mounted) return;
+      setState(() {
+        _isCameraInitialized = false;
+        if (e.code == 'CameraAccessDenied' ||
+            e.code == 'CameraAccessDeniedWithoutPrompt' ||
+            e.code == 'cameraPermission') {
+          _isCameraPermissionDenied = true;
+        }
+      });
+    } catch (e) {
+      debugPrint('Error finding cameras: $e');
+      if (mounted) setState(() => _isCameraInitialized = false);
+    }
+  }
+
+  Future<void> _setupBackCamera() async {
+    if (_isConfiguringCamera) return;
+    _isConfiguringCamera = true;
+
+    // Safely dispose old controller first while removing preview from tree
+    final oldController = _cameraController;
+    _cameraController = null;
+    if (mounted) setState(() => _isCameraInitialized = false);
+    if (oldController != null) {
+      try {
+        await oldController.dispose();
+      } catch (_) {}
+      // Brief pause to allow Android camera HAL / CameraX native thread
+      // to cleanly unbind prior surfaces before requesting new hardware bindings
+      await Future.delayed(const Duration(milliseconds: 150));
+    }
+
+    try {
+      if (_cameras.isEmpty) {
+        _cameras = await availableCameras();
+      }
+      if (_cameras.isEmpty) {
+        if (mounted) setState(() => _isCameraInitialized = false);
+        return;
+      }
+
+      // Strictly select the BACK camera
+      final backCamera = _cameras.firstWhere(
+        (c) => c.lensDirection == CameraLensDirection.back,
+        orElse: () => _cameras.first,
+      );
+
+      // Do NOT set imageFormatGroup: ImageFormatGroup.jpeg because CameraX
+      // binds an unnecessary YUV ImageAnalysis surface that exceeds hardware limits
+      // ("No supported surface combination is found for camera device").
+      final controller = CameraController(
+        backCamera,
+        ResolutionPreset.medium,
+        enableAudio: false,
+      );
+
+      await controller.initialize();
+      if (!mounted) {
+        await controller.dispose();
+        return;
+      }
+      _cameraController = controller;
+      setState(() {
+        _isCameraInitialized = true;
+        _isCameraPermissionDenied = false;
+        _isTorchOn = false;
+      });
+    } on CameraException catch (e) {
+      debugPrint('CameraException on back camera setup: ${e.code}');
+      if (!mounted) return;
+      setState(() {
+        _isCameraInitialized = false;
+        if (e.code == 'CameraAccessDenied' ||
+            e.code == 'CameraAccessDeniedWithoutPrompt' ||
+            e.code == 'cameraPermission') {
+          _isCameraPermissionDenied = true;
+        }
+      });
+    } catch (e) {
+      debugPrint('Unexpected error setting up camera: $e');
+      if (mounted) setState(() => _isCameraInitialized = false);
+    } finally {
+      _isConfiguringCamera = false;
+    }
+  }
+
+  Future<void> _toggleTorch() async {
+    final controller = _cameraController;
+    if (controller == null) return;
+    try {
+      if (!controller.value.isInitialized) return;
+      if (_isTorchOn) {
+        await controller.setFlashMode(FlashMode.off);
+        if (mounted) setState(() => _isTorchOn = false);
+      } else {
+        await controller.setFlashMode(FlashMode.torch);
+        if (mounted) setState(() => _isTorchOn = true);
+      }
+    } catch (e) {
+      debugPrint('Error toggling flash: $e');
+    }
+  }
+
+  Future<void> _captureAndScan() async {
+    final controller = _cameraController;
+    bool isReady = false;
+    try {
+      isReady = controller != null && controller.value.isInitialized;
+    } catch (_) {
+      isReady = false;
+    }
+
+    if (!isReady || controller == null) {
+      AppToast.error(context, 'Camera is not ready yet. Please wait a moment.');
+      return;
+    }
+    if (controller.value.isTakingPicture || _scanning || _isCapturing) {
+      return;
+    }
+
+    setState(() => _isCapturing = true);
+    try {
+      HapticFeedback.mediumImpact();
+      final XFile photo = await controller.takePicture();
+
+      if (!mounted) return;
+      setState(() {
+        _isCapturing = false;
+        _pickedImage = File(photo.path);
+        _done = false;
+        _results = [];
+        _speciesResult = null;
+        _error = null;
+      });
+      await _runScan();
+    } catch (e) {
+      if (mounted) setState(() => _isCapturing = false);
+      if (mounted) {
+        AppToast.error(context, 'Failed to capture photo: $e');
+      }
+    }
+  }
+
+  Future<void> _returnToLiveCamera() async {
+    if (_isSwitchingToLive) return;
+    setState(() => _isSwitchingToLive = true);
+
+    try {
+      // The live camera view remains continuously mounted at the base of the Stack,
+      // so we simply unhide it by clearing _pickedImage.
+      final controller = _cameraController;
+      bool isReady = false;
+      if (controller != null) {
+        try {
+          isReady = controller.value.isInitialized;
+        } catch (_) {
+          isReady = false;
+        }
+      }
+
+      if (!isReady) {
+        await _setupBackCamera();
+      }
+    } catch (e) {
+      debugPrint('Error returning to live camera: $e');
+    } finally {
+      if (mounted) {
+        setState(() {
+          _pickedImage = null;
+          _done = false;
+          _results = [];
+          _speciesResult = null;
+          _error = null;
+          _scanning = false;
+          _isSwitchingToLive = false;
+        });
+      }
+    }
+  }
+
+  Future<void> _pickGalleryImage() async {
+    try {
+      final picked =
+          await _picker.pickImage(source: ImageSource.gallery, imageQuality: 85);
       if (picked == null) return;
       setState(() {
         _pickedImage = File(picked.path);
@@ -59,15 +300,14 @@ class _AiScanScreenState extends State<AiScanScreen>
         _speciesResult = null;
         _error = null;
       });
-    } on PlatformException catch (e) {
+      await _runScan();
+    } on PlatformException catch (_) {
       if (!mounted) return;
-      final message = source == ImageSource.camera
-          ? 'Camera is unavailable or permission was denied. Please allow camera access in device settings and try again.'
-          : 'Photo access was denied. Please allow gallery access in device settings and try again.';
-      AppToast.error(context, '$message (${e.code})');
+      AppToast.error(
+          context, 'Gallery access denied. Please allow photo permissions.');
     } catch (e) {
       if (!mounted) return;
-      AppToast.error(context, 'Failed to open image source: $e');
+      AppToast.error(context, 'Failed to select image: $e');
     }
   }
 
@@ -563,9 +803,7 @@ class _AiScanScreenState extends State<AiScanScreen>
                 children: [
                   _buildViewfinder(),
                   const SizedBox(height: 20),
-                  _buildSourceButtons(),
-                  const SizedBox(height: 20),
-                  if (_pickedImage != null) _buildScanButton(),
+                  _buildActionControls(),
                   if (_scanning) ...[
                     const SizedBox(height: 24),
                     _buildScanningIndicator(),
@@ -616,62 +854,298 @@ class _AiScanScreenState extends State<AiScanScreen>
 
   Widget _buildViewfinder() {
     return Container(
-      height: 300,
+      height: 330,
       decoration: BoxDecoration(
-        color: Colors.grey.shade900,
-        borderRadius: BorderRadius.circular(20),
+        color: Colors.black,
+        borderRadius: BorderRadius.circular(22),
         border: Border.all(
-            color: AppColors.primaryContainer.withOpacity(0.4), width: 2),
+          color: AppColors.primary.withOpacity(0.4),
+          width: 2,
+        ),
         boxShadow: [
-          BoxShadow(color: Colors.black.withOpacity(0.15), blurRadius: 20)
+          BoxShadow(
+            color: Colors.black.withOpacity(0.2),
+            blurRadius: 20,
+            offset: const Offset(0, 6),
+          ),
         ],
       ),
       clipBehavior: Clip.antiAlias,
-      child: _pickedImage != null
-          ? Stack(
-              fit: StackFit.expand,
-              children: [
-                Image.file(_pickedImage!, fit: BoxFit.cover),
-                BackdropFilter(
-                  filter: ImageFilter.blur(sigmaX: 16, sigmaY: 16),
-                  child: Container(color: Colors.black.withOpacity(0.35)),
-                ),
-                Center(
-                  child: Image.file(_pickedImage!, fit: BoxFit.contain),
-                ),
-                // Corner brackets overlay
-                Positioned.fill(child: _buildCorners()),
-                if (_scanning)
-                  Positioned.fill(
-                    child: AnimatedBuilder(
-                      animation: _pulseCtrl,
-                      builder: (_, __) => Container(
-                        color: AppColors.primaryContainer
-                            .withOpacity(0.08 + _pulseCtrl.value * 0.08),
+      child: Stack(
+        fit: StackFit.expand,
+        children: [
+          // Keep live camera continuously mounted at the base of the Stack so its
+          // native preview surface is NEVER destroyed, unmounted, or rebound when taking consecutive shots.
+          _buildLiveCameraView(),
+
+          // Overlay captured / selected photo on top
+          if (_pickedImage != null) _buildCapturedPhotoOverlay(),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildCapturedPhotoOverlay() {
+    if (_pickedImage == null) return const SizedBox.shrink();
+
+    return Stack(
+      fit: StackFit.expand,
+      children: [
+        Image.file(_pickedImage!, fit: BoxFit.cover),
+        BackdropFilter(
+          filter: ImageFilter.blur(sigmaX: 16, sigmaY: 16),
+          child: Container(color: Colors.black.withOpacity(0.35)),
+        ),
+        Center(
+          child: Image.file(_pickedImage!, fit: BoxFit.contain),
+        ),
+        // Corner brackets overlay
+        Positioned.fill(child: _buildCorners()),
+        if (_scanning)
+          Positioned.fill(
+            child: AnimatedBuilder(
+              animation: _pulseCtrl,
+              builder: (_, __) => Container(
+                color: AppColors.primaryContainer
+                    .withOpacity(0.08 + _pulseCtrl.value * 0.08),
+              ),
+            ),
+          ),
+        // Top-right Live Camera button to return to live feed
+        Positioned(
+          top: 12,
+          right: 12,
+          child: Material(
+            color: Colors.black.withOpacity(0.65),
+            borderRadius: BorderRadius.circular(20),
+            child: InkWell(
+              borderRadius: BorderRadius.circular(20),
+              onTap: _isSwitchingToLive ? null : _returnToLiveCamera,
+              child: Padding(
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    if (_isSwitchingToLive)
+                      const SizedBox(
+                        width: 14,
+                        height: 14,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2,
+                          color: Colors.white,
+                        ),
+                      )
+                    else
+                      const Icon(Icons.videocam_rounded,
+                          color: Colors.white, size: 15),
+                    const SizedBox(width: 5),
+                    Text(
+                      _isSwitchingToLive ? 'Starting…' : 'Live Camera',
+                      style: GoogleFonts.inter(
+                        fontSize: 11,
+                        fontWeight: FontWeight.w600,
+                        color: Colors.white,
                       ),
                     ),
-                  ),
-              ],
-            )
-          : Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                Icon(Icons.pets,
-                    size: 64, color: Colors.white.withOpacity(0.3)),
-                const SizedBox(height: 12),
-                Text(
-                  'No photo selected',
-                  style: GoogleFonts.inter(
-                      fontSize: 15, color: Colors.white.withOpacity(0.5)),
+                  ],
                 ),
-                const SizedBox(height: 4),
-                Text(
-                  'Use the buttons below to pick a photo.',
-                  style: GoogleFonts.inter(
-                      fontSize: 12, color: Colors.white.withOpacity(0.35)),
-                ),
-              ],
+              ),
             ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildLiveCameraView() {
+    if (_isCameraPermissionDenied) {
+      return Center(
+        child: Padding(
+          padding: const EdgeInsets.all(24.0),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(Icons.videocam_off_rounded,
+                  size: 48, color: Colors.white.withOpacity(0.4)),
+              const SizedBox(height: 12),
+              Text(
+                'Camera Access Required',
+                style: GoogleFonts.montserrat(
+                  fontSize: 15,
+                  fontWeight: FontWeight.w700,
+                  color: Colors.white,
+                ),
+              ),
+              const SizedBox(height: 6),
+              Text(
+                'Please allow camera permissions in device settings to use live pet scanning.',
+                textAlign: TextAlign.center,
+                style: GoogleFonts.inter(
+                  fontSize: 12,
+                  color: Colors.white.withOpacity(0.6),
+                ),
+              ),
+              const SizedBox(height: 14),
+              ElevatedButton.icon(
+                onPressed: _initCamera,
+                icon: const Icon(Icons.refresh_rounded, size: 16),
+                label: const Text('Retry Camera'),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: AppColors.primary,
+                  foregroundColor: Colors.white,
+                  padding: const EdgeInsets.symmetric(
+                      horizontal: 16, vertical: 10),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+
+    final controller = _cameraController;
+    bool isControllerReady = false;
+    if (_isCameraInitialized && controller != null) {
+      try {
+        isControllerReady = controller.value.isInitialized;
+      } catch (_) {
+        isControllerReady = false;
+      }
+    }
+
+    if (!isControllerReady || controller == null) {
+      return Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            const CircularProgressIndicator(
+              color: AppColors.primary,
+              strokeWidth: 2.5,
+            ),
+            const SizedBox(height: 14),
+            Text(
+              'Starting live camera…',
+              style: GoogleFonts.inter(
+                fontSize: 13,
+                fontWeight: FontWeight.w500,
+                color: Colors.white.withOpacity(0.7),
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        double cameraRatio = 3.0 / 4.0;
+        try {
+          final ratio = controller.value.aspectRatio;
+          cameraRatio = ratio > 1.0 ? 1.0 / ratio : ratio;
+        } catch (_) {}
+
+        return Stack(
+          fit: StackFit.expand,
+          children: [
+            // Live Camera Preview fitted smoothly
+            FittedBox(
+              fit: BoxFit.cover,
+              clipBehavior: Clip.hardEdge,
+              child: SizedBox(
+                width: constraints.maxWidth,
+                height: constraints.maxWidth / cameraRatio,
+                child: CameraPreview(controller),
+              ),
+            ),
+
+            // Corner brackets overlay
+            Positioned.fill(child: _buildCorners()),
+
+            // Shutter flash or capturing pulse
+            if (_isCapturing || _scanning)
+              Positioned.fill(
+                child: Container(
+                  color: _isCapturing
+                      ? Colors.white.withOpacity(0.5)
+                      : AppColors.primary.withOpacity(0.12),
+                ),
+              ),
+
+            // Top Badges & Controls Overlay
+            Positioned(
+              top: 12,
+              left: 12,
+              right: 12,
+              child: Row(
+                children: [
+                  // Live Camera Indicator Badge
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 10, vertical: 5),
+                    decoration: BoxDecoration(
+                      color: Colors.black.withOpacity(0.55),
+                      borderRadius: BorderRadius.circular(20),
+                      border: Border.all(
+                        color: Colors.white.withOpacity(0.15),
+                      ),
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Container(
+                          width: 8,
+                          height: 8,
+                          decoration: const BoxDecoration(
+                            color: Color(0xFF22C55E),
+                            shape: BoxShape.circle,
+                          ),
+                        ),
+                        const SizedBox(width: 6),
+                        Text(
+                          'LIVE CAM',
+                          style: GoogleFonts.inter(
+                            fontSize: 10,
+                            fontWeight: FontWeight.w700,
+                            letterSpacing: 0.6,
+                            color: Colors.white,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+
+                  const Spacer(),
+
+                  // Torch Toggle
+                  Container(
+                    decoration: BoxDecoration(
+                      color: Colors.black.withOpacity(0.5),
+                      shape: BoxShape.circle,
+                    ),
+                    child: IconButton(
+                      icon: Icon(
+                        _isTorchOn
+                            ? Icons.flash_on_rounded
+                            : Icons.flash_off_rounded,
+                        color: _isTorchOn
+                            ? const Color(0xFFFFB300)
+                            : Colors.white,
+                        size: 18,
+                      ),
+                      tooltip: 'Toggle Flash',
+                      onPressed: _toggleTorch,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        );
+      },
     );
   }
 
@@ -679,52 +1153,158 @@ class _AiScanScreenState extends State<AiScanScreen>
     return const CustomPaint(painter: CornerPainter());
   }
 
-  Widget _buildSourceButtons() {
-    return Row(
-      children: [
-        Expanded(
-          child: SourceButton(
-            icon: Icons.photo_library_rounded,
-            label: 'Gallery',
-            onTap: () => _pickImage(ImageSource.gallery),
+  Widget _buildActionControls() {
+    if (_pickedImage != null) {
+      // Photo is captured or selected
+      return Column(
+        children: [
+          Row(
+            children: [
+              Expanded(
+                child: SizedBox(
+                  height: 52,
+                  child: ElevatedButton.icon(
+                    onPressed: (_scanning || _isSwitchingToLive)
+                        ? null
+                        : _returnToLiveCamera,
+                    icon: _isSwitchingToLive
+                        ? const SizedBox(
+                            width: 18,
+                            height: 18,
+                            child: CircularProgressIndicator(
+                              strokeWidth: 2,
+                              color: Colors.white,
+                            ),
+                          )
+                        : const Icon(Icons.videocam_rounded, size: 20),
+                    label: Text(
+                      _isSwitchingToLive ? 'Starting Camera…' : 'Live Camera',
+                      style: GoogleFonts.inter(
+                        fontSize: 13,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: AppColors.primary,
+                      foregroundColor: Colors.white,
+                      elevation: 2,
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(14),
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: SizedBox(
+                  height: 52,
+                  child: OutlinedButton.icon(
+                    onPressed: _scanning ? null : _pickGalleryImage,
+                    icon: const Icon(Icons.photo_library_rounded, size: 19),
+                    label: Text(
+                      'Gallery',
+                      style: GoogleFonts.inter(
+                        fontSize: 13,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                    style: OutlinedButton.styleFrom(
+                      foregroundColor: AppColors.onSurface,
+                      side: BorderSide(
+                          color: AppColors.outlineVariant.withOpacity(0.35)),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(14),
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ],
           ),
-        ),
-        const SizedBox(width: 12),
-        Expanded(
-          child: SourceButton(
-            icon: Icons.camera_alt_rounded,
-            label: 'Camera',
-            onTap: () => _pickImage(ImageSource.camera),
-          ),
-        ),
-      ],
-    );
-  }
+          if (!_scanning && !_done) ...[
+            const SizedBox(height: 12),
+            SizedBox(
+              width: double.infinity,
+              height: 52,
+              child: ElevatedButton.icon(
+                onPressed: _runScan,
+                icon: const Icon(Icons.search_rounded),
+                label: Text(
+                  'Find Matches',
+                  style: GoogleFonts.montserrat(
+                    fontSize: 15,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: AppColors.primary,
+                  foregroundColor: Colors.white,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(14),
+                  ),
+                  elevation: 3,
+                ),
+              ),
+            ),
+          ],
+        ],
+      );
+    }
 
-  Widget _buildScanButton() {
+    // Live Camera mode: Capture & Scan directly!
     return Column(
       children: [
+        // Main Capture & Scan Button
         SizedBox(
           width: double.infinity,
           height: 54,
           child: ElevatedButton.icon(
-            onPressed: _scanning ? null : _runScan,
-            icon: const Icon(Icons.search_rounded),
+            onPressed: (_scanning || _isCapturing) ? null : _captureAndScan,
+            icon: const Icon(Icons.camera_alt_rounded, size: 22),
             label: Text(
-              'Find Matches',
+              _isCapturing ? 'Capturing photo…' : 'Capture & Scan Pet',
               style: GoogleFonts.montserrat(
-                  fontSize: 15, fontWeight: FontWeight.w700),
+                fontSize: 15,
+                fontWeight: FontWeight.w700,
+              ),
             ),
             style: ElevatedButton.styleFrom(
               backgroundColor: AppColors.primary,
               foregroundColor: Colors.white,
               shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(14)),
+                borderRadius: BorderRadius.circular(16),
+              ),
               elevation: 4,
+              shadowColor: AppColors.primary.withOpacity(0.35),
             ),
           ),
         ),
-        const SizedBox(height: 8),
+        const SizedBox(height: 12),
+        // Secondary option: Gallery
+        SizedBox(
+          width: double.infinity,
+          height: 48,
+          child: OutlinedButton.icon(
+            onPressed: (_scanning || _isCapturing) ? null : _pickGalleryImage,
+            icon: const Icon(Icons.photo_library_rounded, size: 18),
+            label: Text(
+              'Upload from Gallery',
+              style: GoogleFonts.inter(
+                fontSize: 13,
+                fontWeight: FontWeight.w600,
+                color: AppColors.onSurface,
+              ),
+            ),
+            style: OutlinedButton.styleFrom(
+              side:
+                  BorderSide(color: AppColors.outlineVariant.withOpacity(0.35)),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(14),
+              ),
+            ),
+          ),
+        ),
       ],
     );
   }

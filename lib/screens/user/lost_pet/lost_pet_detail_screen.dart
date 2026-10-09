@@ -6,6 +6,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../../../core/app_colors.dart';
 import '../../../core/app_toast.dart';
+import '../../../widgets/user/lost_pet/mark_found_camera_sheet.dart';
 import 'lost_pet_map_screen.dart';
 
 class LostPetDetailScreen extends StatefulWidget {
@@ -56,28 +57,55 @@ class _LostPetDetailScreenState extends State<LostPetDetailScreen> {
 
   Future<void> _markAsFound() async {
     final reportId = widget.report['report_id']?.toString();
+    final petData = widget.report['pets'] as Map<String, dynamic>?;
+    final petName = petData?['name']?.toString() ?? 'your pet';
     final petId = widget.report['pet_id']?.toString() ??
-        (widget.report['pets'] is Map
-            ? widget.report['pets']['pet_id']?.toString()
-            : null);
+        (petData != null ? petData['pet_id']?.toString() : null);
     if (reportId == null) return;
+
+    // Prompt owner to capture live photo of found pet
+    final foundPhotoUrl = await MarkFoundCameraSheet.show(
+      context,
+      petName: petName,
+      reportId: reportId,
+    );
+    if (foundPhotoUrl == null) return; // User cancelled
+
     setState(() => _markingFound = true);
+    final nowIso = DateTime.now().toIso8601String();
     try {
-      await Supabase.instance.client.from('lost_reports').update({
-        'status': 'archived',
-      }).eq('report_id', reportId);
+      try {
+        await Supabase.instance.client.from('lost_reports').update({
+          'status': 'archived',
+          'found_at': nowIso,
+          'found_photo_url': foundPhotoUrl,
+        }).eq('report_id', reportId);
+      } catch (_) {
+        await Supabase.instance.client.from('lost_reports').update({
+          'status': 'archived',
+          'found_at': nowIso,
+          'description': '${widget.report['description'] ?? ''}\n[Found Verification Photo]: $foundPhotoUrl'.trim(),
+        }).eq('report_id', reportId);
+      }
 
       if (petId != null && petId.isNotEmpty) {
-        await Supabase.instance.client
-            .from('pets')
-            .update({'status': 'active'}).eq('pet_id', petId);
+        try {
+          await Supabase.instance.client.from('pets').update({
+            'status': 'active',
+            'found_photo_url': foundPhotoUrl,
+          }).eq('pet_id', petId);
+        } catch (_) {
+          await Supabase.instance.client
+              .from('pets')
+              .update({'status': 'active'}).eq('pet_id', petId);
+        }
       }
 
       if (mounted) {
-        AppToast.show(context, 'Marked as found and archived!',
+        AppToast.show(context, '$petName has been marked as found! 🎉',
             icon: Icons.check_circle_outline,
             backgroundColor: const Color(0xFF22C55E));
-        Navigator.pop(context);
+        Navigator.pop(context, true);
       }
     } catch (e) {
       if (mounted) {
