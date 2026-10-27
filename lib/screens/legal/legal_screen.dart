@@ -134,6 +134,7 @@ class _LegalScreenState extends State<LegalScreen>
               'We collect information necessary to provide pet registration and recovery services:',
           bulletPoints: const [
             'Account Information: Name, email address, phone number, and barangay residence.',
+            'Government / Valid ID Verification: Uploaded photographs of valid government or barangay identification (e.g., PhilID, Driver\'s License, UMID, Postal ID, Barangay ID) and extracted verification details.',
             'Pet Profiles: Pet name, species, breed, color markings, weight, date of birth, and photos.',
             'Optional GPS Telemetry & Location: Real-time satellite coordinates and battery status only if a physical GPS collar is paired to your pet.',
             'Incident & Lost Reports: Last seen location, community sighting images, and incident descriptions.',
@@ -142,6 +143,20 @@ class _LegalScreenState extends State<LegalScreen>
         const SizedBox(height: 16),
         _buildSectionCard(
           number: '3',
+          title: 'Government Identification & Owner Verification',
+          content:
+              'To prevent fraudulent pet claims, ensure legitimate ownership, and maintain verified barangay residency records, ${AppConstants.appName} collects and verifies valid government or barangay-issued identification documents:',
+          bulletPoints: const [
+            'Purpose of Collection: Valid IDs are collected strictly to authenticate your identity as a legitimate pet owner or resident within the designated barangay, ensuring accountability and preventing unlawful pet transfer or theft.',
+            'Document Processing & OCR: Uploaded ID documents may undergo automated Optical Character Recognition (OCR) solely to verify that your full name and residential details match your registered profile.',
+            'Encrypted Cloud Storage: Identification images and verification records are stored with AES-256 encryption at rest and TLS encryption in transit in secure, private cloud storage.',
+            'Strict Confidentiality & Restricted Access: Government IDs are strictly confidential. They are NEVER published on public community feeds, displayed to other pet owners, or indexed by search engines. Only authorized Barangay Administrators and designated verification officers have access for identity confirmation.',
+            'Retention & Deletion: ID records are retained only for as long as your account remains active or as required by animal regulation laws. You may request the deletion of your ID documents upon verified account deactivation.',
+          ],
+        ),
+        const SizedBox(height: 16),
+        _buildSectionCard(
+          number: '4',
           title: 'Location & GPS Data Retention',
           content:
               'For pets equipped with an optional GPS tracker, location data is collected solely for pet security, live tracking by verified owners, and lost pet recovery assistance.',
@@ -153,14 +168,14 @@ class _LegalScreenState extends State<LegalScreen>
         ),
         const SizedBox(height: 16),
         _buildSectionCard(
-          number: '4',
+          number: '5',
           title: 'AI Photo Matching & Computer Vision',
           content:
               'Photos uploaded during registration and lost reporting are processed by our automated image recognition engine to identify distinctive visual patterns (fur color, facial markings, species). We do not perform human facial recognition or store biometric data of owners.',
         ),
         const SizedBox(height: 16),
         _buildSectionCard(
-          number: '5',
+          number: '6',
           title: 'Data Sharing & Disclosure',
           content:
               'We never sell, rent, or monetize your personal information. Data is only shared under the following conditions:',
@@ -172,22 +187,22 @@ class _LegalScreenState extends State<LegalScreen>
         ),
         const SizedBox(height: 16),
         _buildSectionCard(
-          number: '6',
+          number: '7',
           title: 'Your Privacy Rights',
           content:
               'Under Philippine Data Privacy regulations, you retain full rights over your personal data:',
           bulletPoints: const [
-            'Right to Access: View all registered pet profiles and account history.',
-            'Right to Rectification: Update or correct inaccurate information at any time.',
-            'Right to Erasure: Request permanent deletion of your profile, pet records, and stored photos.',
+            'Right to Access: View all registered pet profiles, verification history, and account records.',
+            'Right to Rectification: Update or correct inaccurate information or re-upload updated ID cards at any time.',
+            'Right to Erasure: Request permanent deletion of your profile, pet records, uploaded ID documents, and photos.',
           ],
         ),
         const SizedBox(height: 16),
         _buildSectionCard(
-          number: '7',
+          number: '8',
           title: 'Contact Information',
           content:
-              'For questions regarding this Privacy Policy, data access requests, or privacy concerns, please contact the PetTrace Data Protection team at support@petttrace.com.',
+              'For questions regarding this Privacy Policy, ID verification data, access requests, or privacy concerns, please contact the PetTrace Data Protection team at support@petttrace.com.',
         ),
         const SizedBox(height: 32),
       ],
@@ -223,6 +238,7 @@ class _LegalScreenState extends State<LegalScreen>
               'To use ${AppConstants.appName} features, you must maintain an active and verified account:',
           bulletPoints: const [
             'You must provide accurate, current, and complete registration information.',
+            'Identity Verification: To register pets and claim ownership, you may be required to upload a valid government or barangay-issued ID. Submitting altered, expired, fraudulent, or impersonated identification documents is strictly prohibited and grounds for immediate account suspension.',
             'You are responsible for maintaining the confidentiality of your account credentials.',
             'Only legitimate pet owners, authorized caretakers, and verified municipal personnel may create accounts.',
           ],

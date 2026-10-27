@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../../../core/app_constants.dart';
 import '../pet_location_map_dialog.dart';
 import 'admin_report_image_banner.dart';
 import 'admin_report_details_content.dart';
@@ -25,7 +26,7 @@ class AdminReportCard extends StatelessWidget {
   static String formatDate(String? timestamp) {
     if (timestamp == null || timestamp.isEmpty) return '-';
     try {
-      final dt = DateTime.parse(timestamp).toLocal();
+      final dt = AppConstants.parseLocalTime(timestamp);
       const months = [
         'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
         'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'
@@ -39,7 +40,7 @@ class AdminReportCard extends StatelessWidget {
   static String formatTime(String? timestamp) {
     if (timestamp == null || timestamp.isEmpty) return '-';
     try {
-      final dt = DateTime.parse(timestamp).toLocal();
+      final dt = AppConstants.parseLocalTime(timestamp);
       final hour = dt.hour == 0 ? 12 : (dt.hour > 12 ? dt.hour - 12 : dt.hour);
       final minute = dt.minute.toString().padLeft(2, '0');
       final period = dt.hour < 12 ? 'AM' : 'PM';

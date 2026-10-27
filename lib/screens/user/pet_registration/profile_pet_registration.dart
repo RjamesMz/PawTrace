@@ -37,6 +37,7 @@ class _ProfilePetRegistrationScreenState
   final _weightCtrl = TextEditingController();
   String? _selectedSpecies = 'Dog';
   String _selectedBreed = 'Aspin';
+  String _selectedGender = 'Male';
   String _selectedBarangay = 'Calatagan';
   DateTime? _selectedDOB;
   bool _isDOBUnknown = false;
@@ -460,14 +461,13 @@ class _ProfilePetRegistrationScreenState
       if (collarText.isNotEmpty && collarText.toUpperCase() != 'N/A') {
         final existingPet = await _supabase
             .from('pets')
-            .select('pet_id, name')
+            .select('pet_id')
             .eq('gps_id', collarText)
             .maybeSingle();
 
         if (existingPet != null) {
-          final otherName = existingPet['name'] ?? 'another pet';
           _showError(
-            'Collar "$collarText" is already paired to "$otherName". A collar can only belong to 1 pet.',
+            'Collar "$collarText" is already paired to another pet. A collar can only belong to 1 pet.',
           );
           return;
         }
@@ -517,6 +517,7 @@ class _ProfilePetRegistrationScreenState
             'name': _nameCtrl.text.trim(),
             'species': selectedSpecies,
             'breed': breedText.isEmpty ? 'N/A' : breedText,
+            'gender': _selectedGender,
             'color': colorText.isEmpty ? 'N/A' : colorText,
             'weight': (weightText.isEmpty || weightText.toUpperCase() == 'N/A')
                 ? 0.0
@@ -771,21 +772,30 @@ class _ProfilePetRegistrationScreenState
           ],
           const SizedBox(height: 20),
 
-          // Name + species
+          // Pet Name
+          PetFormField(
+            label: 'Pet Name',
+            controller: _nameCtrl,
+            hint: 'e.g. Buster',
+          ),
+          const SizedBox(height: 12),
+
+          // Species + Sex / Gender
           Row(children: [
-            Expanded(
-              child: PetFormField(
-                label: 'Pet Name',
-                controller: _nameCtrl,
-                hint: 'e.g. Buster',
-              ),
-            ),
-            const SizedBox(width: 12),
             Expanded(
               child: PetSpeciesDropdown(
                 selectedSpecies: _selectedSpecies,
                 onChanged: (v) {
                   if (v != null) _handleSpeciesChange(v);
+                },
+              ),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: PetGenderDropdown(
+                selectedGender: _selectedGender,
+                onChanged: (v) {
+                  if (v != null) setState(() => _selectedGender = v);
                 },
               ),
             ),

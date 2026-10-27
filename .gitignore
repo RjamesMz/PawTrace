@@ -30,6 +30,12 @@ android/key.properties
 **/*.keystore
 **/*.jks
 
+# Hardware Firmware & Secrets (ESP32 Collar tokens/keys)
+firmware/
+*.ino
+pettrace_gps_collar.ino
+pettrace_collar.ino
+
 # ─── Flutter / Dart / Pub ──────────────────────────────────────────────────────
 **/doc/api/
 **/ios/Flutter/.last_build_id

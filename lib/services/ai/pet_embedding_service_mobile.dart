@@ -109,6 +109,8 @@ class PetEmbeddingService {
       try {
         final uri = await _uri(path);
         final request = http.MultipartRequest('POST', uri);
+        // Localtunnel (loca.lt) requires this header to bypass its interstitial reminder page
+        request.headers['bypass-tunnel-reminder'] = 'true';
         request.files.add(
           await http.MultipartFile.fromPath('file', imageFile.path),
         );

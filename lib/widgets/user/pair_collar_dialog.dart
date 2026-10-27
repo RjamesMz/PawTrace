@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../core/app_colors.dart';
+import '../../core/app_constants.dart';
 
 /// Displays a dialog to pair or unpair a GPS collar to a pet.
 /// Enforces the business rule: 1 Collar for 1 Pet only.
@@ -216,23 +217,111 @@ Future<String?> showPairCollarDialog({
                                     try {
                                       final idToClean = currentCollarId.trim();
 
-                                      // 1. Delete all location history for this collar from gps_locations
+                                      // 1. Fetch latest telemetry before unpairing so the pin is retained
+                                      double? lastLat;
+                                      double? lastLon;
+                                      String? lastAt;
+
                                       try {
-                                        await Supabase.instance.client
+                                        final ping = await Supabase.instance.client
                                             .from('gps_locations')
-                                            .delete()
-                                            .eq('gps_id', idToClean);
+                                            .select('lat, lon, recorded_at')
+                                            .eq('gps_id', idToClean)
+                                            .order('recorded_at', ascending: false)
+                                            .limit(1)
+                                            .maybeSingle();
+
+                                        if (ping != null) {
+                                          lastLat =
+                                              (ping['lat'] as num?)?.toDouble();
+                                          lastLon =
+                                              (ping['lon'] as num?)?.toDouble();
+                                          lastAt =
+                                              ping['recorded_at']?.toString();
+                                        }
                                       } catch (locErr) {
                                         debugPrint(
-                                            '[CollarUnpair] Notice deleting collar locations: $locErr');
+                                            '[CollarUnpair] Notice fetching collar location: $locErr');
                                       }
 
-                                      // 2. Clear gps_id and all cached location coordinates from the pet's row
-                                      await Supabase.instance.client
-                                          .from('pets')
-                                          .update({
+                                      lastLat ??= (pet['last_seen_lat'] as num?)
+                                          ?.toDouble();
+                                      lastLon ??= (pet['last_seen_lon'] as num?)
+                                          ?.toDouble();
+                                      lastAt ??= pet['last_seen_at']?.toString();
+
+                                      final barangay =
+                                          pet['barangay']?.toString() ??
+                                              'Calatagan';
+                                      final String? addressWithCoords =
+                                          (lastLat != null && lastLon != null)
+                                              ? '$barangay (Lat: ${lastLat.toStringAsFixed(5)}, Lng: ${lastLon.toStringAsFixed(5)})'
+                                              : null;
+
+                                      // 2. Lock the pin permanently into any active lost reports for this pet
+                                      if (lastLat != null && lastLon != null) {
+                                        try {
+                                          await Supabase.instance.client
+                                              .from('lost_reports')
+                                              .update({
+                                                'last_seen_lat': lastLat,
+                                                'last_seen_lon': lastLon,
+                                                if (addressWithCoords != null)
+                                                  'last_seen_address':
+                                                      addressWithCoords,
+                                              })
+                                              .eq('pet_id', petId)
+                                              .eq('status', 'active');
+                                        } catch (repErr) {
+                                          debugPrint(
+                                              '[CollarUnpair] Notice locking lost report pin: $repErr');
+                                        }
+                                      }
+
+                                      // 3. Clear gps_id from pet row while retaining last known coordinates
+                                      final petUpdate = <String, dynamic>{
                                         'gps_id': null,
-                                      }).eq('pet_id', petId);
+                                      };
+                                      if (lastLat != null && lastLon != null) {
+                                        petUpdate['last_seen_lat'] = lastLat;
+                                        petUpdate['last_seen_lon'] = lastLon;
+                                        if (addressWithCoords != null) {
+                                          petUpdate['last_seen_address'] =
+                                              addressWithCoords;
+                                        }
+                                        if (lastAt != null) {
+                                          petUpdate['last_seen_at'] = lastAt;
+                                        }
+                                      }
+
+                                      try {
+                                        await Supabase.instance.client
+                                            .from('pets')
+                                            .update(petUpdate)
+                                            .eq('pet_id', petId);
+                                      } catch (updateErr) {
+                                        debugPrint(
+                                            '[CollarUnpair] Updating pets with last_seen coords: ');
+                                        // Graceful fallback if schema does not yet have last_seen columns
+                                        await Supabase.instance.client
+                                            .from('pets')
+                                            .update({'gps_id': null})
+                                            .eq('pet_id', petId);
+                                      }
+
+                                      // 4. Update local in-memory pet map so calling screens retain the pin
+                                      pet['gps_id'] = null;
+                                      if (lastLat != null && lastLon != null) {
+                                        pet['last_seen_lat'] = lastLat;
+                                        pet['last_seen_lon'] = lastLon;
+                                        if (lastAt != null) {
+                                          pet['last_seen_at'] = lastAt;
+                                        }
+                                        if (addressWithCoords != null) {
+                                          pet['last_seen_address'] =
+                                              addressWithCoords;
+                                        }
+                                      }
 
                                       if (context.mounted) {
                                         Navigator.pop(context, '__unpaired__');
@@ -240,7 +329,11 @@ Future<String?> showPairCollarDialog({
                                     } catch (e) {
                                       setDialogState(() {
                                         isSubmitting = false;
-                                        errorMessage = 'Failed to unpair: $e';
+                                        errorMessage = AppErrors.format(
+                                          e,
+                                          fallback:
+                                              'Failed to unpair collar. Please try again.',
+                                        );
                                       });
                                     }
                                   },
@@ -319,18 +412,16 @@ Future<String?> showPairCollarDialog({
                                       final existingPet = await Supabase
                                           .instance.client
                                           .from('pets')
-                                          .select('pet_id, name')
+                                          .select('pet_id')
                                           .eq('gps_id', enteredId)
                                           .neq('pet_id', petId)
                                           .maybeSingle();
 
                                       if (existingPet != null) {
-                                        final otherName = existingPet['name'] ??
-                                            'another pet';
                                         setDialogState(() {
                                           isSubmitting = false;
                                           errorMessage =
-                                              'Collar "$enteredId" is already paired to "$otherName". 1 collar can only belong to 1 pet.';
+                                              'Collar "$enteredId" is already paired to another pet. 1 collar can only belong to 1 pet.';
                                         });
                                         return;
                                       }
@@ -359,8 +450,20 @@ Future<String?> showPairCollarDialog({
                                     } catch (e) {
                                       setDialogState(() {
                                         isSubmitting = false;
-                                        errorMessage =
-                                            'Error saving collar: $e';
+                                        final errStr = e.toString().toLowerCase();
+                                        if (errStr.contains('23505') ||
+                                            errStr.contains('unique') ||
+                                            errStr.contains('pets_collar_id') ||
+                                            errStr.contains('duplicate')) {
+                                          errorMessage =
+                                              'Collar "$enteredId" is already paired to another pet. 1 collar can only belong to 1 pet.';
+                                        } else {
+                                          errorMessage = AppErrors.format(
+                                            e,
+                                            fallback:
+                                                'Unable to save collar. Please check your connection and try again.',
+                                          );
+                                        }
                                       });
                                     }
                                   },

@@ -110,6 +110,8 @@ class AdminPetCard extends StatelessWidget {
                           fontSize: 13,
                           color: AppColors.onSurfaceVariant,
                         ),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
                       ),
                       const SizedBox(height: 2),
                       Text(
@@ -119,16 +121,22 @@ class AdminPetCard extends StatelessWidget {
                           fontWeight: FontWeight.w500,
                           color: AppColors.primary,
                         ),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
                       ),
                       Row(
                         children: [
                           if (barangay.toString().isNotEmpty)
-                            Text(
-                              barangay,
-                              style: GoogleFonts.inter(
-                                fontSize: 11,
-                                color:
-                                    AppColors.onSurfaceVariant.withOpacity(0.7),
+                            Flexible(
+                              child: Text(
+                                barangay,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: GoogleFonts.inter(
+                                  fontSize: 11,
+                                  color:
+                                      AppColors.onSurfaceVariant.withOpacity(0.7),
+                                ),
                               ),
                             ),
                           if (barangay.toString().isNotEmpty && regDate != '-')

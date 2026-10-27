@@ -1,9 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../../core/app_colors.dart';
-import '../../core/app_routes.dart';
-import '../admin/stat_card.dart';
 import '../admin/web/admin_web_layout.dart';
+import '../admin/dashboard/admin_dashboard_analytics_view.dart';
 import 'super_admin_data_tables.dart';
 
 /// SuperAdmin desktop web view implementation.
@@ -15,6 +14,7 @@ class SuperAdminDesktopView extends StatelessWidget {
   final int totalAdmins;
   final List<Map<String, dynamic>> recentReports;
   final List<Map<String, dynamic>> admins;
+  final List<Map<String, dynamic>>? recentActivity;
   final int webTabIndex;
   final ValueChanged<int> onTabChanged;
   final Function(String userId, String email, bool isDeactivated)
@@ -30,6 +30,7 @@ class SuperAdminDesktopView extends StatelessWidget {
     required this.totalAdmins,
     required this.recentReports,
     required this.admins,
+    this.recentActivity,
     required this.webTabIndex,
     required this.onTabChanged,
     required this.onToggleAdminStatus,
@@ -68,142 +69,11 @@ class SuperAdminDesktopView extends StatelessWidget {
   }
 
   Widget _buildWebDashboard(BuildContext context) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Row(
-          children: [
-            Expanded(
-              child: SizedBox(
-                height: 110,
-                child: StatCard(
-                  label: 'Total Pets',
-                  count: totalPets,
-                  icon: Icons.pets_rounded,
-                  color: const Color(0xFFFF6600),
-                  isLoading: isLoading,
-                ),
-              ),
-            ),
-            const SizedBox(width: 16),
-            Expanded(
-              child: SizedBox(
-                height: 110,
-                child: StatCard(
-                  label: 'Registered Users',
-                  count: totalUsers,
-                  icon: Icons.people_rounded,
-                  color: const Color(0xFF4E7AC7),
-                  isLoading: isLoading,
-                  onTap: () {
-                    Navigator.pushNamed(
-                      context,
-                      AppRoutes.userManagement,
-                      arguments: {'tab': 0},
-                    );
-                  },
-                ),
-              ),
-            ),
-            const SizedBox(width: 16),
-            Expanded(
-              child: SizedBox(
-                height: 110,
-                child: StatCard(
-                  label: 'Active Reports',
-                  count: totalLostReports,
-                  icon: Icons.flag_rounded,
-                  color: const Color(0xFFBA1A1A),
-                  isLoading: isLoading,
-                ),
-              ),
-            ),
-            const SizedBox(width: 16),
-            Expanded(
-              child: SizedBox(
-                height: 110,
-                child: StatCard(
-                  label: 'Barangay Admins',
-                  count: totalAdmins,
-                  icon: Icons.shield_rounded,
-                  color: const Color(0xFF00796B),
-                  isLoading: isLoading,
-                  onTap: () {
-                    Navigator.pushNamed(
-                      context,
-                      AppRoutes.userManagement,
-                      arguments: {'tab': 1},
-                    );
-                  },
-                ),
-              ),
-            ),
-          ],
-        ),
-        const SizedBox(height: 24),
-        Card(
-          elevation: 0,
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(16),
-            side: BorderSide(color: Colors.grey.shade200),
-          ),
-          color: Colors.white,
-          clipBehavior: Clip.antiAlias,
-          child: Theme(
-            data: Theme.of(context).copyWith(
-              cardColor: Colors.white,
-              dividerColor: Colors.grey.shade200,
-            ),
-            child: SizedBox(
-              width: double.infinity,
-              child: PaginatedDataTable(
-                header: Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    Text(
-                      'Recent Lost Pet Reports',
-                      style: GoogleFonts.montserrat(
-                        fontSize: 16,
-                        fontWeight: FontWeight.bold,
-                        color: AppColors.onSurface,
-                      ),
-                    ),
-                    TextButton(
-                      onPressed: () {
-                        Navigator.pushNamed(
-                            context, AppRoutes.adminReports);
-                      },
-                      child: Text(
-                        'View All',
-                        style: GoogleFonts.inter(
-                          fontSize: 12,
-                          fontWeight: FontWeight.w600,
-                          color: AppColors.primary,
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-                rowsPerPage: 5,
-                dataRowMinHeight: 58,
-                dataRowMaxHeight: 66,
-                showFirstLastButtons: true,
-                columns: const [
-                  DataColumn(label: Text('Photo')),
-                  DataColumn(label: Text('Pet Name')),
-                  DataColumn(label: Text('Owner')),
-                  DataColumn(label: Text('Location')),
-                  DataColumn(label: Text('Date & Time Reported')),
-                  DataColumn(label: Text('Found Date & Time')),
-                  DataColumn(label: Text('Pet Status')),
-                  DataColumn(label: Text('Archive')),
-                ],
-                source: RecentReportsDataTableSource(recentReports),
-              ),
-            ),
-          ),
-        ),
-      ],
+    return AdminDashboardAnalyticsView(
+      adminBarangay: '',
+      isSuperAdmin: true,
+      pendingReports: recentReports,
+      recentActivity: recentActivity,
     );
   }
 

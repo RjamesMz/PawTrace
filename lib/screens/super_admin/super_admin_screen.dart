@@ -9,13 +9,13 @@ import '../../core/app_toast.dart';
 import '../../services/auth/auth_service.dart';
 import '../../widgets/admin/admin_content_wrapper.dart';
 import '../../widgets/admin/admin_layout.dart';
-import '../../widgets/admin/stat_card.dart';
 import '../../widgets/common/notification_bell_button.dart';
 import '../admin/reports/admin_reports_screen.dart';
 import '../admin/pets/admin_pets_screen.dart';
 import '../../widgets/super_admin/add_admin_sheet.dart';
 import '../../widgets/super_admin/super_admin_cards.dart';
 import '../../widgets/super_admin/super_admin_desktop_view.dart';
+import '../../widgets/admin/dashboard/admin_dashboard_analytics_view.dart';
 
 /// Super Admin Dashboard — province-wide control center for PawTrace
 /// in Catanduanes. Shows aggregate stats, barangay breakdown, admin
@@ -49,6 +49,7 @@ class _SuperAdminScreenState extends State<SuperAdminScreen> {
 
   // ── Recent lost reports ──────────────────────────────────────────────────
   List<Map<String, dynamic>> _recentReports = [];
+  List<Map<String, dynamic>> _recentActivity = [];
 
   /// Catanduanes municipalities used for barangay dropdown
   static const List<String> _municipalities = [
@@ -110,6 +111,7 @@ class _SuperAdminScreenState extends State<SuperAdminScreen> {
       _loadBarangayOverview(),
       _loadAdmins(),
       _loadRecentReports(),
+      _loadRecentActivity(),
     ]);
 
     if (mounted) setState(() => _isLoading = false);
@@ -227,6 +229,69 @@ class _SuperAdminScreenState extends State<SuperAdminScreen> {
     }
   }
 
+  Future<void> _loadRecentActivity() async {
+    try {
+      final pets = await _supabase
+          .from('pets')
+          .select('name, created_at, barangay, users(first_name, surname)')
+          .order('created_at', ascending: false)
+          .limit(5);
+
+      final List<Map<String, dynamic>> activities = [];
+      for (final p in pets) {
+        final petName = p['name'] ?? 'A pet';
+        final brgy = p['barangay']?.toString().trim();
+        final u = p['users'];
+        final ownerName = u != null
+            ? '${u['first_name'] ?? ''} ${u['surname'] ?? ''}'.trim()
+            : 'Someone';
+        final locationStr =
+            (brgy != null && brgy.isNotEmpty) ? ' in $brgy' : '';
+        activities.add({
+          'description': '$petName was registered by $ownerName$locationStr',
+          'timestamp': p['created_at'],
+          'color': const Color(0xFF22C55E),
+        });
+      }
+
+      final reports = await _supabase
+          .from('lost_reports')
+          .select('*, pets(name), owner_id(first_name, surname)')
+          .order('reported_at', ascending: false)
+          .limit(5);
+
+      for (final r in reports) {
+        final petData = r['pets'];
+        final petName =
+            petData is Map ? (petData['name'] ?? 'A pet') : 'A pet';
+        final brgy = r['barangay']?.toString().trim();
+        final locationStr =
+            (brgy != null && brgy.isNotEmpty) ? ' in $brgy' : '';
+        activities.add({
+          'description': 'Lost report filed for $petName$locationStr',
+          'timestamp': r['reported_at'] ?? r['created_at'],
+          'color': const Color(0xFFEF4444),
+        });
+      }
+
+      activities.sort((a, b) {
+        final ta = DateTime.tryParse(a['timestamp']?.toString() ?? '') ??
+            DateTime(2000);
+        final tb = DateTime.tryParse(b['timestamp']?.toString() ?? '') ??
+            DateTime(2000);
+        return tb.compareTo(ta);
+      });
+
+      if (mounted) {
+        setState(() {
+          _recentActivity = activities.take(6).toList();
+        });
+      }
+    } catch (e) {
+      debugPrint('Error fetching super admin recent activity: $e');
+    }
+  }
+
   // ─── Admin Status Management ──────────────────────────────────────────────
 
   Future<void> _toggleAdminStatus(
@@ -306,6 +371,7 @@ class _SuperAdminScreenState extends State<SuperAdminScreen> {
         totalLostReports: _totalLostReports,
         totalAdmins: _totalAdmins,
         recentReports: _recentReports,
+        recentActivity: _recentActivity,
         admins: _admins,
         webTabIndex: _webTabIndex,
         onTabChanged: (index) => setState(() => _webTabIndex = index),
@@ -341,13 +407,20 @@ class _SuperAdminScreenState extends State<SuperAdminScreen> {
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
                               _buildWelcomeBanner(),
-                              const SizedBox(height: 8),
-                              _buildProvinceStats(),
-                              const SizedBox(height: 8),
+                              const SizedBox(height: 16),
+                              Padding(
+                                padding:
+                                    const EdgeInsets.symmetric(horizontal: 16),
+                                child: AdminDashboardAnalyticsView(
+                                  adminBarangay: '',
+                                  isSuperAdmin: true,
+                                  pendingReports: _recentReports,
+                                  recentActivity: _recentActivity,
+                                ),
+                              ),
+                              const SizedBox(height: 16),
                               _buildBarangayOverview(),
-                              const SizedBox(height: 8),
-                              _buildRecentReports(),
-                              const SizedBox(height: 8),
+                              const SizedBox(height: 16),
                               _buildActionButtons(),
                               const SizedBox(height: 24),
                             ],
@@ -485,90 +558,6 @@ class _SuperAdminScreenState extends State<SuperAdminScreen> {
     );
   }
 
-  // ─── Section 2 — Province Stats ──────────────────────────────────────────
-
-  Widget _buildProvinceStats() {
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 16),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          const SizedBox(height: 8),
-          Text(
-            'PROVINCE OVERVIEW',
-            style: GoogleFonts.inter(
-              fontSize: 11,
-              fontWeight: FontWeight.w700,
-              color: AppColors.primary,
-              letterSpacing: 1.2,
-            ),
-          ),
-          const SizedBox(height: 12),
-          LayoutBuilder(
-            builder: (context, constraints) {
-              final isWide = constraints.maxWidth >= 900;
-              final crossAxisCount = isWide ? 4 : 2;
-              final childAspectRatio = isWide ? 2.2 : 1.35;
-
-              return GridView.count(
-                crossAxisCount: crossAxisCount,
-                crossAxisSpacing: 12,
-                mainAxisSpacing: 12,
-                childAspectRatio: childAspectRatio,
-                shrinkWrap: true,
-                physics: const NeverScrollableScrollPhysics(),
-                children: [
-                  StatCard(
-                    label: 'Total Pets',
-                    count: _totalPets,
-                    icon: Icons.pets_rounded,
-                    color: const Color(0xFFFF6600),
-                    isLoading: _isLoading,
-                  ),
-                  StatCard(
-                    label: 'Registered Users',
-                    count: _totalUsers,
-                    icon: Icons.people_rounded,
-                    color: const Color(0xFF4E7AC7),
-                    isLoading: _isLoading,
-                    onTap: () {
-                      Navigator.pushNamed(
-                        context,
-                        AppRoutes.userManagement,
-                        arguments: {'tab': 0},
-                      );
-                    },
-                  ),
-                  StatCard(
-                    label: 'Active Reports',
-                    count: _totalLostReports,
-                    icon: Icons.flag_rounded,
-                    color: const Color(0xFFBA1A1A),
-                    isLoading: _isLoading,
-                  ),
-                  StatCard(
-                    label: 'Barangay Admins',
-                    count: _totalAdmins,
-                    icon: Icons.shield_rounded,
-                    color: const Color(0xFF00796B),
-                    isLoading: _isLoading,
-                    onTap: () {
-                      Navigator.pushNamed(
-                        context,
-                        AppRoutes.userManagement,
-                        arguments: {'tab': 1},
-                      );
-                    },
-                  ),
-                ],
-              );
-            },
-          ),
-        ],
-      ),
-    );
-  }
-
   // ─── Section 3 — Barangay Breakdown Carousel ─────────────────────────────
 
   Widget _buildBarangayOverview() {
@@ -623,76 +612,6 @@ class _SuperAdminScreenState extends State<SuperAdminScreen> {
   }
 
 
-
-  // ─── Section 5 — Recent Lost Reports ─────────────────────────────────────
-
-  Widget _buildRecentReports() {
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 16),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          const SizedBox(height: 8),
-          Text(
-            'RECENT REPORTS',
-            style: GoogleFonts.inter(
-              fontSize: 11,
-              fontWeight: FontWeight.w700,
-              color: AppColors.primary,
-              letterSpacing: 1.2,
-            ),
-          ),
-          const SizedBox(height: 12),
-          if (_recentReports.isEmpty)
-            Container(
-              padding: const EdgeInsets.symmetric(vertical: 24),
-              alignment: Alignment.center,
-              child: Text(
-                'No recent reports.',
-                style: GoogleFonts.inter(
-                    fontSize: 13, color: AppColors.onSurfaceVariant),
-              ),
-            )
-          else
-            LayoutBuilder(
-              builder: (context, constraints) {
-                final isWide = constraints.maxWidth >= 900;
-                if (isWide) {
-                  return GridView.builder(
-                    shrinkWrap: true,
-                    physics: const NeverScrollableScrollPhysics(),
-                    gridDelegate:
-                        const SliverGridDelegateWithFixedCrossAxisCount(
-                      crossAxisCount: 2,
-                      crossAxisSpacing: 12,
-                      mainAxisSpacing: 12,
-                      childAspectRatio: 3.4,
-                    ),
-                    itemCount: _recentReports.length,
-                    itemBuilder: (context, i) {
-                      return SuperAdminReportItem(
-                        report: _recentReports[i],
-                        removeBottomMargin: true,
-                        onRefreshNeeded: _loadDashboard,
-                      );
-                    },
-                  );
-                }
-                return Column(
-                  children: List.generate(_recentReports.length, (i) {
-                    final report = _recentReports[i];
-                    return SuperAdminReportItem(
-                      report: report,
-                      onRefreshNeeded: _loadDashboard,
-                    );
-                  }),
-                );
-              },
-            ),
-        ],
-      ),
-    );
-  }
 
   // ─── Section 6 — Action Buttons ──────────────────────────────────────────
 

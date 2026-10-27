@@ -82,8 +82,8 @@ class _LoginScreenState extends State<LoginScreen> {
       Navigator.of(context).pushNamedAndRemoveUntil('/', (_) => false);
     } on AuthException catch (e) {
       _showError(AuthService.friendlyError(e));
-    } catch (_) {
-      _showError('An unexpected error occurred. Please try again.');
+    } catch (e) {
+      _showError(AppErrors.format(e));
     } finally {
       if (mounted) setState(() => _isLoading = false);
     }
@@ -340,12 +340,12 @@ class _LoginScreenState extends State<LoginScreen> {
             ),
             // Slim loading bar at the top of the card
             if (_isLoading)
-              Positioned(
+              const Positioned(
                 top: 24,
                 left: 24,
                 right: 24,
                 child: ClipRRect(
-                  borderRadius: const BorderRadius.vertical(
+                  borderRadius: BorderRadius.vertical(
                       top: Radius.circular(28)),
                   child: LinearProgressIndicator(
                     backgroundColor: Colors.transparent,

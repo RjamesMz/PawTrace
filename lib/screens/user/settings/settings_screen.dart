@@ -12,6 +12,7 @@ import '../../../services/auth/auth_service.dart';
 import '../../../widgets/user/settings/change_email_dialog.dart';
 import '../../../widgets/user/settings/edit_address_dialog.dart';
 import '../../../widgets/user/settings/edit_profile_dialog.dart';
+import '../../../services/audit/user_audit_service.dart';
 
 class SettingsScreen extends StatefulWidget {
   final bool showBottomNav;
@@ -204,6 +205,13 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
       if (!mounted) return;
       setState(() => _photoUrl = publicUrl);
+      UserAuditService.instance.logUserModification(
+        userId: uid,
+        action: 'Profile Photo Updated',
+        changesSummary: 'Uploaded and updated profile photo',
+        userName: _displayName,
+        userEmail: _email,
+      );
       AppToast.success(context, 'Profile photo updated!');
     } catch (e) {
       if (!mounted) return;
@@ -249,6 +257,22 @@ class _SettingsScreenState extends State<SettingsScreen> {
       }).eq('user_id', uid);
 
       if (!mounted) return;
+
+      final diffs = <String>[];
+      if (fn != _firstName) diffs.add('First Name: "$_firstName" -> "$fn"');
+      if (mn != _middleName) diffs.add('Middle Name: "$_middleName" -> "$mn"');
+      if (sn != _surname) diffs.add('Surname: "$_surname" -> "$sn"');
+      if (sfx != _suffix) diffs.add('Suffix: "$_suffix" -> "$sfx"');
+
+      UserAuditService.instance.logUserModification(
+        userId: uid,
+        action: 'Profile Details Updated',
+        changesSummary:
+            diffs.isEmpty ? 'Account profile details updated' : diffs.join('; '),
+        userName: [fn, mn, sn, sfx].where((s) => s.isNotEmpty).join(' '),
+        userEmail: _email,
+      );
+
       AuthService.instance.updateProfileData({
         'first_name': fn,
         'middle_name': mn,
@@ -431,6 +455,23 @@ class _SettingsScreenState extends State<SettingsScreen> {
           .updateCachedBarangay(baranga.isEmpty ? null : baranga);
 
       if (!mounted) return;
+
+      final diffs = <String>[];
+      if (addr != (_address ?? '')) {
+        diffs.add('Address: "${_address ?? 'Not set'}" -> "$addr"');
+      }
+      if (baranga != (_barangay ?? '')) {
+        diffs.add('Barangay: "${_barangay ?? 'Not set'}" -> "$baranga"');
+      }
+
+      UserAuditService.instance.logUserModification(
+        userId: uid,
+        action: 'Address Updated',
+        changesSummary: diffs.isEmpty ? 'Address details updated' : diffs.join('; '),
+        userName: _displayName,
+        userEmail: _email,
+      );
+
       setState(() {
         _address = addr.isEmpty ? null : addr;
         _barangay = baranga.isEmpty ? null : baranga;

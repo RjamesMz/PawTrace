@@ -1,15 +1,21 @@
 import 'dart:io';
+import 'dart:math';
 import 'dart:ui' show ImageFilter;
 import 'package:camera/camera.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:image_picker/image_picker.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../../core/app_colors.dart';
 import '../../../core/app_toast.dart';
 import '../../../services/ai/pet_embedding_service.dart';
 import '../../../services/ai/pet_match_service.dart';
+import '../../../services/alerts/alert_service.dart';
+import '../../../services/ai/scan_rate_limit_service.dart';
+import '../../../services/auth/auth_service.dart';
 import '../../../widgets/user/ai_scan/ai_scan_widgets.dart';
+import '../../../widgets/user/ai_scan/ai_sighting_notify_dialog.dart';
 
 export '../../../widgets/user/ai_scan/ai_scan_widgets.dart';
 
@@ -51,6 +57,7 @@ class _AiScanScreenState extends State<AiScanScreen>
       vsync: this,
       duration: const Duration(seconds: 2),
     )..repeat(reverse: true);
+    ScanRateLimitService.instance.init();
     _initCamera();
   }
 
@@ -311,8 +318,39 @@ class _AiScanScreenState extends State<AiScanScreen>
     }
   }
 
+  Future<String?> _uploadSightingPhoto(File file, String reportId) async {
+    try {
+      final timestamp = DateTime.now().millisecondsSinceEpoch;
+      final randomSuffix = Random().nextInt(999999).toString().padLeft(6, '0');
+      final ext = file.path.split('.').last;
+      final cleanExt = (ext.isEmpty || ext.length > 5) ? 'jpg' : ext;
+      final fileName =
+          'sighting_scans/ai_scan_${reportId}_${timestamp}_$randomSuffix.$cleanExt';
+
+      final storage = Supabase.instance.client.storage.from('pet-photos');
+      await storage.upload(fileName, file);
+      return storage.getPublicUrl(fileName);
+    } catch (e) {
+      debugPrint('[AiScan] Error uploading sighting photo: $e');
+      return null;
+    }
+  }
+
   Future<void> _runScan() async {
     if (_pickedImage == null) return;
+
+    final quota = await ScanRateLimitService.instance.checkAndConsumeQuota();
+    if (!quota.isAllowed) {
+      if (mounted) {
+        setState(() {
+          _scanning = false;
+          _done = false;
+        });
+        await _showQuotaExceededDialog(quota.waitMinutes);
+      }
+      return;
+    }
+
     setState(() {
       _scanning = true;
       _error = null;
@@ -353,12 +391,108 @@ class _AiScanScreenState extends State<AiScanScreen>
       final isDog = detected['isDog'] == true;
       final matches =
           await PetMatchService.instance.findMatches(embedding, isDog: isDog);
+
+      // Automated AI sighting alert trigger for >= 75% similarity matches
+      final currentUserId = Supabase.instance.client.auth.currentUser?.id;
+      final currentUserProfile =
+          await AuthService.instance.getCurrentUserProfile();
+      final scannerName = currentUserProfile != null
+          ? '${currentUserProfile['first_name'] ?? ''} ${currentUserProfile['surname'] ?? ''}'
+              .trim()
+          : null;
+      final scannerPhone = currentUserProfile?['phone']?.toString().trim();
+      final scannerEmail = Supabase.instance.client.auth.currentUser?.email;
+      final scannerBarangay = currentUserProfile?['barangay']?.toString();
+
       if (mounted) {
         setState(() {
           _results = matches;
           _scanning = false;
           _done = true;
         });
+      }
+
+      // Check for high matches (>= 75%) that belong to other users
+      final highMatches = matches
+          .where((m) =>
+              m.similarity >= 0.75 &&
+              m.ownerId != null &&
+              m.ownerId != currentUserId)
+          .toList();
+
+      if (highMatches.isNotEmpty && mounted) {
+        final topMatch = highMatches.first;
+
+        // Prompt the scanner to customize their contact preferences and add a note
+        final config = await AiSightingNotifyDialog.show(
+          context,
+          match: topMatch,
+          userName: scannerName,
+          userPhone: scannerPhone,
+          userEmail: scannerEmail,
+        );
+
+        if (config != null && config.shouldNotify && mounted) {
+          String? chosenPhone;
+          String? chosenEmail;
+          String? chosenName = scannerName;
+
+          if (config.contactPreference == 'phone') {
+            chosenPhone = (scannerPhone != null && scannerPhone.isNotEmpty)
+                ? scannerPhone
+                : null;
+            chosenEmail = null;
+          } else if (config.contactPreference == 'email') {
+            chosenPhone = null;
+            chosenEmail = (scannerEmail != null && scannerEmail.isNotEmpty)
+                ? scannerEmail
+                : null;
+          } else {
+            // Anonymous / Location Only
+            chosenPhone = null;
+            chosenEmail = null;
+            chosenName = null;
+          }
+
+          // Upload sighting snapshot photo
+          String? sightingUrl;
+          if (_pickedImage != null) {
+            sightingUrl =
+                await _uploadSightingPhoto(_pickedImage!, topMatch.reportId);
+          }
+          sightingUrl ??= topMatch.photoUrl;
+
+          final sent = await AlertService.instance.sendAiSightingAlert(
+            ownerUserId: topMatch.ownerId!,
+            lostReportId: topMatch.reportId,
+            petName: topMatch.name,
+            similarity: topMatch.similarity,
+            sightingPhotoUrl: sightingUrl,
+            barangay: (scannerBarangay != null && scannerBarangay.isNotEmpty)
+                ? scannerBarangay
+                : topMatch.barangay,
+            scannerName: chosenName,
+            scannerPhone: chosenPhone,
+            scannerEmail: chosenEmail,
+            finderNote: config.note,
+          );
+
+          if (sent && mounted) {
+            setState(() {
+              _results = _results.map((m) {
+                if (m.reportId == topMatch.reportId) {
+                  return m.copyWith(isOwnerNotified: true);
+                }
+                return m;
+              }).toList();
+            });
+
+            AppToast.success(
+              context,
+              'Alert sent to ${topMatch.name}\'s owner with your details!',
+            );
+          }
+        }
       }
     } on PawTraceServerException catch (e) {
       // AI server is down — show a dedicated maintenance dialog.
@@ -383,7 +517,109 @@ class _AiScanScreenState extends State<AiScanScreen>
     }
   }
 
-  /// Shows a bottom dialog explaining that the AI server is under maintenance.
+
+  /// Shows dialog when hourly AI scan quota (20 scans) is reached.
+  Future<void> _showQuotaExceededDialog(int waitMinutes) async {
+    await showDialog<void>(
+      context: context,
+      barrierDismissible: true,
+      builder: (ctx) => Dialog(
+        backgroundColor: Colors.transparent,
+        insetPadding: const EdgeInsets.symmetric(horizontal: 22, vertical: 24),
+        child: Container(
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(28),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withOpacity(0.14),
+                blurRadius: 32,
+                offset: const Offset(0, 12),
+              ),
+            ],
+          ),
+          padding: const EdgeInsets.fromLTRB(24, 28, 24, 24),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(
+                width: 78,
+                height: 78,
+                decoration: BoxDecoration(
+                  gradient: const LinearGradient(
+                    colors: [Color(0xFFFED7AA), Color(0xFFF97316)],
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
+                  ),
+                  shape: BoxShape.circle,
+                  boxShadow: [
+                    BoxShadow(
+                      color: const Color(0xFFF97316).withOpacity(0.35),
+                      blurRadius: 20,
+                      offset: const Offset(0, 6),
+                    ),
+                  ],
+                ),
+                child: const Center(
+                  child: Icon(
+                    Icons.hourglass_top_rounded,
+                    size: 38,
+                    color: Colors.white,
+                  ),
+                ),
+              ),
+              const SizedBox(height: 20),
+              Text(
+                'Scan Limit Reached',
+                style: GoogleFonts.montserrat(
+                  fontSize: 20,
+                  fontWeight: FontWeight.w700,
+                  color: AppColors.onSurface,
+                  letterSpacing: -0.3,
+                ),
+                textAlign: TextAlign.center,
+              ),
+              const SizedBox(height: 8),
+              Text(
+                'You have reached your quota of 20 AI scans for this hour. To ensure fair server performance for all community members, please wait $waitMinutes minute(s) before scanning again.',
+                style: GoogleFonts.inter(
+                  fontSize: 13.5,
+                  color: AppColors.onSurfaceVariant,
+                  height: 1.5,
+                ),
+                textAlign: TextAlign.center,
+              ),
+              const SizedBox(height: 24),
+              SizedBox(
+                width: double.infinity,
+                child: ElevatedButton(
+                  onPressed: () => Navigator.pop(ctx),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: AppColors.primary,
+                    foregroundColor: Colors.white,
+                    padding: const EdgeInsets.symmetric(vertical: 14),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(16),
+                    ),
+                    elevation: 0,
+                  ),
+                  child: Text(
+                    'Got It',
+                    style: GoogleFonts.inter(
+                      fontSize: 15,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+    /// Shows a bottom dialog explaining that the AI server is under maintenance.
   Future<void> _showServerMaintenanceDialog(
       {String? detail, VoidCallback? onRetry}) async {
     await showDialog<void>(
@@ -1116,6 +1352,53 @@ class _AiScanScreenState extends State<AiScanScreen>
                         ),
                       ],
                     ),
+                  ),
+
+                  ValueListenableBuilder<int>(
+                    valueListenable:
+                        ScanRateLimitService.instance.remainingScansNotifier,
+                    builder: (context, remaining, _) {
+                      final isLow = remaining <= 3;
+                      return Container(
+                        margin: const EdgeInsets.only(left: 8),
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 10, vertical: 5),
+                        decoration: BoxDecoration(
+                          color: Colors.black.withOpacity(0.55),
+                          borderRadius: BorderRadius.circular(20),
+                          border: Border.all(
+                            color: isLow
+                                ? const Color(0xFFF97316)
+                                : Colors.white.withOpacity(0.2),
+                            width: 1,
+                          ),
+                        ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(
+                              Icons.speed_rounded,
+                              size: 11,
+                              color: isLow
+                                  ? const Color(0xFFF97316)
+                                  : Colors.white,
+                            ),
+                            const SizedBox(width: 5),
+                            Text(
+                              '$remaining/20 SCANS',
+                              style: GoogleFonts.inter(
+                                fontSize: 10,
+                                fontWeight: FontWeight.w700,
+                                letterSpacing: 0.5,
+                                color: isLow
+                                    ? const Color(0xFFF97316)
+                                    : Colors.white,
+                              ),
+                            ),
+                          ],
+                        ),
+                      );
+                    },
                   ),
 
                   const Spacer(),

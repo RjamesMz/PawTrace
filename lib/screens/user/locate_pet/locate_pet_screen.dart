@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
+import 'package:google_fonts/google_fonts.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:latlong2/latlong.dart' as ll;
 import 'package:supabase_flutter/supabase_flutter.dart';
@@ -12,11 +13,13 @@ import '../../../widgets/user/locate_pet/pet_marker_widget.dart';
 import '../../../widgets/user/locate_pet/locate_pet_top_controls.dart';
 import '../../../widgets/user/locate_pet/locate_pet_bottom_card.dart';
 import '../../../widgets/user/locate_pet/locate_pet_empty_view.dart';
+import '../../../widgets/user/locate_pet/pet_geofence_layer.dart';
 
 export '../../../widgets/user/locate_pet/pet_marker_widget.dart';
 export '../../../widgets/user/locate_pet/locate_pet_top_controls.dart';
 export '../../../widgets/user/locate_pet/locate_pet_bottom_card.dart';
 export '../../../widgets/user/locate_pet/locate_pet_empty_view.dart';
+export '../../../widgets/user/locate_pet/pet_geofence_layer.dart';
 
 class LocatePetScreen extends StatefulWidget {
   final Map<String, dynamic> pet;
@@ -58,9 +61,17 @@ class _LocatePetScreenState extends State<LocatePetScreen> {
     }
   }
 
+  int _parseBattery(dynamic val) {
+    if (val == null) return 0;
+    if (val is int) return val;
+    if (val is num) return val.toInt();
+    return int.tryParse(val.toString()) ?? 0;
+  }
+
   @override
   void initState() {
     super.initState();
+    battery = 0;
     NoSignalMaskService.instance.loadMask().then((_) {
       if (mounted) setState(() {});
     });
@@ -70,7 +81,24 @@ class _LocatePetScreenState extends State<LocatePetScreen> {
       loadCollarLocation();
       listenToCollarUpdates();
     } else {
-      isLoading = false;
+      // Pet has no active collar, but check if it has a retained last known location!
+      final pLat = (widget.pet['last_seen_lat'] as num?)?.toDouble();
+      final pLon = (widget.pet['last_seen_lon'] as num?)?.toDouble();
+      if (pLat != null && pLon != null) {
+        lat = pLat;
+        lon = pLon;
+        lastUpdated = widget.pet['last_seen_at']?.toString() ?? '';
+        isOnline = false;
+        battery = 0;
+        isLoading = false;
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (mounted && lat != null && lon != null) {
+            _mapController.move(ll.LatLng(lat!, lon!), 16.0);
+          }
+        });
+      } else {
+        isLoading = false;
+      }
     }
 
     // Refresh every 5 seconds to automatically recalculate time-ago and offline status quickly
@@ -110,7 +138,7 @@ class _LocatePetScreenState extends State<LocatePetScreen> {
           lat = (data['lat'] as num).toDouble();
           lon = (data['lon'] as num).toDouble();
           isOnline = data['is_online'] ?? false;
-          battery = data['battery_level'] ?? data['battery'] ?? 0;
+          battery = _parseBattery(data['battery_level'] ?? data['battery']);
           lastUpdated = data['recorded_at'] ?? '';
           isLoading = false;
         });
@@ -144,7 +172,7 @@ class _LocatePetScreenState extends State<LocatePetScreen> {
             lat = (latest['lat'] as num).toDouble();
             lon = (latest['lon'] as num).toDouble();
             isOnline = latest['is_online'] ?? false;
-            battery = latest['battery_level'] ?? latest['battery'] ?? 0;
+            battery = _parseBattery(latest['battery_level'] ?? latest['battery']);
             lastUpdated = latest['recorded_at'] ?? '';
           });
           debugPrint('[GPS DEBUG] lastUpdated = "$lastUpdated", isGpsActive = $isGpsActive');
@@ -169,21 +197,19 @@ class _LocatePetScreenState extends State<LocatePetScreen> {
       setState(() {
         currentCollarId = null;
         widget.pet['gps_id'] = null;
-        widget.pet['last_seen_address'] = null;
-        widget.pet['last_seen_lat'] = null;
-        widget.pet['last_seen_lon'] = null;
-        widget.pet['last_seen_at'] = null;
+        // RETAIN last known location so the pin is NOT removed!
+        if (lat != null && lon != null) {
+          widget.pet['last_seen_lat'] = lat;
+          widget.pet['last_seen_lon'] = lon;
+        }
         isOnline = false;
         battery = 0;
-        lastUpdated = '';
-        lat = null; // no location — collar is gone
-        lon = null;
         isLoading = false;
       });
       if (mounted) {
         AppToast.show(
           context,
-          'Collar unpaired from this pet.',
+          'Collar unpaired. Last known location retained.',
           icon: Icons.link_off_rounded,
         );
       }
@@ -273,25 +299,30 @@ class _LocatePetScreenState extends State<LocatePetScreen> {
                             PolygonLayer(
                               polygons: NoSignalMaskService.instance.polygons,
                             ),
-                          if (hasCollar)
-                            MarkerLayer(
-                              markers: [
-                                Marker(
-                                  point: ll.LatLng(lat!, lon!),
-                                  width: 160,
-                                  height: 80,
-                                  alignment: Alignment.center,
-                                  child: LocatePetMarker(
-                                    petName: petName,
-                                    photoUrl: photoUrl,
-                                    isGpsActive: isGpsActive,
-                                  ),
+                          // Geofence boundary & Satellite GPS accuracy margin of error (±2.5m)
+                          PetGeofenceLayer(
+                            center: ll.LatLng(lat!, lon!),
+                            isGpsActive: isGpsActive,
+                          ),
+                          MarkerLayer(
+                            markers: [
+                              Marker(
+                                point: ll.LatLng(lat!, lon!),
+                                width: 160,
+                                height: 80,
+                                alignment: Alignment.center,
+                                child: LocatePetMarker(
+                                  petName: petName,
+                                  photoUrl: photoUrl,
+                                  isGpsActive: isGpsActive,
                                 ),
-                              ],
-                            ),
+                              ),
+                            ],
+                          ),
                         ],
                       ),
           ),
+
 
           // ── 2, 3, 4. Top Controls (Back button, Status pill, Manage collar) ──
           LocatePetTopControls(
@@ -336,6 +367,13 @@ class _LocatePetScreenState extends State<LocatePetScreen> {
             },
             onManageCollar: _handleManageCollar,
             onReportLost: () {
+              if (isGpsActive) {
+                AppToast.error(
+                  context,
+                  'GPS is active. You cannot report as lost while the GPS collar is active.',
+                );
+                return;
+              }
               Navigator.pushNamed(
                 context,
                 AppRoutes.reportLostPet,

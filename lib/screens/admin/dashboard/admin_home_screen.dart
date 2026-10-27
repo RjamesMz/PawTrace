@@ -6,6 +6,7 @@ import '../../../core/app_colors.dart';
 import '../../../core/app_constants.dart';
 import '../../../core/app_routes.dart';
 import '../../../core/app_toast.dart';
+import '../../../core/time_utils.dart';
 import '../../../services/auth/auth_service.dart';
 import '../../../widgets/admin/admin_content_wrapper.dart';
 import '../../../widgets/admin/admin_layout.dart';
@@ -644,15 +645,6 @@ class _AdminHomeScreenState extends State<AdminHomeScreen> {
   // ─── Helpers ─────────────────────────────────────────────────────────────────
 
   String _formatTimeAgo(String? timestamp) {
-    if (timestamp == null || timestamp.isEmpty) return 'Recent';
-    try {
-      final dt = DateTime.parse(timestamp);
-      final diff = DateTime.now().difference(dt);
-      if (diff.inMinutes < 60) return '${diff.inMinutes}m ago';
-      if (diff.inHours < 24) return '${diff.inHours}h ago';
-      return '${diff.inDays}d ago';
-    } catch (_) {
-      return 'Recent';
-    }
+    return TimeUtils.formatTimeAgo(timestamp);
   }
 }

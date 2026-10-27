@@ -8,6 +8,7 @@ import '../../../core/app_colors.dart';
 import '../../../core/app_toast.dart';
 import '../../../widgets/user/lost_pet/mark_found_camera_sheet.dart';
 import 'lost_pet_map_screen.dart';
+import '../../../services/geo/pet_location_resolver.dart';
 
 class LostPetDetailScreen extends StatefulWidget {
   final Map<String, dynamic> report;
@@ -72,7 +73,7 @@ class _LostPetDetailScreenState extends State<LostPetDetailScreen> {
     if (foundPhotoUrl == null) return; // User cancelled
 
     setState(() => _markingFound = true);
-    final nowIso = DateTime.now().toIso8601String();
+    final nowIso = DateTime.now().toUtc().toIso8601String();
     try {
       try {
         await Supabase.instance.client.from('lost_reports').update({
@@ -435,21 +436,33 @@ class _LostPetDetailScreenState extends State<LostPetDetailScreen> {
                             const SizedBox(width: 10),
                             Expanded(
                               child: ElevatedButton.icon(
-                                onPressed: (lat != null && lon != null)
-                                    ? () => Navigator.push(
-                                          context,
-                                          MaterialPageRoute(
-                                            builder: (_) => LostPetMapScreen(
-                                              petName: petName,
-                                              lat: lat!,
-                                              lon: lon!,
-                                              address: location,
-                                            ),
-                                          ),
-                                        )
-                                    : () => AppToast.show(context,
-                                        'No GPS coordinates available.',
-                                        icon: Icons.location_off_rounded),
+                                onPressed: () async {
+                                  final res = await PetLocationResolver.resolve(
+                                    report: widget.report,
+                                    petData: petData,
+                                  );
+                                  if (!context.mounted) return;
+                                  if (res != null) {
+                                    Navigator.push(
+                                      context,
+                                      MaterialPageRoute(
+                                        builder: (_) => LostPetMapScreen(
+                                          petName: petName,
+                                          lat: res.lat,
+                                          lon: res.lon,
+                                          address: location,
+                                          locationSource: res.sourceLabel,
+                                        ),
+                                      ),
+                                    );
+                                  } else {
+                                    AppToast.show(
+                                      context,
+                                      'No GPS coordinates available.',
+                                      icon: Icons.location_off_rounded,
+                                    );
+                                  }
+                                },
                                 icon: const Icon(Icons.map_rounded, size: 16),
                                 label: FittedBox(
                                   fit: BoxFit.scaleDown,

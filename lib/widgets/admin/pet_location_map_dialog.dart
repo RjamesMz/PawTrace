@@ -6,6 +6,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../../core/app_colors.dart';
 import '../../screens/admin/pets/admin_pet_tracking_map_screen.dart';
+import '../user/locate_pet/pet_geofence_layer.dart';
 
 /// Data class holding resolved location info for a pet
 class PetLocationResult {
@@ -745,6 +746,10 @@ class _PetLocationMapDialogState extends State<PetLocationMapDialog> {
                     'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
                 userAgentPackageName: 'com.pettrace.app',
               ),
+              PetGeofenceLayer(
+                center: targetPoint,
+                isGpsActive: loc.isLiveCollar,
+              ),
               MarkerLayer(
                 markers: [
                   Marker(
@@ -839,7 +844,7 @@ class _PetLocationMapDialogState extends State<PetLocationMapDialog> {
       case 'archived':
         bg = const Color(0xFFF1F5F9);
         fg = const Color(0xFF64748B);
-        label = 'ARCHIVED';
+        label = 'DE-ACTIVE';
         break;
       default:
         bg = const Color(0xFFF1F5F9);

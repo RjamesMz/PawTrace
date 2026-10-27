@@ -143,8 +143,10 @@ class AdminReportDetailsContent extends StatelessWidget {
                     ),
                     child: Text(
                       'Close Details',
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
                       style: GoogleFonts.inter(
-                        fontSize: 13,
+                        fontSize: 12.5,
                         fontWeight: FontWeight.w600,
                       ),
                     ),
@@ -181,16 +183,19 @@ class AdminReportDetailsContent extends StatelessWidget {
                         child: OutlinedButton.icon(
                           onPressed: null,
                           icon: const Icon(Icons.gps_off_rounded,
-                              size: 15, color: Color(0xFF94A3B8)),
+                              size: 14, color: Color(0xFF94A3B8)),
                           label: Text(
                             'No GPS Connected',
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
                             style: GoogleFonts.inter(
-                              fontSize: 12,
+                              fontSize: 11,
                               fontWeight: FontWeight.w600,
                               color: const Color(0xFF94A3B8),
                             ),
                           ),
                           style: OutlinedButton.styleFrom(
+                            padding: const EdgeInsets.symmetric(horizontal: 8),
                             side: const BorderSide(color: Color(0xFFE2E8F0)),
                             shape: RoundedRectangleBorder(
                               borderRadius: BorderRadius.circular(12),
@@ -236,16 +241,20 @@ class AdminReportDetailsContent extends StatelessWidget {
               children: [
                 Row(
                   children: [
-                    Text(
-                      'LAST SEEN LOCATION',
-                      style: GoogleFonts.inter(
-                        fontSize: 10,
-                        fontWeight: FontWeight.w700,
-                        letterSpacing: 0.5,
-                        color: const Color(0xFF64748B),
+                    Flexible(
+                      child: Text(
+                        'LAST SEEN LOCATION',
+                        style: GoogleFonts.inter(
+                          fontSize: 10,
+                          fontWeight: FontWeight.w700,
+                          letterSpacing: 0.5,
+                          color: const Color(0xFF64748B),
+                        ),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
                       ),
                     ),
-                    const Spacer(),
+                    const SizedBox(width: 8),
                     if (hasGps)
                       Container(
                         padding: const EdgeInsets.symmetric(
@@ -355,6 +364,8 @@ class AdminReportDetailsContent extends StatelessWidget {
                       ),
                       Text(
                         formatDate(reportedAt),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
                         style: GoogleFonts.inter(
                           fontSize: 12,
                           fontWeight: FontWeight.w600,
@@ -396,6 +407,8 @@ class AdminReportDetailsContent extends StatelessWidget {
                       ),
                       Text(
                         formatTime(reportedAt),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
                         style: GoogleFonts.inter(
                           fontSize: 12,
                           fontWeight: FontWeight.w600,
@@ -650,12 +663,16 @@ class AdminReportDetailsContent extends StatelessWidget {
                       const Icon(Icons.phone_outlined,
                           size: 12, color: Color(0xFF64748B)),
                       const SizedBox(width: 4),
-                      Text(
-                        ownerPhone,
-                        style: GoogleFonts.inter(
-                          fontSize: 12,
-                          fontWeight: FontWeight.w500,
-                          color: const Color(0xFF64748B),
+                      Expanded(
+                        child: Text(
+                          ownerPhone,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: GoogleFonts.inter(
+                            fontSize: 12,
+                            fontWeight: FontWeight.w500,
+                            color: const Color(0xFF64748B),
+                          ),
                         ),
                       ),
                     ],
@@ -668,12 +685,16 @@ class AdminReportDetailsContent extends StatelessWidget {
                       const Icon(Icons.email_outlined,
                           size: 12, color: Color(0xFF64748B)),
                       const SizedBox(width: 4),
-                      Text(
-                        ownerEmail,
-                        style: GoogleFonts.inter(
-                          fontSize: 12,
-                          fontWeight: FontWeight.w500,
-                          color: const Color(0xFF64748B),
+                      Expanded(
+                        child: Text(
+                          ownerEmail,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: GoogleFonts.inter(
+                            fontSize: 12,
+                            fontWeight: FontWeight.w500,
+                            color: const Color(0xFF64748B),
+                          ),
                         ),
                       ),
                     ],

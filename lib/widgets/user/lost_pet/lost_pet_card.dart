@@ -3,9 +3,11 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../../../core/app_colors.dart';
 import '../../../core/app_toast.dart';
+import '../../../core/time_utils.dart';
 import '../../../screens/user/lost_pet/lost_pet_detail_screen.dart';
 import 'contact_owner_sheet.dart';
 import '../../../screens/user/lost_pet/lost_pet_map_screen.dart';
+import '../../../services/geo/pet_location_resolver.dart';
 
 /// Card widget representing a lost pet report in LostPetScreen feed.
 class LostPetCard extends StatelessWidget {
@@ -14,16 +16,7 @@ class LostPetCard extends StatelessWidget {
   const LostPetCard({super.key, required this.pet});
 
   static String formatTimeAgo(String? timestamp) {
-    if (timestamp == null || timestamp.isEmpty) return 'Recent';
-    try {
-      final dt = DateTime.parse(timestamp);
-      final diff = DateTime.now().difference(dt);
-      if (diff.inMinutes < 60) return '${diff.inMinutes}m ago';
-      if (diff.inHours < 24) return '${diff.inHours}h ago';
-      return '${diff.inDays}d ago';
-    } catch (_) {
-      return 'Recent';
-    }
+    return TimeUtils.formatTimeAgo(timestamp);
   }
 
   @override
@@ -176,7 +169,7 @@ class LostPetCard extends StatelessWidget {
                           borderRadius: BorderRadius.circular(999),
                         ),
                         child: Text(
-                          isArchived ? 'ARCHIVED' : 'LOST',
+                          isArchived ? 'DE-ACTIVE' : 'LOST',
                           style: GoogleFonts.inter(
                             fontSize: 10,
                             fontWeight: FontWeight.w800,
@@ -289,29 +282,23 @@ class LostPetCard extends StatelessWidget {
                       const SizedBox(width: 10),
                       Expanded(
                         child: ElevatedButton.icon(
-                          onPressed: () {
-                            double? lat =
-                                (pet['last_seen_lat'] as num?)?.toDouble();
-                            double? lng =
-                                (pet['last_seen_lon'] as num?)?.toDouble();
-                            if (lat == null || lng == null) {
-                              final regExp = RegExp(
-                                  r'Lat:\s*([-\d.]+),\s*Lng:\s*([-\d.]+)');
-                              final match = regExp.firstMatch(rawAddress);
-                              if (match != null) {
-                                lat = double.tryParse(match.group(1)!);
-                                lng = double.tryParse(match.group(2)!);
-                              }
-                            }
-                            if (lat != null && lng != null) {
+                          onPressed: () async {
+                            final result = await PetLocationResolver.resolve(
+                              report: pet,
+                              petData: petData,
+                            );
+                            if (!context.mounted) return;
+
+                            if (result != null) {
                               Navigator.push(
                                 context,
                                 MaterialPageRoute(
                                   builder: (_) => LostPetMapScreen(
                                     petName: petName,
-                                    lat: lat!,
-                                    lon: lng!,
+                                    lat: result.lat,
+                                    lon: result.lon,
                                     address: location,
+                                    locationSource: result.sourceLabel,
                                   ),
                                 ),
                               );

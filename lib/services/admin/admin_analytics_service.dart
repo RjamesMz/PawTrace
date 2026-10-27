@@ -1,6 +1,7 @@
 import 'package:flutter/foundation.dart';
 import 'package:intl/intl.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import '../../core/app_constants.dart';
 
 enum DashboardDateRange {
   thisMonth,
@@ -158,8 +159,13 @@ class AdminAnalyticsService {
       final startDate = _getStartDateForRange(dateRange);
 
       // 1. Fetch Pets (for snapshots & demographics)
+      final filterByBarangay = barangay.isNotEmpty &&
+          barangay != 'All' &&
+          barangay != 'All Catanduanes' &&
+          barangay != 'Catanduanes';
+
       var petQuery = _supabase.from('pets').select();
-      if (barangay.isNotEmpty && barangay != 'All') {
+      if (filterByBarangay) {
         petQuery = petQuery.eq('barangay', barangay);
       }
       final petsData = await petQuery;
@@ -218,7 +224,7 @@ class AdminAnalyticsService {
 
       // 2. Fetch Lost Reports with joined pets data
       var reportQuery = _supabase.from('lost_reports').select('*, pets(*)');
-      if (barangay.isNotEmpty && barangay != 'All') {
+      if (filterByBarangay) {
         reportQuery = reportQuery.eq('barangay', barangay);
       }
       final reportsData = await reportQuery;
@@ -257,7 +263,7 @@ class AdminAnalyticsService {
 
         final reportedAtStr = r['reported_at']?.toString() ?? r['created_at']?.toString();
         DateTime? reportedAt;
-        if (reportedAtStr != null) reportedAt = DateTime.tryParse(reportedAtStr)?.toLocal();
+        if (reportedAtStr != null) reportedAt = AppConstants.tryParseLocalTime(reportedAtStr);
 
         if (!isFound && status == 'active') {
           activeLostReports++;
@@ -268,18 +274,18 @@ class AdminAnalyticsService {
           DateTime? foundAt;
           final foundAtStr = r['found_at']?.toString() ?? r['resolved_at']?.toString();
           if (foundAtStr != null) {
-            foundAt = DateTime.tryParse(foundAtStr)?.toLocal();
+            foundAt = AppConstants.tryParseLocalTime(foundAtStr);
           } else {
             final updatedStr = r['updated_at']?.toString();
             if (updatedStr != null) {
-              foundAt = DateTime.tryParse(updatedStr)?.toLocal();
+              foundAt = AppConstants.tryParseLocalTime(updatedStr);
             }
           }
           if (foundAt == null && r['pets'] is Map) {
             final petMap = r['pets'] as Map<String, dynamic>;
             final petUp = petMap['updated_at']?.toString() ?? petMap['modified_at']?.toString();
             if (petUp != null) {
-              foundAt = DateTime.tryParse(petUp)?.toLocal();
+              foundAt = AppConstants.tryParseLocalTime(petUp);
             }
           }
 
@@ -359,7 +365,7 @@ class AdminAnalyticsService {
 
       // 4. Fetch Users for Registration Growth
       var userQuery = _supabase.from('users').select('user_id, created_at, role');
-      if (barangay.isNotEmpty && barangay != 'All') {
+      if (filterByBarangay) {
         userQuery = userQuery.eq('barangay', barangay);
       }
       final usersData = await userQuery;
@@ -463,7 +469,7 @@ class AdminAnalyticsService {
       final reportedAtStr = r['reported_at']?.toString() ?? r['created_at']?.toString();
       DateTime? rDate;
       if (reportedAtStr != null) {
-        rDate = DateTime.tryParse(reportedAtStr)?.toLocal();
+        rDate = AppConstants.tryParseLocalTime(reportedAtStr);
         if (rDate != null && rDate.isAfter(startDate.subtract(const Duration(days: 1)))) {
           final key = _formatBinKey(rDate, granularity);
           if (bins.containsKey(key)) {
@@ -483,12 +489,12 @@ class AdminAnalyticsService {
         DateTime? fDate;
         final foundAtStr = r['found_at']?.toString();
         if (foundAtStr != null) {
-          fDate = DateTime.tryParse(foundAtStr)?.toLocal();
+          fDate = AppConstants.tryParseLocalTime(foundAtStr);
         }
         if (fDate == null) {
           final updatedStr = r['updated_at']?.toString();
           if (updatedStr != null) {
-            fDate = DateTime.tryParse(updatedStr)?.toLocal();
+            fDate = AppConstants.tryParseLocalTime(updatedStr);
           }
         }
         fDate ??= (rDate ?? DateTime.now());

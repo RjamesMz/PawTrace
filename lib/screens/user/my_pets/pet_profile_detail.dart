@@ -1,14 +1,18 @@
+import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../../core/app_colors.dart';
+import '../../../core/app_constants.dart';
 import '../../../core/app_routes.dart';
 import '../../../core/app_toast.dart';
 import '../../../core/navigation_helpers.dart';
 import '../../../widgets/user/bottom_nav_bar.dart';
 import '../../../widgets/user/pair_collar_dialog.dart';
 import '../../../services/audit/pet_audit_service.dart';
+import '../../../services/pets/pet_photo_service.dart';
 import '../../../widgets/user/lost_pet/mark_found_camera_sheet.dart';
+import '../../../widgets/user/my_pets/update_pet_photos_sheet.dart';
 import '../locate_pet/locate_pet_screen.dart';
 
 /// Pet Profile Detail screen – detailed individual pet profile view.
@@ -23,12 +27,68 @@ class PetProfileDetailScreen extends StatefulWidget {
 class _PetProfileDetailScreenState extends State<PetProfileDetailScreen> {
   bool _isRemoving = false;
   bool _isMarkingFound = false;
+  bool _isUpdatingPhoto = false;
   Map<String, dynamic>? _currentPet;
 
   @override
   void initState() {
     super.initState();
     _currentPet = widget.pet;
+  }
+
+    Future<void> _handleChangePetPhoto(Map<String, dynamic> pet) async {
+    final petId = pet['pet_id'];
+    if (petId == null) return;
+    final petName = pet['name']?.toString() ?? 'Pet';
+
+    try {
+      if (await PetPhotoService.instance.hasActiveLostReport(petId)) {
+        if (mounted) {
+          AppToast.error(
+            context,
+            '$petName has an active lost report. Photos can be changed once the report is resolved.',
+          );
+        }
+        return;
+      }
+    } catch (e) {
+      // If the check fails, stay safe and block the change.
+      if (mounted) {
+        AppToast.error(context, 'Could not verify lost report status. Please try again.');
+      }
+      return;
+    }
+    if (!mounted) return;
+
+    final selection = await UpdatePetPhotosSheet.show(context);
+    if (selection == null || !mounted) return;
+
+    setState(() => _isUpdatingPhoto = true);
+    try {
+      final newUrl = await PetPhotoService.instance.updatePetPhotos(
+        petId: petId,
+        petName: petName,
+        faceImage: selection.face,
+        leftImage: selection.left,
+        rightImage: selection.right,
+        uniqueImage: selection.unique,
+        modifiedByRole: 'Owner',
+      );
+
+      if (mounted) {
+        setState(() {
+          _currentPet?['photo_url'] = newUrl;
+          _isUpdatingPhoto = false;
+        });
+        AppToast.success(context, '$petName\'s photo updated successfully! 📸');
+        await _reloadPet();
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() => _isUpdatingPhoto = false);
+        AppToast.error(context, 'Failed to update photo: $e');
+      }
+    }
   }
 
   Future<void> _reloadPet() async {
@@ -43,8 +103,16 @@ class _PetProfileDetailScreenState extends State<PetProfileDetailScreen> {
           .eq('pet_id', petId)
           .single();
       if (mounted) {
+        final merged = Map<String, dynamic>.from(data);
+        if (merged['last_seen_lat'] == null &&
+            _currentPet?['last_seen_lat'] != null) {
+          merged['last_seen_lat'] = _currentPet!['last_seen_lat'];
+          merged['last_seen_lon'] = _currentPet!['last_seen_lon'];
+          merged['last_seen_address'] = _currentPet!['last_seen_address'];
+          merged['last_seen_at'] = _currentPet!['last_seen_at'];
+        }
         setState(() {
-          _currentPet = data;
+          _currentPet = merged;
         });
       }
     } catch (e) {
@@ -101,6 +169,8 @@ class _PetProfileDetailScreenState extends State<PetProfileDetailScreen> {
       }
     } catch (_) {}
 
+    if (!mounted) return;
+
     // Prompt user to capture live photo of the found pet
     final foundPhotoUrl = await MarkFoundCameraSheet.show(
       context,
@@ -110,7 +180,7 @@ class _PetProfileDetailScreenState extends State<PetProfileDetailScreen> {
     if (foundPhotoUrl == null) return; // User cancelled
 
     setState(() => _isMarkingFound = true);
-    final nowIso = DateTime.now().toIso8601String();
+    final nowIso = DateTime.now().toUtc().toIso8601String();
     try {
       // 1. Update pet status back to active in Supabase
       try {
@@ -188,18 +258,7 @@ class _PetProfileDetailScreenState extends State<PetProfileDetailScreen> {
       final petId = pet['pet_id'];
       if (petId == null) throw Exception('Pet ID is missing.');
 
-      // Purge collar locations for this collar so it is completely fresh when reused
-      final collarId = pet['gps_id']?.toString().trim();
-      if (collarId != null &&
-          collarId.isNotEmpty &&
-          collarId.toUpperCase() != 'N/A') {
-        try {
-          await Supabase.instance.client
-              .from('gps_locations')
-              .delete()
-              .eq('gps_id', collarId);
-        } catch (_) {}
-      }
+      // Unpair collar ID so it can be reused, but preserve location trail
 
       // Soft delete: Update status to 'archived' in Supabase
       // Preserves photo, medical/biometric records, and audit history
@@ -467,13 +526,152 @@ class _PetProfileDetailScreenState extends State<PetProfileDetailScreen> {
                             child: ElevatedButton.icon(
                               onPressed: !canRemove
                                   ? null
-                                  : () {
+                                  : () async {
                                       final finalReason =
                                           selectedReason == 'Other'
                                               ? reasonCtrl.text.trim()
                                               : selectedReason;
-                                      Navigator.pop(context);
-                                      _archivePet(pet, finalReason!);
+
+                                      final confirmed =
+                                          await showDialog<bool>(
+                                        context: context,
+                                        builder: (ctx) => AlertDialog(
+                                          backgroundColor: Colors.white,
+                                          shape: RoundedRectangleBorder(
+                                            borderRadius:
+                                                BorderRadius.circular(22),
+                                          ),
+                                          titlePadding:
+                                              const EdgeInsets.fromLTRB(
+                                                  20, 20, 20, 8),
+                                          contentPadding:
+                                              const EdgeInsets.fromLTRB(
+                                                  20, 8, 20, 16),
+                                          title: Row(
+                                            children: [
+                                              Container(
+                                                padding:
+                                                    const EdgeInsets.all(9),
+                                                decoration: const BoxDecoration(
+                                                  color: AppColors
+                                                      .errorContainer,
+                                                  shape: BoxShape.circle,
+                                                ),
+                                                child: const Icon(
+                                                  Icons.warning_amber_rounded,
+                                                  color: AppColors.error,
+                                                  size: 22,
+                                                ),
+                                              ),
+                                              const SizedBox(width: 12),
+                                              Expanded(
+                                                child: Text(
+                                                  'Archive $petName?',
+                                                  style:
+                                                      GoogleFonts.montserrat(
+                                                    fontSize: 18,
+                                                    fontWeight:
+                                                        FontWeight.w700,
+                                                    color: AppColors
+                                                        .onSurface,
+                                                  ),
+                                                ),
+                                              ),
+                                            ],
+                                          ),
+                                          content: Text(
+                                            'Are you sure you want to archive $petName? This will move their profile to archived history, and their GPS collar will be unpaired.',
+                                            style: GoogleFonts.inter(
+                                              fontSize: 13.5,
+                                              color: AppColors
+                                                  .onSurfaceVariant,
+                                              height: 1.45,
+                                            ),
+                                          ),
+                                          actionsPadding:
+                                              const EdgeInsets.fromLTRB(
+                                                  16, 0, 16, 16),
+                                          actions: [
+                                            Row(
+                                              children: [
+                                                Expanded(
+                                                  child: OutlinedButton(
+                                                    onPressed: () =>
+                                                        Navigator.pop(
+                                                            ctx, false),
+                                                    style: OutlinedButton
+                                                        .styleFrom(
+                                                      foregroundColor:
+                                                          AppColors
+                                                              .onSurfaceVariant,
+                                                      side: BorderSide(
+                                                        color: AppColors
+                                                            .outlineVariant
+                                                            .withOpacity(0.7),
+                                                      ),
+                                                      shape:
+                                                          RoundedRectangleBorder(
+                                                        borderRadius:
+                                                            BorderRadius
+                                                                .circular(12),
+                                                      ),
+                                                      padding:
+                                                          const EdgeInsets
+                                                              .symmetric(
+                                                              vertical: 12),
+                                                    ),
+                                                    child: Text(
+                                                      'No, Keep Pet',
+                                                      style: GoogleFonts.inter(
+                                                          fontWeight:
+                                                              FontWeight.w600),
+                                                    ),
+                                                  ),
+                                                ),
+                                                const SizedBox(width: 10),
+                                                Expanded(
+                                                  child: ElevatedButton(
+                                                    onPressed: () =>
+                                                        Navigator.pop(
+                                                            ctx, true),
+                                                    style: ElevatedButton
+                                                        .styleFrom(
+                                                      backgroundColor:
+                                                          AppColors.error,
+                                                      foregroundColor:
+                                                          Colors.white,
+                                                      elevation: 0,
+                                                      shape:
+                                                          RoundedRectangleBorder(
+                                                        borderRadius:
+                                                            BorderRadius
+                                                                .circular(12),
+                                                      ),
+                                                      padding:
+                                                          const EdgeInsets
+                                                              .symmetric(
+                                                              vertical: 12),
+                                                    ),
+                                                    child: Text(
+                                                      'Yes, Archive',
+                                                      style: GoogleFonts.inter(
+                                                          fontWeight:
+                                                              FontWeight.w700),
+                                                    ),
+                                                  ),
+                                                ),
+                                              ],
+                                            ),
+                                          ],
+                                        ),
+                                      );
+
+                                      if (confirmed == true) {
+                                        if (context.mounted) {
+                                          Navigator.pop(context);
+                                        }
+                                        _archivePet(pet, finalReason!);
+                                      }
                                     },
                               icon: const Icon(Icons.archive_rounded, size: 18),
                               label: Text(
@@ -610,14 +808,84 @@ class _PetProfileDetailScreenState extends State<PetProfileDetailScreen> {
                                     )
                                   : _fallbackImage(),
                               const DecoratedBox(
-                                  decoration: BoxDecoration(
-                                      gradient: LinearGradient(
-                                          begin: Alignment.topCenter,
-                                          end: Alignment.bottomCenter,
-                                          colors: [
-                                    Colors.transparent,
-                                    Colors.black38
-                                  ]))),
+                                decoration: BoxDecoration(
+                                  gradient: LinearGradient(
+                                    begin: Alignment.topCenter,
+                                    end: Alignment.bottomCenter,
+                                    colors: [
+                                      Colors.transparent,
+                                      Colors.black45,
+                                    ],
+                                  ),
+                                ),
+                              ),
+                              if (_isUpdatingPhoto)
+                                Container(
+                                  color: Colors.black.withOpacity(0.55),
+                                  child: Center(
+                                    child: Column(
+                                      mainAxisSize: MainAxisSize.min,
+                                      children: [
+                                        const CircularProgressIndicator(
+                                            color: Colors.white),
+                                        const SizedBox(height: 12),
+                                        Text(
+                                          'Updating photo...',
+                                          style: GoogleFonts.inter(
+                                            color: Colors.white,
+                                            fontWeight: FontWeight.w600,
+                                            fontSize: 13,
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                ),
+                              Positioned(
+                                bottom: 16,
+                                right: 16,
+                                child: GestureDetector(
+                                  onTap: _isUpdatingPhoto
+                                      ? null
+                                      : () => _handleChangePetPhoto(pet),
+                                  child: Container(
+                                    padding: const EdgeInsets.symmetric(
+                                        horizontal: 14, vertical: 8),
+                                    decoration: BoxDecoration(
+                                      color: Colors.black.withOpacity(0.6),
+                                      borderRadius:
+                                          BorderRadius.circular(999),
+                                      border: Border.all(
+                                        color: Colors.white.withOpacity(0.45),
+                                        width: 1,
+                                      ),
+                                      boxShadow: [
+                                        BoxShadow(
+                                          color: Colors.black.withOpacity(0.3),
+                                          blurRadius: 8,
+                                          offset: const Offset(0, 2),
+                                        ),
+                                      ],
+                                    ),
+                                    child: Row(
+                                      mainAxisSize: MainAxisSize.min,
+                                      children: [
+                                        const Icon(Icons.camera_alt_rounded,
+                                            color: Colors.white, size: 15),
+                                        const SizedBox(width: 6),
+                                        Text(
+                                          'Change Photo',
+                                          style: GoogleFonts.inter(
+                                            color: Colors.white,
+                                            fontSize: 12.5,
+                                            fontWeight: FontWeight.w700,
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                ),
+                              ),
                             ],
                           ),
                         ),
@@ -628,7 +896,8 @@ class _PetProfileDetailScreenState extends State<PetProfileDetailScreen> {
                           child: Column(
                             children: [
                               _buildIdentityHeader(
-                                  name, breed, species, status),
+                                  name, breed, species, status,
+                                  gender: pet['gender']?.toString()),
                               const SizedBox(height: 16),
                               _buildInfoGrid(pet),
                               const SizedBox(height: 20),
@@ -657,7 +926,8 @@ class _PetProfileDetailScreenState extends State<PetProfileDetailScreen> {
   }
 
   Widget _buildIdentityHeader(
-      String name, String breed, String species, String status) {
+      String name, String breed, String species, String status,
+      {String? gender}) {
     final upperStatus = status.toUpperCase().trim();
     Color bg;
     Color fg;
@@ -681,6 +951,12 @@ class _PetProfileDetailScreenState extends State<PetProfileDetailScreen> {
         break;
     }
 
+    final genderText = (gender != null && gender.isNotEmpty)
+        ? (gender.toLowerCase() == 'female' ? '♀ Female' : '♂ Male')
+        : '';
+    final subtext = [breed, species, if (genderText.isNotEmpty) genderText]
+        .join(' • ');
+
     return Row(
       mainAxisAlignment: MainAxisAlignment.spaceBetween,
       children: [
@@ -693,7 +969,7 @@ class _PetProfileDetailScreenState extends State<PetProfileDetailScreen> {
                     fontWeight: FontWeight.w600,
                     color: AppColors.onSurface),
                 overflow: TextOverflow.ellipsis),
-            Text('$breed • $species',
+            Text(subtext,
                 style: GoogleFonts.inter(
                     fontSize: 15, color: AppColors.onSurfaceVariant),
                 overflow: TextOverflow.ellipsis),
@@ -1011,6 +1287,46 @@ class _PetProfileDetailScreenState extends State<PetProfileDetailScreen> {
             child: OutlinedButton.icon(
               onPressed: () async {
                 final Map<String, dynamic> currentPet = _currentPet ?? {};
+                final collarId = currentPet['gps_id']?.toString().trim();
+                if (collarId != null &&
+                    collarId.isNotEmpty &&
+                    collarId.toUpperCase() != 'N/A' &&
+                    collarId.toUpperCase() != 'NONE') {
+                  try {
+                    final ping = await Supabase.instance.client
+                        .from('gps_locations')
+                        .select('is_online, recorded_at')
+                        .eq('gps_id', collarId)
+                        .order('recorded_at', ascending: false)
+                        .limit(1)
+                        .maybeSingle();
+                    if (ping != null) {
+                      bool active = ping['is_online'] == true;
+                      final raw = ping['recorded_at']?.toString();
+                      if (raw != null && raw.isNotEmpty) {
+                        try {
+                          DateTime dt = DateTime.parse(raw);
+                          if (!raw.endsWith('Z') && !raw.contains('+')) {
+                            dt = DateTime.parse('${raw}Z');
+                          }
+                          final diff = DateTime.now().difference(dt.toLocal());
+                          if (!diff.isNegative && diff.inSeconds <= 180) {
+                            active = true;
+                          }
+                        } catch (_) {}
+                      }
+                      if (active) {
+                        if (!context.mounted) return;
+                        AppToast.error(
+                          context,
+                          'GPS is active. You cannot report as lost while the GPS collar is active.',
+                        );
+                        return;
+                      }
+                    }
+                  } catch (_) {}
+                }
+                if (!context.mounted) return;
                 await Navigator.pushNamed(context, AppRoutes.reportLostPet,
                     arguments: currentPet);
                 _reloadPet();
@@ -1122,6 +1438,7 @@ class _PetProfileDetailScreenState extends State<PetProfileDetailScreen> {
         ? pet['breed'].toString()
         : 'Unknown Breed';
     final photoUrl = pet['photo_url']?.toString();
+    File? newLocalPhoto;
 
     DateTime? selectedDOB = pet['date_of_birth'] != null
         ? DateTime.tryParse(pet['date_of_birth'].toString())
@@ -1257,7 +1574,7 @@ class _PetProfileDetailScreenState extends State<PetProfileDetailScreen> {
                             const SizedBox(height: 16),
                           ],
 
-                          // PERMANENT BIOMETRIC IDENTITY CARD (Read-only)
+                          // PERMANENT BIOMETRIC IDENTITY CARD (Read-only species/breed/gender, editable photo)
                           Container(
                             padding: const EdgeInsets.all(12),
                             decoration: BoxDecoration(
@@ -1268,24 +1585,71 @@ class _PetProfileDetailScreenState extends State<PetProfileDetailScreen> {
                             ),
                             child: Row(
                               children: [
-                                ClipRRect(
-                                  borderRadius: BorderRadius.circular(12),
-                                  child: Container(
-                                    width: 54,
-                                    height: 54,
-                                    color: AppColors.surfaceContainerHigh,
-                                    child: (photoUrl != null &&
-                                            photoUrl.isNotEmpty)
-                                        ? Image.network(
-                                            photoUrl,
-                                            fit: BoxFit.cover,
-                                            errorBuilder: (_, __, ___) =>
-                                                const Icon(Icons.pets,
-                                                    size: 28,
-                                                    color: AppColors.primary),
-                                          )
-                                        : const Icon(Icons.pets,
-                                            size: 28, color: AppColors.primary),
+                                GestureDetector(
+                                  onTap: () async {
+                                    final picked = await PetPhotoService
+                                        .instance
+                                        .pickPetImage(modalContext);
+                                    if (picked != null) {
+                                      setModalState(() {
+                                        newLocalPhoto = picked;
+                                      });
+                                    }
+                                  },
+                                  child: Stack(
+                                    children: [
+                                      ClipRRect(
+                                        borderRadius: BorderRadius.circular(14),
+                                        child: Container(
+                                          width: 60,
+                                          height: 60,
+                                          color: AppColors.surfaceContainerHigh,
+                                          child: newLocalPhoto != null
+                                              ? Image.file(
+                                                  newLocalPhoto!,
+                                                  fit: BoxFit.cover,
+                                                )
+                                              : (photoUrl != null &&
+                                                      photoUrl.isNotEmpty)
+                                                  ? Image.network(
+                                                      photoUrl,
+                                                      fit: BoxFit.cover,
+                                                      errorBuilder:
+                                                          (_, __, ___) =>
+                                                              const Icon(
+                                                        Icons.pets,
+                                                        size: 28,
+                                                        color: AppColors.primary,
+                                                      ),
+                                                    )
+                                                  : const Icon(
+                                                      Icons.pets,
+                                                      size: 28,
+                                                      color: AppColors.primary,
+                                                    ),
+                                        ),
+                                      ),
+                                      Positioned(
+                                        bottom: 0,
+                                        right: 0,
+                                        child: Container(
+                                          padding: const EdgeInsets.all(4),
+                                          decoration: BoxDecoration(
+                                            color: AppColors.primary,
+                                            shape: BoxShape.circle,
+                                            border: Border.all(
+                                              color: Colors.white,
+                                              width: 1.5,
+                                            ),
+                                          ),
+                                          child: const Icon(
+                                            Icons.camera_alt_rounded,
+                                            size: 11,
+                                            color: Colors.white,
+                                          ),
+                                        ),
+                                      ),
+                                    ],
                                   ),
                                 ),
                                 const SizedBox(width: 12),
@@ -1316,26 +1680,57 @@ class _PetProfileDetailScreenState extends State<PetProfileDetailScreen> {
                                             ),
                                             overflow: TextOverflow.ellipsis,
                                           ),
-                                        ],
-                                      ),
-                                      const SizedBox(height: 4),
-                                      Row(
-                                        children: [
-                                          const Icon(Icons.lock_rounded,
-                                              size: 12,
-                                              color: Color(0xFF94A3B8)),
-                                          const SizedBox(width: 4),
-                                          Expanded(
-                                            child: Text(
-                                              'Species & breed are locked after registration',
-                                              style: GoogleFonts.inter(
-                                                fontSize: 11,
-                                                color: const Color(0xFF64748B),
-                                                fontWeight: FontWeight.w500,
-                                              ),
+                                          const SizedBox(width: 6),
+                                          Text(
+                                            '• ${pet["gender"] != null && pet["gender"].toString().toLowerCase() == "female" ? "♀ Female" : "♂ Male"}',
+                                            style: GoogleFonts.inter(
+                                              fontSize: 13,
+                                              fontWeight: FontWeight.w600,
+                                              color: const Color(0xFF475569),
                                             ),
                                           ),
                                         ],
+                                      ),
+                                      const SizedBox(height: 5),
+                                      InkWell(
+                                        onTap: () async {
+                                          final picked = await PetPhotoService
+                                              .instance
+                                              .pickPetImage(modalContext);
+                                          if (picked != null) {
+                                            setModalState(() {
+                                              newLocalPhoto = picked;
+                                            });
+                                          }
+                                        },
+                                        borderRadius: BorderRadius.circular(6),
+                                        child: Row(
+                                          mainAxisSize: MainAxisSize.min,
+                                          children: [
+                                            Icon(
+                                              newLocalPhoto != null
+                                                  ? Icons.check_circle_rounded
+                                                  : Icons.add_photo_alternate_outlined,
+                                              size: 13,
+                                              color: newLocalPhoto != null
+                                                  ? const Color(0xFF16A34A)
+                                                  : AppColors.primary,
+                                            ),
+                                            const SizedBox(width: 4),
+                                            Text(
+                                              newLocalPhoto != null
+                                                  ? 'New photo selected (tap to change)'
+                                                  : 'Tap to change photo',
+                                              style: GoogleFonts.inter(
+                                                fontSize: 11.5,
+                                                fontWeight: FontWeight.w600,
+                                                color: newLocalPhoto != null
+                                                    ? const Color(0xFF16A34A)
+                                                    : AppColors.primary,
+                                              ),
+                                            ),
+                                          ],
+                                        ),
                                       ),
                                     ],
                                   ),
@@ -1488,7 +1883,7 @@ class _PetProfileDetailScreenState extends State<PetProfileDetailScreen> {
                                             : selectedDOB!.toIso8601String();
 
                                         final nowIso =
-                                            DateTime.now().toIso8601String();
+                                            DateTime.now().toUtc().toIso8601String();
                                         final updatePayload = <String, dynamic>{
                                           'name': newName,
                                           'color': newColor,
@@ -1496,6 +1891,23 @@ class _PetProfileDetailScreenState extends State<PetProfileDetailScreen> {
                                           'date_of_birth': newDob,
                                           'updated_at': nowIso,
                                         };
+                                        if (newLocalPhoto != null) {
+                                          final newPhotoUrl =
+                                              await PetPhotoService.instance
+                                                  .uploadPetPhoto(newLocalPhoto!);
+                                          updatePayload['photo_url'] =
+                                              newPhotoUrl;
+
+                                          try {
+                                            await Supabase.instance.client
+                                                .from('lost_reports')
+                                                .update({
+                                                  'photo_url': newPhotoUrl
+                                                })
+                                                .eq('pet_id', petId)
+                                                .eq('status', 'active');
+                                          } catch (_) {}
+                                        }
 
                                         try {
                                           await Supabase.instance.client
@@ -1565,6 +1977,10 @@ class _PetProfileDetailScreenState extends State<PetProfileDetailScreen> {
                                           _currentPet?['date_of_birth'] =
                                               newDob;
                                           _currentPet?['updated_at'] = nowIso;
+                                          if (updatePayload.containsKey('photo_url')) {
+                                            _currentPet?['photo_url'] =
+                                                updatePayload['photo_url'];
+                                          }
                                         });
 
                                         if (context.mounted) {
@@ -1576,8 +1992,11 @@ class _PetProfileDetailScreenState extends State<PetProfileDetailScreen> {
                                       } catch (err) {
                                         setModalState(() {
                                           isSubmitting = false;
-                                          errorMessage =
-                                              'Failed to save changes: $err';
+                                          errorMessage = AppErrors.format(
+                                            err,
+                                            fallback:
+                                                'Failed to save changes. Please try again.',
+                                          );
                                         });
                                       }
                                     },

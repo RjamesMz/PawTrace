@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../../core/app_colors.dart';
+import '../../core/time_utils.dart';
 import '../common/photo_placeholder.dart';
 import '../../screens/admin/reports/admin_reports_screen.dart';
 
@@ -257,19 +258,7 @@ class SuperAdminReportItem extends StatelessWidget {
   });
 
   String _formatTimeAgo(String? timestamp) {
-    if (timestamp == null || timestamp.isEmpty) return '';
-    try {
-      final dt = DateTime.parse(timestamp);
-      final diff = DateTime.now().difference(dt);
-      if (diff.inMinutes < 1) return 'Just now';
-      if (diff.inMinutes < 60) return '${diff.inMinutes}m ago';
-      if (diff.inHours < 24) return '${diff.inHours}h ago';
-      if (diff.inDays < 7) return '${diff.inDays}d ago';
-      if (diff.inDays < 30) return '${(diff.inDays / 7).floor()}w ago';
-      return '${(diff.inDays / 30).floor()}mo ago';
-    } catch (_) {
-      return '';
-    }
+    return TimeUtils.formatTimeAgo(timestamp);
   }
 
   @override

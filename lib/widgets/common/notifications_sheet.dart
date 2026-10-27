@@ -1,10 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:intl/intl.dart';
+import 'package:url_launcher/url_launcher.dart';
 import '../../core/app_colors.dart';
 import '../../core/app_routes.dart';
+import '../../core/time_utils.dart';
 import '../../services/alerts/alert_service.dart';
 import '../../services/auth/auth_service.dart';
+import 'photo_placeholder.dart';
 
 /// Bottom sheet / modal dialog displaying notifications from the Supabase `alerts` table.
 class NotificationsSheet extends StatefulWidget {
@@ -86,6 +89,15 @@ class _NotificationsSheetState extends State<NotificationsSheet> {
 
     final lostReportId = alert['lost_report_id'];
     final rawMessage = alert['message']?.toString() ?? '';
+    final isAiSighting = rawMessage.contains('AI Sighting Match') ||
+        rawMessage.contains('AI SIGHTING MATCH');
+
+    // For AI sighting alerts, display rich side-by-side comparison modal
+    if (isAiSighting && mounted) {
+      _showAiSightingModal(context, alert);
+      return;
+    }
+
     final isLostPet = lostReportId != null ||
         rawMessage.toLowerCase().contains('lost') ||
         rawMessage.toLowerCase().contains('missing');
@@ -118,12 +130,72 @@ class _NotificationsSheetState extends State<NotificationsSheet> {
     }
   }
 
+  String? _extractSightingPhotoUrl(String raw) {
+    final match = RegExp(r'\[Sighting Photo\]:\s*([^\s\]]+)').firstMatch(raw);
+    return match?.group(1);
+  }
+
+  String? _extractFinderNote(String raw) {
+    final match =
+        RegExp(r'\[Finder Note(?::|\]:)\s*([^\]]+)').firstMatch(raw);
+    return match?.group(1)?.trim();
+  }
+
+  String? _extractScannerContact(String raw) {
+    final match =
+        RegExp(r'\[Scanner Contact(?::|\]:)\s*([^\]]+)').firstMatch(raw);
+    return match?.group(1)?.trim();
+  }
+
+  int? _extractSimilarityPercent(String raw) {
+    final match = RegExp(r'\((\d+)%\)').firstMatch(raw);
+    if (match != null) {
+      return int.tryParse(match.group(1)!);
+    }
+    return null;
+  }
+
+  Future<void> _makeCall(BuildContext context, String contact) async {
+    final phoneDigits = contact.replaceAll(RegExp(r'[^\d+]'), '');
+    if (phoneDigits.length >= 7) {
+      final uri = Uri.parse('tel:$phoneDigits');
+      if (await canLaunchUrl(uri)) {
+        await launchUrl(uri);
+        return;
+      }
+    }
+    final emailMatch = RegExp(r'[\w\.-]+@[\w\.-]+\.\w+').firstMatch(contact);
+    if (emailMatch != null) {
+      final uri = Uri.parse('mailto:${emailMatch.group(0)}');
+      if (await canLaunchUrl(uri)) {
+        await launchUrl(uri);
+        return;
+      }
+    }
+  }
+
   String _cleanMessage(String raw) {
     String cleaned = raw;
+    cleaned = cleaned.replaceAll('🎯', '').replaceAll('🐾', '').trim();
     if (cleaned.startsWith('URGENT: ')) {
       cleaned = cleaned.substring('URGENT: '.length);
     } else if (cleaned.startsWith('🚨 MISSING PET ALERT: ')) {
       cleaned = cleaned.substring('🚨 MISSING PET ALERT: '.length);
+    }
+    if (cleaned.contains('[Sighting Photo]:')) {
+      cleaned = cleaned.split('[Sighting Photo]:').first.trim();
+    }
+    if (cleaned.contains('[Scanner Contact:')) {
+      cleaned = cleaned.split('[Scanner Contact:').first.trim();
+    }
+    if (cleaned.contains('[Scanner Contact]:')) {
+      cleaned = cleaned.split('[Scanner Contact]:').first.trim();
+    }
+    if (cleaned.contains('[Finder Note:')) {
+      cleaned = cleaned.split('[Finder Note:').first.trim();
+    }
+    if (cleaned.contains('[Finder Note]:')) {
+      cleaned = cleaned.split('[Finder Note]:').first.trim();
     }
     return cleaned.trim();
   }
@@ -131,9 +203,9 @@ class _NotificationsSheetState extends State<NotificationsSheet> {
   String _formatSentAt(String? raw) {
     if (raw == null || raw.isEmpty) return 'Recent';
     try {
-      final dt = DateTime.parse(raw).toLocal();
+      final dt = TimeUtils.parseTimestamp(raw);
       final diff = DateTime.now().difference(dt);
-      if (diff.inMinutes < 1) return 'Just now';
+      if (diff.isNegative || diff.inMinutes < 1) return 'Just now';
       if (diff.inMinutes < 60) return '${diff.inMinutes}m ago';
       if (diff.inHours < 24) return '${diff.inHours}h ago';
       if (diff.inDays < 7) return '${diff.inDays}d ago';
@@ -268,10 +340,29 @@ class _NotificationsSheetState extends State<NotificationsSheet> {
                             final message = _cleanMessage(rawMessage);
                             final timeStr =
                                 _formatSentAt(alert['sent_at']?.toString());
-                            final isLostPet = alert['lost_report_id'] != null ||
-                                rawMessage.toLowerCase().contains('lost') ||
-                                rawMessage.toLowerCase().contains('missing');
-                            final isNews = !isLostPet &&
+                            final isAiSighting =
+                                rawMessage.contains('AI Sighting Match') ||
+                                    rawMessage.contains('AI SIGHTING MATCH');
+                            final sightingPhotoUrl = isAiSighting
+                                ? _extractSightingPhotoUrl(rawMessage)
+                                : null;
+                            final scannerContact = isAiSighting
+                                ? _extractScannerContact(rawMessage)
+                                : null;
+                            final finderNote = isAiSighting
+                                ? _extractFinderNote(rawMessage)
+                                : null;
+                            final simPercent = isAiSighting
+                                ? _extractSimilarityPercent(rawMessage)
+                                : null;
+                            final isLostPet = !isAiSighting &&
+                                (alert['lost_report_id'] != null ||
+                                    rawMessage.toLowerCase().contains('lost') ||
+                                    rawMessage
+                                        .toLowerCase()
+                                        .contains('missing'));
+                            final isNews = !isAiSighting &&
+                                !isLostPet &&
                                 (rawMessage.toLowerCase().contains('news') ||
                                     rawMessage
                                         .toLowerCase()
@@ -284,20 +375,27 @@ class _NotificationsSheetState extends State<NotificationsSheet> {
                               decoration: BoxDecoration(
                                 color: isRead
                                     ? Colors.white
-                                    : const Color(0xFFFFFBF5),
+                                    : isAiSighting
+                                        ? const Color(0xFFF0FDF4)
+                                        : const Color(0xFFFFFBF5),
                                 borderRadius: BorderRadius.circular(18),
                                 border: Border.all(
                                   color: isRead
                                       ? const Color(0xFFE2E8F0)
-                                      : const Color(0xFFFFD8B3),
+                                      : isAiSighting
+                                          ? const Color(0xFF86EFAC)
+                                          : const Color(0xFFFFD8B3),
                                   width: isRead ? 1 : 1.2,
                                 ),
                                 boxShadow: [
                                   BoxShadow(
                                     color: isRead
                                         ? Colors.black.withOpacity(0.02)
-                                        : const Color(0xFFFF6600)
-                                            .withOpacity(0.06),
+                                        : isAiSighting
+                                            ? const Color(0xFF10B981)
+                                                .withOpacity(0.08)
+                                            : const Color(0xFFFF6600)
+                                                .withOpacity(0.06),
                                     blurRadius: 10,
                                     offset: const Offset(0, 3),
                                   ),
@@ -321,20 +419,25 @@ class _NotificationsSheetState extends State<NotificationsSheet> {
                                           height: 44,
                                           decoration: BoxDecoration(
                                             gradient: LinearGradient(
-                                              colors: isLostPet
+                                              colors: isAiSighting
                                                   ? const [
-                                                      Color(0xFFFF7A00),
-                                                      Color(0xFFFF9E44)
+                                                      Color(0xFF059669),
+                                                      Color(0xFF10B981)
                                                     ]
-                                                  : isNews
+                                                  : isLostPet
                                                       ? const [
-                                                          Color(0xFF6366F1),
-                                                          Color(0xFF8B5CF6)
+                                                          Color(0xFFFF7A00),
+                                                          Color(0xFFFF9E44)
                                                         ]
-                                                      : const [
-                                                          Color(0xFF0EA5E9),
-                                                          Color(0xFF38BDF8)
-                                                        ],
+                                                      : isNews
+                                                          ? const [
+                                                              Color(0xFF6366F1),
+                                                              Color(0xFF8B5CF6)
+                                                            ]
+                                                          : const [
+                                                              Color(0xFF0EA5E9),
+                                                              Color(0xFF38BDF8)
+                                                            ],
                                               begin: Alignment.topLeft,
                                               end: Alignment.bottomRight,
                                             ),
@@ -342,14 +445,17 @@ class _NotificationsSheetState extends State<NotificationsSheet> {
                                                 BorderRadius.circular(14),
                                             boxShadow: [
                                               BoxShadow(
-                                                color: (isLostPet
+                                                color: (isAiSighting
                                                         ? const Color(
-                                                            0xFFFF6600)
-                                                        : isNews
+                                                            0xFF10B981)
+                                                        : isLostPet
                                                             ? const Color(
-                                                                0xFF6366F1)
-                                                            : const Color(
-                                                                0xFF0EA5E9))
+                                                                0xFFFF6600)
+                                                            : isNews
+                                                                ? const Color(
+                                                                    0xFF6366F1)
+                                                                : const Color(
+                                                                    0xFF0EA5E9))
                                                     .withOpacity(0.28),
                                                 blurRadius: 8,
                                                 offset: const Offset(0, 3),
@@ -357,12 +463,9 @@ class _NotificationsSheetState extends State<NotificationsSheet> {
                                             ],
                                           ),
                                           child: Icon(
-                                            isLostPet
-                                                ? Icons.pets_rounded
-                                                : isNews
-                                                    ? Icons.campaign_rounded
-                                                    : Icons
-                                                        .notifications_active_rounded,
+                                            isNews
+                                                ? Icons.campaign_rounded
+                                                : Icons.notifications_active_rounded,
                                             color: Colors.white,
                                             size: 22,
                                           ),
@@ -384,38 +487,48 @@ class _NotificationsSheetState extends State<NotificationsSheet> {
                                                         horizontal: 8,
                                                         vertical: 3),
                                                     decoration: BoxDecoration(
-                                                      color: isLostPet
+                                                      color: isAiSighting
                                                           ? const Color(
-                                                              0xFFFFF0E6)
-                                                          : isNews
+                                                              0xFFECFDF5)
+                                                          : isLostPet
                                                               ? const Color(
-                                                                  0xFFEEF2FF)
-                                                              : const Color(
-                                                                  0xFFF1F5F9),
+                                                                  0xFFFFF0E6)
+                                                              : isNews
+                                                                  ? const Color(
+                                                                      0xFFEEF2FF)
+                                                                  : const Color(
+                                                                      0xFFF1F5F9),
                                                       borderRadius:
                                                           BorderRadius.circular(
                                                               6),
                                                     ),
                                                     child: Text(
-                                                      isLostPet
-                                                          ? 'LOST PET ALERT'
-                                                          : isNews
-                                                              ? 'COMMUNITY NEWS'
-                                                              : 'NOTIFICATION',
+                                                      isAiSighting
+                                                          ? (simPercent != null
+                                                              ? 'AI SIGHTING · $simPercent%'
+                                                              : 'AI SIGHTING MATCH')
+                                                          : isLostPet
+                                                              ? 'LOST PET ALERT'
+                                                              : isNews
+                                                                  ? 'COMMUNITY NEWS'
+                                                                  : 'NOTIFICATION',
                                                       style:
                                                           GoogleFonts.inter(
                                                         fontSize: 10,
                                                         fontWeight:
                                                             FontWeight.w700,
                                                         letterSpacing: 0.5,
-                                                        color: isLostPet
+                                                        color: isAiSighting
                                                             ? const Color(
-                                                                0xFFFF6600)
-                                                            : isNews
+                                                                0xFF059669)
+                                                            : isLostPet
                                                                 ? const Color(
-                                                                    0xFF4F46E5)
-                                                                : const Color(
-                                                                    0xFF475569),
+                                                                    0xFFFF6600)
+                                                                : isNews
+                                                                    ? const Color(
+                                                                        0xFF4F46E5)
+                                                                    : const Color(
+                                                                        0xFF475569),
                                                       ),
                                                     ),
                                                   ),
@@ -451,9 +564,12 @@ class _NotificationsSheetState extends State<NotificationsSheet> {
                                                       width: 8,
                                                       height: 8,
                                                       decoration:
-                                                          const BoxDecoration(
-                                                        color:
-                                                            Color(0xFFFF6600),
+                                                          BoxDecoration(
+                                                        color: isAiSighting
+                                                            ? const Color(
+                                                                0xFF10B981)
+                                                            : const Color(
+                                                                0xFFFF6600),
                                                         shape:
                                                             BoxShape.circle,
                                                       ),
@@ -477,9 +593,166 @@ class _NotificationsSheetState extends State<NotificationsSheet> {
                                                 ),
                                               ),
 
-                                              // Footer action for lost reports
+                                              // Sighting Photo Preview Card
+                                              if (isAiSighting &&
+                                                  sightingPhotoUrl != null &&
+                                                  sightingPhotoUrl.isNotEmpty) ...[
+                                                const SizedBox(height: 10),
+                                                ClipRRect(
+                                                  borderRadius:
+                                                      BorderRadius.circular(10),
+                                                  child: Container(
+                                                    padding: const EdgeInsets.all(8),
+                                                    color: const Color(0xFFF1F5F9),
+                                                    child: Row(
+                                                      children: [
+                                                        ClipRRect(
+                                                          borderRadius:
+                                                              BorderRadius.circular(8),
+                                                          child: SizedBox(
+                                                            width: 48,
+                                                            height: 48,
+                                                            child: Image.network(
+                                                              sightingPhotoUrl,
+                                                              fit: BoxFit.cover,
+                                                              errorBuilder: (_, __, ___) =>
+                                                                  const PhotoPlaceholder(
+                                                                width: 48,
+                                                                height: 48,
+                                                              ),
+                                                            ),
+                                                          ),
+                                                        ),
+                                                        const SizedBox(width: 10),
+                                                        Expanded(
+                                                          child: Column(
+                                                            crossAxisAlignment:
+                                                                CrossAxisAlignment.start,
+                                                            children: [
+                                                              Text(
+                                                                'Sighting Snapshot Captured',
+                                                                style: GoogleFonts.inter(
+                                                                  fontSize: 11.5,
+                                                                  fontWeight:
+                                                                      FontWeight.w700,
+                                                                  color: const Color(
+                                                                      0xFF0F172A),
+                                                                ),
+                                                              ),
+                                                              const SizedBox(height: 2),
+                                                              Text(
+                                                                'Tap to view visual comparison',
+                                                                style: GoogleFonts.inter(
+                                                                  fontSize: 10.5,
+                                                                  fontWeight:
+                                                                      FontWeight.w600,
+                                                                  color: const Color(
+                                                                      0xFF059669),
+                                                                ),
+                                                              ),
+                                                            ],
+                                                          ),
+                                                        ),
+                                                        const Icon(
+                                                          Icons.chevron_right_rounded,
+                                                          color: Color(0xFF64748B),
+                                                          size: 20,
+                                                        ),
+                                                      ],
+                                                    ),
+                                                  ),
+                                                ),
+                                              ],
+
+                                              // Finder / Scanner Contact badge
+                                              if (isAiSighting &&
+                                                  scannerContact != null &&
+                                                  scannerContact.isNotEmpty) ...[
+                                                const SizedBox(height: 8),
+                                                Container(
+                                                  padding: const EdgeInsets.symmetric(
+                                                      horizontal: 10, vertical: 6),
+                                                  decoration: BoxDecoration(
+                                                    color: const Color(0xFFEFF6FF),
+                                                    borderRadius:
+                                                        BorderRadius.circular(10),
+                                                    border: Border.all(
+                                                        color: const Color(0xFFBFDBFE)),
+                                                  ),
+                                                  child: Row(
+                                                    children: [
+                                                      const Icon(
+                                                        Icons.person_pin_circle_rounded,
+                                                        size: 16,
+                                                        color: Color(0xFF1D4ED8),
+                                                      ),
+                                                      const SizedBox(width: 6),
+                                                      Expanded(
+                                                        child: Text(
+                                                          'Finder: $scannerContact',
+                                                          style: GoogleFonts.inter(
+                                                            fontSize: 11.5,
+                                                            fontWeight:
+                                                                FontWeight.w600,
+                                                            color: const Color(
+                                                                0xFF1E3A8A),
+                                                          ),
+                                                          maxLines: 1,
+                                                          overflow: TextOverflow.ellipsis,
+                                                        ),
+                                                      ),
+                                                    ],
+                                                  ),
+                                                ),
+                                              ],
+
+                                              // Finder Note Quote
+                                              if (isAiSighting &&
+                                                  finderNote != null &&
+                                                  finderNote.isNotEmpty) ...[
+                                                const SizedBox(height: 6),
+                                                Container(
+                                                  padding: const EdgeInsets.symmetric(
+                                                      horizontal: 10, vertical: 7),
+                                                  decoration: BoxDecoration(
+                                                    color: const Color(0xFFF8FAFC),
+                                                    borderRadius:
+                                                        BorderRadius.circular(10),
+                                                    border: Border.all(
+                                                        color: const Color(0xFFE2E8F0)),
+                                                  ),
+                                                  child: Row(
+                                                    crossAxisAlignment:
+                                                        CrossAxisAlignment.start,
+                                                    children: [
+                                                      const Icon(
+                                                        Icons.chat_bubble_outline_rounded,
+                                                        size: 14,
+                                                        color: Color(0xFF64748B),
+                                                      ),
+                                                      const SizedBox(width: 8),
+                                                      Expanded(
+                                                        child: Text(
+                                                          '"$finderNote"',
+                                                          style: GoogleFonts.inter(
+                                                            fontSize: 11.5,
+                                                            fontStyle: FontStyle.italic,
+                                                            color: const Color(0xFF334155),
+                                                            height: 1.35,
+                                                          ),
+                                                          maxLines: 2,
+                                                          overflow: TextOverflow.ellipsis,
+                                                        ),
+                                                      ),
+                                                    ],
+                                                  ),
+                                                ),
+                                              ],
+
+                                              // Footer action for lost reports & AI sightings
                                               if (alert['lost_report_id'] !=
-                                                  null) ...[
+                                                      null ||
+                                                  isAiSighting) ...[
                                                 const SizedBox(height: 10),
                                                 Row(
                                                   children: [
@@ -489,8 +762,11 @@ class _NotificationsSheetState extends State<NotificationsSheet> {
                                                           horizontal: 10,
                                                           vertical: 4),
                                                       decoration: BoxDecoration(
-                                                        color: const Color(
-                                                                0xFFFF6600)
+                                                        color: (isAiSighting
+                                                                ? const Color(
+                                                                    0xFF10B981)
+                                                                : const Color(
+                                                                    0xFFFF6600))
                                                             .withOpacity(0.08),
                                                         borderRadius:
                                                             BorderRadius
@@ -501,25 +777,33 @@ class _NotificationsSheetState extends State<NotificationsSheet> {
                                                             MainAxisSize.min,
                                                         children: [
                                                           Text(
-                                                            'View Pet Report',
+                                                            isAiSighting
+                                                                ? 'Inspect Sighting Match'
+                                                                : 'View Pet Report',
                                                             style: GoogleFonts
                                                                 .inter(
                                                               fontSize: 11,
                                                               fontWeight:
                                                                   FontWeight
                                                                       .w700,
-                                                              color: const Color(
-                                                                  0xFFFF6600),
+                                                              color: isAiSighting
+                                                                  ? const Color(
+                                                                      0xFF059669)
+                                                                  : const Color(
+                                                                      0xFFFF6600),
                                                             ),
                                                           ),
                                                           const SizedBox(
                                                               width: 4),
-                                                          const Icon(
+                                                          Icon(
                                                             Icons
                                                                 .arrow_forward_rounded,
                                                             size: 12,
-                                                            color: Color(
-                                                                0xFFFF6600),
+                                                            color: isAiSighting
+                                                                ? const Color(
+                                                                    0xFF059669)
+                                                                : const Color(
+                                                                    0xFFFF6600),
                                                           ),
                                                         ],
                                                       ),
@@ -541,6 +825,432 @@ class _NotificationsSheetState extends State<NotificationsSheet> {
                       ),
           ),
         ],
+      ),
+    );
+  }
+
+  void _showAiSightingModal(BuildContext context, Map<String, dynamic> alert) {
+    final rawMessage = alert['message']?.toString() ?? '';
+    final sightingPhotoUrl = _extractSightingPhotoUrl(rawMessage);
+    final scannerContact = _extractScannerContact(rawMessage);
+    final finderNote = _extractFinderNote(rawMessage);
+    final simPercent = _extractSimilarityPercent(rawMessage);
+    final cleanMsg = _cleanMessage(rawMessage);
+    final lostReport = alert['lost_reports'] as Map<String, dynamic>?;
+    final petMap = lostReport?['pets'] as Map<String, dynamic>?;
+    final registeredPhotoUrl = petMap?['photo_url']?.toString() ?? '';
+
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (ctx) => Container(
+        padding: const EdgeInsets.fromLTRB(20, 16, 20, 28),
+        constraints: BoxConstraints(
+          maxHeight: MediaQuery.of(context).size.height * 0.88,
+        ),
+        decoration: const BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
+        ),
+        child: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              // Handle
+              Center(
+                child: Container(
+                  width: 44,
+                  height: 4,
+                  decoration: BoxDecoration(
+                    color: Colors.grey.shade300,
+                    borderRadius: BorderRadius.circular(2),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 16),
+
+              // Glowing Header with AI Chip
+              Row(
+                children: [
+                  Container(
+                    width: 48,
+                    height: 48,
+                    decoration: BoxDecoration(
+                      gradient: const LinearGradient(
+                        colors: [Color(0xFF059669), Color(0xFF10B981)],
+                        begin: Alignment.topLeft,
+                        end: Alignment.bottomRight,
+                      ),
+                      borderRadius: BorderRadius.circular(16),
+                      boxShadow: [
+                        BoxShadow(
+                          color: const Color(0xFF10B981).withOpacity(0.35),
+                          blurRadius: 12,
+                          offset: const Offset(0, 4),
+                        ),
+                      ],
+                    ),
+                    child: const Icon(Icons.notifications_active_rounded,
+                        color: Colors.white, size: 26),
+                  ),
+                  const SizedBox(width: 14),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          'AI Sighting Match',
+                          style: GoogleFonts.montserrat(
+                            fontSize: 18,
+                            fontWeight: FontWeight.w700,
+                            color: AppColors.onSurface,
+                          ),
+                        ),
+                        const SizedBox(height: 2),
+                        Row(
+                          children: [
+                            Container(
+                              padding: const EdgeInsets.symmetric(
+                                  horizontal: 8, vertical: 2),
+                              decoration: BoxDecoration(
+                                color: const Color(0xFFECFDF5),
+                                borderRadius: BorderRadius.circular(6),
+                                border:
+                                    Border.all(color: const Color(0xFFA7F3D0)),
+                              ),
+                              child: Text(
+                                '${simPercent ?? 75}% Visual Match',
+                                style: GoogleFonts.inter(
+                                  fontSize: 11,
+                                  fontWeight: FontWeight.w700,
+                                  color: const Color(0xFF059669),
+                                ),
+                              ),
+                            ),
+                            const SizedBox(width: 8),
+                            Text(
+                              _formatSentAt(alert['sent_at']?.toString()),
+                              style: GoogleFonts.inter(
+                                fontSize: 11.5,
+                                color: AppColors.onSurfaceVariant,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 18),
+
+              // Visual Photo Comparison (Registered vs Scanned Sighting)
+              if (sightingPhotoUrl != null && sightingPhotoUrl.isNotEmpty) ...[
+                Text(
+                  'Visual Comparison',
+                  style: GoogleFonts.montserrat(
+                    fontSize: 14,
+                    fontWeight: FontWeight.w700,
+                    color: AppColors.onSurface,
+                  ),
+                ),
+                const SizedBox(height: 8),
+                Row(
+                  children: [
+                    // Registered Photo
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Container(
+                            height: 140,
+                            decoration: BoxDecoration(
+                              borderRadius: BorderRadius.circular(16),
+                              color: AppColors.surfaceContainerHigh,
+                              border: Border.all(
+                                  color: AppColors.surfaceContainerHigh),
+                            ),
+                            clipBehavior: Clip.antiAlias,
+                            child: registeredPhotoUrl.isNotEmpty
+                                ? Image.network(
+                                    registeredPhotoUrl,
+                                    fit: BoxFit.cover,
+                                    width: double.infinity,
+                                    errorBuilder: (_, __, ___) =>
+                                        const PhotoPlaceholder(
+                                      iconColor: AppColors.outline,
+                                    ),
+                                  )
+                                : const PhotoPlaceholder(
+                                    iconColor: AppColors.outline,
+                                  ),
+                          ),
+                          const SizedBox(height: 6),
+                          Center(
+                            child: Text(
+                              'Registered Photo',
+                              style: GoogleFonts.inter(
+                                fontSize: 11,
+                                fontWeight: FontWeight.w600,
+                                color: AppColors.onSurfaceVariant,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    // Scanned Sighting Photo
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Container(
+                            height: 140,
+                            decoration: BoxDecoration(
+                              borderRadius: BorderRadius.circular(16),
+                              color: const Color(0xFFECFDF5),
+                              border: Border.all(
+                                  color: const Color(0xFF34D399), width: 1.5),
+                              boxShadow: [
+                                BoxShadow(
+                                  color:
+                                      const Color(0xFF10B981).withOpacity(0.12),
+                                  blurRadius: 10,
+                                  offset: const Offset(0, 3),
+                                ),
+                              ],
+                            ),
+                            clipBehavior: Clip.antiAlias,
+                            child: Image.network(
+                              sightingPhotoUrl,
+                              fit: BoxFit.cover,
+                              width: double.infinity,
+                              errorBuilder: (_, __, ___) =>
+                                  const PhotoPlaceholder(
+                                iconColor: Color(0xFF059669),
+                              ),
+                            ),
+                          ),
+                          const SizedBox(height: 6),
+                          Center(
+                            child: Text(
+                              'Scanned Sighting',
+                              style: GoogleFonts.inter(
+                                fontSize: 11,
+                                fontWeight: FontWeight.w700,
+                                color: const Color(0xFF059669),
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 16),
+              ],
+
+              // Alert Message Card
+              Container(
+                padding: const EdgeInsets.all(14),
+                decoration: BoxDecoration(
+                  color: const Color(0xFFF8FAFC),
+                  borderRadius: BorderRadius.circular(16),
+                  border: Border.all(color: const Color(0xFFE2E8F0)),
+                ),
+                child: Text(
+                  cleanMsg,
+                  style: GoogleFonts.inter(
+                    fontSize: 13,
+                    height: 1.45,
+                    color: const Color(0xFF334155),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 14),
+
+              // Finder Note Card if available
+              if (finderNote != null && finderNote.isNotEmpty) ...[
+                Container(
+                  padding: const EdgeInsets.all(14),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFFFFBEB),
+                    borderRadius: BorderRadius.circular(16),
+                    border: Border.all(color: const Color(0xFFFDE68A)),
+                  ),
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.all(7),
+                        decoration: const BoxDecoration(
+                          color: Color(0xFFFEF3C7),
+                          shape: BoxShape.circle,
+                        ),
+                        child: const Icon(
+                          Icons.chat_bubble_rounded,
+                          color: Color(0xFFD97706),
+                          size: 18,
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              'Note from Finder',
+                              style: GoogleFonts.inter(
+                                fontSize: 11,
+                                fontWeight: FontWeight.w700,
+                                color: const Color(0xFFB45309),
+                              ),
+                            ),
+                            const SizedBox(height: 3),
+                            Text(
+                              '"$finderNote"',
+                              style: GoogleFonts.inter(
+                                fontSize: 12.5,
+                                fontStyle: FontStyle.italic,
+                                fontWeight: FontWeight.w500,
+                                color: const Color(0xFF78350F),
+                                height: 1.4,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 14),
+              ],
+
+              // Scanner Contact Card if available
+              if (scannerContact != null && scannerContact.isNotEmpty) ...[
+                Container(
+                  padding: const EdgeInsets.all(14),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFEFF6FF),
+                    borderRadius: BorderRadius.circular(16),
+                    border: Border.all(color: const Color(0xFFBFDBFE)),
+                  ),
+                  child: Row(
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.all(8),
+                        decoration: const BoxDecoration(
+                          color: Color(0xFFDBEAFE),
+                          shape: BoxShape.circle,
+                        ),
+                        child: const Icon(
+                          Icons.contact_phone_rounded,
+                          color: Color(0xFF1D4ED8),
+                          size: 20,
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              'Scanner Contact',
+                              style: GoogleFonts.inter(
+                                fontSize: 11,
+                                fontWeight: FontWeight.w600,
+                                color: const Color(0xFF1E40AF),
+                              ),
+                            ),
+                            Text(
+                              scannerContact,
+                              style: GoogleFonts.inter(
+                                fontSize: 13,
+                                fontWeight: FontWeight.w700,
+                                color: const Color(0xFF1E3A8A),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      IconButton(
+                        onPressed: () => _makeCall(context, scannerContact),
+                        icon: Icon(
+                            scannerContact.contains('@') &&
+                                    !scannerContact.contains(RegExp(r'\d{7}'))
+                                ? Icons.email_rounded
+                                : Icons.phone_rounded,
+                            color: const Color(0xFF1D4ED8)),
+                        tooltip: scannerContact.contains('@') &&
+                                !scannerContact.contains(RegExp(r'\d{7}'))
+                            ? 'Email Scanner'
+                            : 'Call Scanner',
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 16),
+              ],
+
+              // Actions: Close & View Lost Report
+              Row(
+                children: [
+                  Expanded(
+                    child: OutlinedButton(
+                      onPressed: () => Navigator.pop(ctx),
+                      style: OutlinedButton.styleFrom(
+                        padding: const EdgeInsets.symmetric(vertical: 13),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(14),
+                        ),
+                      ),
+                      child: Text(
+                        'Close',
+                        style: GoogleFonts.inter(
+                          fontWeight: FontWeight.w600,
+                          fontSize: 13,
+                        ),
+                      ),
+                    ),
+                  ),
+                  if (alert['lost_report_id'] != null) ...[
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: ElevatedButton.icon(
+                        onPressed: () {
+                          Navigator.pop(ctx);
+                          Navigator.pop(
+                              context); // Close parent notifications sheet
+                          Navigator.pushNamed(context, AppRoutes.lostPetScreen);
+                        },
+                        icon: const Icon(Icons.pets_rounded, size: 17),
+                        label: Text(
+                          'View Lost Report',
+                          style: GoogleFonts.montserrat(
+                            fontWeight: FontWeight.w700,
+                            fontSize: 13,
+                          ),
+                        ),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: AppColors.primary,
+                          foregroundColor: Colors.white,
+                          padding: const EdgeInsets.symmetric(vertical: 13),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(14),
+                          ),
+                          elevation: 2,
+                        ),
+                      ),
+                    ),
+                  ],
+                ],
+              ),
+            ],
+          ),
+        ),
       ),
     );
   }

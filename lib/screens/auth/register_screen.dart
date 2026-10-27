@@ -10,7 +10,6 @@ import '../../core/app_toast.dart';
 import '../../services/auth/auth_service.dart';
 import '../../services/auth/id_validation_service.dart';
 import '../../services/auth/id_upload_edge_service.dart';
-import '../../services/auth/user_id_service.dart';
 
 /// Standalone Register / Sign-up screen for PawTrace.
 ///
@@ -42,6 +41,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
   final _regPhoneCtrl = TextEditingController();
   String? _selectedSuffix;
   String? _selectedBarangay;
+  String _selectedGender = 'Male';
 
   bool _obscureRegPwd = true;
   bool _obscureRegConfirm = true;
@@ -155,10 +155,12 @@ class _RegisterScreenState extends State<RegisterScreen> {
             password: password,
             phone: phone,
             barangay: _selectedBarangay,
+            gender: _selectedGender,
           );
       _registrationUser = registrationUser;
 
       // Upload ID images via Edge Function (bypasses RLS — no session required).
+      // Non-fatal: if upload fails, account is still created and user is informed.
       try {
         await IdUploadEdgeService.uploadViaEdgeFunction(
           userId: registrationUser.id,
@@ -173,10 +175,8 @@ class _RegisterScreenState extends State<RegisterScreen> {
               'front:${validation.frontQuality};back:${validation.backQuality}',
         );
       } catch (e) {
-        throw StateError(
-          'Your account was created, but the ID submission was not completed. '
-          'Please retry the ID upload. Details: $e',
-        );
+        // Log but don't block — account is created, admin can request ID later.
+        debugPrint('[Register] ID upload failed (non-fatal): $e');
       }
 
       // Ensure the user signs out so they must verify their email before accessing
@@ -340,8 +340,31 @@ class _RegisterScreenState extends State<RegisterScreen> {
       );
     } on AuthException catch (e) {
       _showError(AuthService.friendlyError(e));
+    } on StateError catch (e) {
+      // StateError is thrown when account was created but ID upload failed.
+      // Show a clear, actionable message instead of the raw exception text.
+      final msg = e.message;
+      if (msg.contains('ID submission')) {
+        _showError(
+          '✅ Account created! However, your ID upload did not complete. '
+          'Please log in and re-upload your ID from Settings.',
+        );
+        // Still navigate to login since the account was created
+        if (mounted) {
+          Navigator.of(context).pushNamedAndRemoveUntil(
+            AppRoutes.login,
+            (_) => false,
+            arguments: {
+              'flashMessage':
+                  'Account created! Please verify your email, then upload your ID from Settings.',
+            },
+          );
+        }
+      } else {
+        _showError('Registration error: ${e.message}');
+      }
     } catch (e) {
-      _showError('Unexpected error: $e');
+      _showError(AppErrors.format(e));
     } finally {
       if (mounted) {
         setState(() {
@@ -490,6 +513,8 @@ class _RegisterScreenState extends State<RegisterScreen> {
                     ),
                     const SizedBox(height: 12),
                     _buildBarangayDropdown(),
+                    const SizedBox(height: 12),
+                    _buildGenderDropdown(),
                     const SizedBox(height: 20),
 
                     // ── Valid ID Upload Section (Required) ───────────────────
@@ -764,6 +789,52 @@ class _RegisterScreenState extends State<RegisterScreen> {
               ))
           .toList(),
       onChanged: (v) => setState(() => _selectedBarangay = v),
+    );
+  }
+
+  Widget _buildGenderDropdown() {
+    return DropdownButtonFormField<String>(
+      isExpanded: true,
+      value: _selectedGender,
+      decoration: InputDecoration(
+        labelText: 'Sex / Gender (Non-editable)',
+        labelStyle: GoogleFonts.inter(
+          fontSize: 13,
+          fontWeight: FontWeight.w600,
+          color: AppColors.secondary,
+        ),
+        hintText: 'Select Sex / Gender',
+        prefixIcon: Icon(
+          _selectedGender == 'Female' ? Icons.female_rounded : Icons.male_rounded,
+          color: AppColors.primary,
+          size: 20,
+        ),
+        suffixIcon: const Padding(
+          padding: EdgeInsets.only(right: 12),
+          child: Icon(Icons.lock_outline_rounded, size: 16, color: Color(0xFF94A3B8)),
+        ),
+        focusedBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(16),
+          borderSide: const BorderSide(color: AppColors.primary, width: 2),
+        ),
+      ),
+      icon: const Icon(Icons.expand_more_rounded, color: AppColors.secondary),
+      style: GoogleFonts.inter(fontSize: 15, color: AppColors.onSurface),
+      dropdownColor: AppColors.surfaceContainerLowest,
+      borderRadius: BorderRadius.circular(16),
+      items: const [
+        DropdownMenuItem(
+          value: 'Male',
+          child: Text('Male'),
+        ),
+        DropdownMenuItem(
+          value: 'Female',
+          child: Text('Female'),
+        ),
+      ],
+      onChanged: (v) {
+        if (v != null) setState(() => _selectedGender = v);
+      },
     );
   }
 

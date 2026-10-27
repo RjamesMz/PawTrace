@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../../core/app_colors.dart';
 import '../../../core/navigation_helpers.dart';
+import '../../../core/time_utils.dart';
 import '../../../widgets/user/bottom_nav_bar.dart';
 
 /// Locate My Pet screen – live GPS tracking with map and pet info bottom sheet.
@@ -20,6 +22,28 @@ class _LocateMyPetScreenState extends State<LocateMyPetScreen>
   late final AnimationController _pulseCtrl;
   late final Animation<double> _pulseAnim;
 
+  int _battery = 0;
+  String _petName = 'Cooper';
+  String _collarId = '';
+  String _lastSeen = 'Live';
+  String? _recordedAtRaw;
+  double? _lat;
+  double? _lon;
+
+  bool get _isGpsActive {
+    if (_recordedAtRaw == null || _recordedAtRaw!.isEmpty) return false;
+    try {
+      DateTime dt = DateTime.parse(_recordedAtRaw!);
+      if (!_recordedAtRaw!.endsWith('Z') && !_recordedAtRaw!.contains('+')) {
+        dt = DateTime.parse('${_recordedAtRaw!}Z');
+      }
+      final diff = DateTime.now().difference(dt.toLocal());
+      return !diff.isNegative && diff.inSeconds <= 180;
+    } catch (_) {
+      return false;
+    }
+  }
+
   @override
   void initState() {
     super.initState();
@@ -28,6 +52,59 @@ class _LocateMyPetScreenState extends State<LocateMyPetScreen>
           ..repeat(reverse: true);
     _pulseAnim = Tween<double>(begin: 0.8, end: 1.2)
         .animate(CurvedAnimation(parent: _pulseCtrl, curve: Curves.easeInOut));
+    _loadCollarTelemetry();
+  }
+
+  Future<void> _loadCollarTelemetry() async {
+    try {
+      final uid = Supabase.instance.client.auth.currentUser?.id;
+      if (uid == null) return;
+      final pet = await Supabase.instance.client
+          .from('pets')
+          .select('name, gps_id')
+          .eq('owner_id', uid)
+          .not('gps_id', 'is', null)
+          .limit(1)
+          .maybeSingle();
+
+      if (pet != null) {
+        final gpsId = pet['gps_id']?.toString() ?? '';
+        final name = pet['name']?.toString() ?? 'My Pet';
+        if (mounted) {
+          setState(() {
+            _petName = name;
+            _collarId = gpsId;
+          });
+        }
+
+        if (gpsId.isNotEmpty) {
+          final loc = await Supabase.instance.client
+              .from('gps_locations')
+              .select()
+              .eq('gps_id', gpsId)
+              .order('recorded_at', ascending: false)
+              .limit(1)
+              .maybeSingle();
+
+          if (loc != null && mounted) {
+            final rawBat = loc['battery_level'] ?? loc['battery'];
+            final parsedBat = (rawBat is num)
+                ? rawBat.toInt()
+                : (int.tryParse(rawBat?.toString() ?? '') ?? 0);
+            setState(() {
+              _battery = parsedBat;
+              _lat = (loc['lat'] as num?)?.toDouble();
+              _lon = (loc['lon'] as num?)?.toDouble();
+              _recordedAtRaw = loc['recorded_at']?.toString();
+              _lastSeen =
+                  TimeUtils.formatTimeAgo(loc['recorded_at']?.toString());
+            });
+          }
+        }
+      }
+    } catch (e) {
+      debugPrint('[LocateMyPet] Error fetching telemetry: $e');
+    }
   }
 
   @override
@@ -262,7 +339,7 @@ class _LocateMyPetScreenState extends State<LocateMyPetScreen>
                 child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text('Cooper',
+                      Text(_petName,
                           style: GoogleFonts.montserrat(
                               fontSize: 18,
                               fontWeight: FontWeight.w600,
@@ -292,11 +369,36 @@ class _LocateMyPetScreenState extends State<LocateMyPetScreen>
           const SizedBox(height: 14),
           // Status pills
           Wrap(spacing: 8, runSpacing: 8, children: [
-            _pill(Icons.location_on, 'Virac', AppColors.surfaceContainerLow),
-            _pill(Icons.schedule, '30s ago', AppColors.surfaceContainerLow),
-            _pill(Icons.battery_5_bar, '85%', const Color(0xFFF0FDF4),
-                iconColor: const Color(0xFF22C55E),
-                textColor: const Color(0xFF15803D)),
+            _pill(Icons.location_on,
+                _collarId.isNotEmpty ? _collarId : 'Collar',
+                AppColors.surfaceContainerLow),
+            _pill(Icons.schedule, _lastSeen, AppColors.surfaceContainerLow),
+            if (_collarId.isNotEmpty && _isGpsActive && _battery > 0)
+              _pill(
+                _battery >= 85
+                    ? Icons.battery_full_rounded
+                    : _battery >= 50
+                        ? Icons.battery_5_bar_rounded
+                        : _battery >= 20
+                            ? Icons.battery_3_bar_rounded
+                            : Icons.battery_alert_rounded,
+                '$_battery%',
+                _battery >= 50
+                    ? const Color(0xFFF0FDF4)
+                    : (_battery >= 20
+                        ? const Color(0xFFFFFBEB)
+                        : const Color(0xFFFEF2F2)),
+                iconColor: _battery >= 50
+                    ? const Color(0xFF22C55E)
+                    : (_battery >= 20
+                        ? const Color(0xFFD97706)
+                        : const Color(0xFFDC2626)),
+                textColor: _battery >= 50
+                    ? const Color(0xFF15803D)
+                    : (_battery >= 20
+                        ? const Color(0xFFB45309)
+                        : const Color(0xFFB91C1C)),
+              ),
           ]),
           const SizedBox(height: 14),
           // Location details
@@ -315,7 +417,11 @@ class _LocateMyPetScreenState extends State<LocateMyPetScreen>
                 border: Border.all(
                     color: AppColors.outlineVariant.withOpacity(0.2))),
             child: Column(children: [
-              _locationRow(Icons.explore, 'Lat: 13.9747, Lon: 124.2432'),
+              _locationRow(
+                  Icons.explore,
+                  _lat != null && _lon != null
+                      ? 'Lat: ${_lat!.toStringAsFixed(4)}, Lon: ${_lon!.toStringAsFixed(4)}'
+                      : 'Lat: 13.9747, Lon: 124.2432'),
               const SizedBox(height: 8),
               _locationRow(Icons.home,
                   'Brgy. Santa Ana, Calatagan, Batangas, Philippines'),

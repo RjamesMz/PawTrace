@@ -218,16 +218,6 @@ class _AdminWebLayoutState extends State<AdminWebLayout> {
                                 overflow: TextOverflow.ellipsis,
                               ),
                             ),
-                            IconButton(
-                              icon: const Icon(
-                                Icons.menu_open_rounded,
-                                color: Colors.white,
-                                size: 20,
-                              ),
-                              tooltip: 'Collapse Sidebar',
-                              onPressed: () =>
-                                  setState(() => _isSidebarCollapsed = true),
-                            ),
                           ],
                         ),
                 ),
@@ -482,26 +472,6 @@ class _AdminWebLayoutState extends State<AdminWebLayout> {
                     ),
                     child: Row(
                       children: [
-                        // Toggle sidebar button in top bar
-                        IconButton(
-                          icon: Icon(
-                            _isSidebarCollapsed
-                                ? Icons.menu_rounded
-                                : Icons.menu_open_rounded,
-                            color: AppColors.onSurface,
-                            size: 24,
-                          ),
-                          tooltip: _isSidebarCollapsed
-                              ? 'Expand Sidebar'
-                              : 'Collapse Sidebar',
-                          onPressed: () {
-                            setState(() {
-                              _isSidebarCollapsed = !_isSidebarCollapsed;
-                            });
-                          },
-                        ),
-                        const SizedBox(width: 8),
-
                         // Current page title in Montserrat bold 20sp
                         Text(
                           _resolveTitle(),

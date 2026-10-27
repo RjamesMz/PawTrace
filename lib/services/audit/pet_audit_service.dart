@@ -33,7 +33,7 @@ class PetAuditLog {
         'changes_summary': changesSummary,
         'modified_by': modifiedBy,
         'modifier_role': modifierRole,
-        'created_at': timestamp.toIso8601String(),
+        'created_at': timestamp.toUtc().toIso8601String(),
       };
 
   factory PetAuditLog.fromMap(Map<String, dynamic> map) {
@@ -148,9 +148,9 @@ class PetAuditService {
       final petIdInt = int.tryParse(petIdStr);
       final query = _client.from('pets');
       if (petIdInt != null) {
-        await query.update({'updated_at': now.toIso8601String()}).eq('pet_id', petIdInt);
+        await query.update({'updated_at': now.toUtc().toIso8601String()}).eq('pet_id', petIdInt);
       } else {
-        await query.update({'updated_at': now.toIso8601String()}).eq('pet_id', petIdStr);
+        await query.update({'updated_at': now.toUtc().toIso8601String()}).eq('pet_id', petIdStr);
       }
     } catch (_) {}
   }

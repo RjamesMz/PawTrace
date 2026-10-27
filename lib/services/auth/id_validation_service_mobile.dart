@@ -36,14 +36,18 @@ class IdValidationService {
   }) async {
     final frontQuality = _checkQuality(frontBytes);
     final backQuality = _checkQuality(backBytes);
+
+    // Poor quality photos are flagged for admin review — NOT hard-blocked.
+    // This ensures users with lower-res photos can still register.
+    // Admins will verify the ID manually during account approval.
     if (frontQuality != 'good' || backQuality != 'good') {
       return IdValidationResult(
         frontQuality: frontQuality,
         backQuality: backQuality,
         ocrExtractedText: '',
         nameMatchScore: 0,
-        validationStatus: 'rejected',
-        message: 'Use clear, well-lit card photos with a visible full ID.',
+        validationStatus: 'needs_review',
+        message: 'ID photo quality is low — your account will be reviewed by an admin.',
       );
     }
 
@@ -55,8 +59,8 @@ class IdValidationService {
         backQuality: backQuality,
         ocrExtractedText: '',
         nameMatchScore: 0,
-        validationStatus: 'unsupported_platform',
-        message: 'ID validation is available on Android and iOS only.',
+        validationStatus: 'needs_review',
+        message: 'ID validation skipped on this platform. Admin will review manually.',
       );
     }
 

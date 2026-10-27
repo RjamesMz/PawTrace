@@ -13,6 +13,7 @@ import '../../../widgets/admin/admin_layout.dart';
 import '../../../widgets/common/change_password_dialog.dart';
 import '../../../widgets/admin/web/admin_web_layout.dart';
 import '../../../widgets/admin/settings/admin_settings_cards.dart';
+import '../../../services/audit/user_audit_service.dart';
 
 /// Admin Settings Screen — allows barangay admins and super admins to view
 /// and edit their profile details, contact information, profile picture,
@@ -253,6 +254,13 @@ class _AdminSettingsScreenState extends State<AdminSettingsScreen> {
 
       if (!mounted) return;
       setState(() => _photoUrl = publicUrl);
+      UserAuditService.instance.logUserModification(
+        userId: uid,
+        action: 'Profile Photo Updated',
+        changesSummary: 'Admin profile photo uploaded and updated',
+        userName: '$_initialFirstName $_initialSurname'.trim(),
+        modifierRole: 'admin',
+      );
       AppToast.success(context, 'Profile photo updated successfully!');
     } catch (e) {
       if (!mounted) return;
@@ -292,6 +300,22 @@ class _AdminSettingsScreenState extends State<AdminSettingsScreen> {
       }).eq('user_id', uid);
 
       if (!mounted) return;
+
+      final diffs = <String>[];
+      if (fn != _initialFirstName) diffs.add('First Name: "$_initialFirstName" -> "$fn"');
+      if (mn != _initialMiddleName) diffs.add('Middle Name: "$_initialMiddleName" -> "$mn"');
+      if (sn != _initialSurname) diffs.add('Surname: "$_initialSurname" -> "$sn"');
+      if (sfx != _initialSuffix) diffs.add('Suffix: "$_initialSuffix" -> "$sfx"');
+      if (phone != _initialPhone) diffs.add('Phone: "$_initialPhone" -> "$phone"');
+      if (address != _initialAddress) diffs.add('Address: "$_initialAddress" -> "$address"');
+
+      UserAuditService.instance.logUserModification(
+        userId: uid,
+        action: 'Admin Profile Updated',
+        changesSummary: diffs.isEmpty ? 'Admin details updated' : diffs.join('; '),
+        userName: [fn, mn, sn, sfx].where((s) => s.isNotEmpty).join(' '),
+        modifierRole: 'admin',
+      );
 
       AuthService.instance.updateProfileData({
         'first_name': fn,

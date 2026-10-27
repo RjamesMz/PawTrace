@@ -183,7 +183,7 @@ class AlertService {
 
       final List<Map<String, dynamic>> alertRows = [];
       final Set<String> addedUserIds = {};
-      final now = DateTime.now().toIso8601String();
+      final now = DateTime.now().toUtc().toIso8601String();
 
       // Dispatch to Admins (ALWAYS include all admins, even if the admin logged the report)
       for (final r in adminRecipients) {
@@ -204,7 +204,7 @@ class AlertService {
 
       // Dispatch to community residents in that barangay
       final communityMessage =
-          '🐾 Lost Pet Alert: "$petName" was reported missing in Brgy. $barangay. Keep an eye out!';
+          'Lost Pet Alert: "$petName" was reported missing in Brgy. $barangay. Keep an eye out!';
 
       for (final r in barangayRecipients) {
         final userId = r['user_id']?.toString();
@@ -243,9 +243,9 @@ class AlertService {
   }) async {
     try {
       final List<Map<String, dynamic>> alertRows = [];
-      final now = DateTime.now().toIso8601String();
+      final now = DateTime.now().toUtc().toIso8601String();
       final message =
-          '🐾 New Pet Registered: "$petName" ($species · $breed) was registered in Brgy. $barangay.';
+          'New Pet Registered: "$petName" ($species · $breed) was registered in Brgy. $barangay.';
 
       List<dynamic> admins = [];
       try {
@@ -303,7 +303,7 @@ class AlertService {
 
       final message =
           '📢 Community Alert: "$petName" was reported missing in Brgy. $barangay. Tap to view News!';
-      final now = DateTime.now().toIso8601String();
+      final now = DateTime.now().toUtc().toIso8601String();
 
       for (final r in recipients) {
         final userId = r['user_id']?.toString();
@@ -337,7 +337,7 @@ class AlertService {
     final uid = _client.auth.currentUser?.id;
     if (uid == null) return false;
     try {
-      final now = DateTime.now().toIso8601String();
+      final now = DateTime.now().toUtc().toIso8601String();
       final timeStr =
           '${DateTime.now().hour.toString().padLeft(2, '0')}:${DateTime.now().minute.toString().padLeft(2, '0')}';
       await _client.from('alerts').insert({
@@ -351,6 +351,107 @@ class AlertService {
       return true;
     } catch (e) {
       debugPrint('[AlertService] Error sending test alert: $e');
+      return false;
+    }
+  }
+
+  /// Dispatches an AI sighting match alert to the owner of the lost pet
+  /// when another user scans a pet that matches with >= 75% similarity.
+  ///
+  /// Includes a 15-minute cooldown per report/owner to avoid duplicate spam.
+  Future<bool> sendAiSightingAlert({
+    required String ownerUserId,
+    required String lostReportId,
+    required String petName,
+    required double similarity,
+    required String sightingPhotoUrl,
+    String? barangay,
+    String? scannerName,
+    String? scannerPhone,
+    String? scannerEmail,
+    String? finderNote,
+  }) async {
+    try {
+      final currentUserId = _client.auth.currentUser?.id;
+
+      // 1. Guard against alerting self (owner scanning their own pet)
+      if (currentUserId != null && currentUserId == ownerUserId) {
+        debugPrint(
+            '[AlertService] Sighting alert skipped: scanner is the pet owner.');
+        return false;
+      }
+
+      // 2. 15-Minute Cooldown: Check if an alert for this lost_report_id was already sent in the last 15 minutes
+      final fifteenMinutesAgo = DateTime.now()
+          .toUtc()
+          .subtract(const Duration(minutes: 15))
+          .toIso8601String();
+
+      try {
+        final recentAlerts = await _client
+            .from('alerts')
+            .select('alert_id, sent_at')
+            .eq('sent_to', ownerUserId)
+            .eq('lost_report_id', lostReportId)
+            .gte('sent_at', fifteenMinutesAgo)
+            .limit(1);
+
+        if ((recentAlerts as List).isNotEmpty) {
+          debugPrint(
+              '[AlertService] Sighting alert debounced (within 15-min cooldown window).');
+          return false;
+        }
+      } catch (e) {
+        debugPrint('[AlertService] Cooldown check warning (continuing): $e');
+      }
+
+      // 3. Compose rich structured alert message
+      final simPercent = (similarity * 100).round();
+      final brgyText = (barangay != null && barangay.trim().isNotEmpty)
+          ? ' near Brgy. ${barangay.trim()}'
+          : '';
+
+      final contactDetails = <String>[];
+      if (scannerName != null && scannerName.trim().isNotEmpty) {
+        contactDetails.add(scannerName.trim());
+      }
+      if (scannerPhone != null && scannerPhone.trim().isNotEmpty) {
+        contactDetails.add(scannerPhone.trim());
+      } else if (scannerEmail != null && scannerEmail.trim().isNotEmpty) {
+        contactDetails.add(scannerEmail.trim());
+      }
+
+      final scannerContactPart = contactDetails.isNotEmpty
+          ? ' [Scanner Contact: ${contactDetails.join(' · ')}]'
+          : '';
+
+      final notePart = (finderNote != null && finderNote.trim().isNotEmpty)
+          ? ' [Finder Note: ${finderNote.trim()}]'
+          : '';
+
+      final sightingPhotoPart = sightingPhotoUrl.isNotEmpty
+          ? ' [Sighting Photo]: $sightingPhotoUrl'
+          : '';
+
+      final message =
+          'AI Sighting Match ($simPercent%): Your lost pet "$petName" was scanned$brgyText!$sightingPhotoPart$scannerContactPart$notePart';
+
+      final now = DateTime.now().toUtc().toIso8601String();
+
+      await _client.from('alerts').insert({
+        'sent_to': ownerUserId,
+        'lost_report_id': lostReportId,
+        'message': message,
+        'is_read': false,
+        'sent_at': now,
+      });
+
+      debugPrint(
+          '[AlertService] Dispatched AI sighting alert to owner ($ownerUserId) for $petName ($simPercent% match)');
+      await refreshUnreadCount();
+      return true;
+    } catch (e) {
+      debugPrint('[AlertService] Error sending AI sighting alert: $e');
       return false;
     }
   }

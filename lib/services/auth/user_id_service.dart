@@ -53,7 +53,7 @@ class UserIdService {
     double? nameMatchScore,
     String? imageQuality,
   }) async {
-    final ts = uploadedAt ?? DateTime.now().toIso8601String();
+    final ts = uploadedAt ?? DateTime.now().toUtc().toIso8601String();
     final record = {
       'user_id': userId,
       'email': email.trim().toLowerCase(),

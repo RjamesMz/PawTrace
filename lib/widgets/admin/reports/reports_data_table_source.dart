@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../../../core/app_colors.dart';
+import '../../../core/app_constants.dart';
 import '../../../services/admin/admin_analytics_service.dart';
 import '../../../widgets/common/photo_placeholder.dart';
 
@@ -47,7 +48,7 @@ class ReportsDataTableSource extends DataTableSource {
     String formattedTime = '';
     if (reportedAt.isNotEmpty) {
       try {
-        final dt = DateTime.parse(reportedAt).toLocal();
+        final dt = AppConstants.parseLocalTime(reportedAt);
         formattedDate = '${dt.month}/${dt.day}/${dt.year}';
         final hour = dt.hour == 0 ? 12 : (dt.hour > 12 ? dt.hour - 12 : dt.hour);
         final minute = dt.minute.toString().padLeft(2, '0');
@@ -77,7 +78,7 @@ class ReportsDataTableSource extends DataTableSource {
 
       if (rawFound != null && rawFound.isNotEmpty) {
         try {
-          final dt = DateTime.parse(rawFound).toLocal();
+          final dt = AppConstants.parseLocalTime(rawFound);
           formattedFoundDate = '${dt.month}/${dt.day}/${dt.year}';
           final hour =
               dt.hour == 0 ? 12 : (dt.hour > 12 ? dt.hour - 12 : dt.hour);

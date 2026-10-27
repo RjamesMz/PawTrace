@@ -5,6 +5,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:excel/excel.dart' hide Border;
 import '../../../core/app_colors.dart';
 import '../../../core/app_constants.dart';
+import '../../../core/time_utils.dart';
 import '../../../services/admin/admin_analytics_service.dart';
 import '../../../services/auth/auth_service.dart';
 import '../../../services/export/file_export_service.dart';
@@ -166,7 +167,7 @@ class _AdminReportsScreenState extends State<AdminReportsScreen> {
           final ts = r['reported_at']?.toString() ?? '';
           if (ts.isEmpty) return false;
           try {
-            return DateTime.parse(ts).isAfter(weekAgo);
+            return TimeUtils.parseTimestamp(ts).isAfter(weekAgo);
           } catch (_) {
             return false;
           }
@@ -229,7 +230,7 @@ class _AdminReportsScreenState extends State<AdminReportsScreen> {
               '';
           if (ts.isEmpty) return false;
           try {
-            final dt = DateTime.parse(ts).toLocal();
+            final dt = TimeUtils.parseTimestamp(ts);
             return !dt.isBefore(startDate!) && !dt.isAfter(endDate!);
           } catch (_) {
             return false;
@@ -712,21 +713,25 @@ class _AdminReportsScreenState extends State<AdminReportsScreen> {
         children: [
           AppConstants.buildLogoGraphic(size: 24),
           const SizedBox(width: 8),
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Text('Lost Reports',
-                  style: GoogleFonts.montserrat(
-                      fontSize: 18,
-                      fontWeight: FontWeight.w700,
-                      color: AppColors.onSurface)),
-              Text('Brgy. $_adminBarangay',
-                  style: GoogleFonts.inter(
-                      fontSize: 12, color: AppColors.onSurfaceVariant)),
-            ],
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Text('Lost Reports',
+                    style: GoogleFonts.montserrat(
+                        fontSize: 18,
+                        fontWeight: FontWeight.w700,
+                        color: AppColors.onSurface)),
+                Text('Brgy. $_adminBarangay',
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: GoogleFonts.inter(
+                        fontSize: 12, color: AppColors.onSurfaceVariant)),
+              ],
+            ),
           ),
-          const Spacer(),
+          const SizedBox(width: 8),
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
             decoration: BoxDecoration(
@@ -1148,7 +1153,7 @@ class _AdminReportsScreenState extends State<AdminReportsScreen> {
         'Date Found',
         'Time Found',
         'Pet Status',
-        'Archive Status',
+        'De-active Status',
         'Where Pet Last Seen',
       ];
       final headerStyle = CellStyle(
@@ -1190,7 +1195,7 @@ class _AdminReportsScreenState extends State<AdminReportsScreen> {
         final bool isFound = isReportFound(report);
         final String petCondition = isFound ? 'FOUND' : 'LOST';
         final archiveStatus =
-            reportStatus == 'archived' ? 'ARCHIVED' : 'ACTIVE';
+            reportStatus == 'archived' ? 'DE-ACTIVE' : 'ACTIVE';
 
         final lastSeenRaw = report['last_seen_address']?.toString() ?? '';
         final cleanLastSeen = lastSeenRaw
@@ -1207,7 +1212,7 @@ class _AdminReportsScreenState extends State<AdminReportsScreen> {
         final raw = report['reported_at']?.toString() ?? '';
         if (raw.isNotEmpty) {
           try {
-            final dt = DateTime.parse(raw).toLocal();
+            final dt = AppConstants.parseLocalTime(raw);
             const months = [
               'Jan',
               'Feb',
@@ -1241,7 +1246,7 @@ class _AdminReportsScreenState extends State<AdminReportsScreen> {
           }
           if (rawFound != null && rawFound.isNotEmpty) {
             try {
-              final dt = DateTime.parse(rawFound).toLocal();
+              final dt = AppConstants.parseLocalTime(rawFound);
               const months = [
                 'Jan',
                 'Feb',

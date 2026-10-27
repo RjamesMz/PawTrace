@@ -1,5 +1,6 @@
 <!DOCTYPE html>
 <html>
+
 <head>
   <!--
     If you are serving your web app in a path other than the root, change the
@@ -18,7 +19,13 @@
 
   <meta charset="UTF-8">
   <meta content="IE=Edge" http-equiv="X-UA-Compatible">
-  <meta name="description" content="A new Flutter project.">
+  <meta name="description" content="PetTrace - Community-driven pet protection and recovery.">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="theme-color" content="#FF6600">
+
+  <!-- Warm up connections used right after startup -->
+  <link rel="preconnect" href="https://www.gstatic.com" crossorigin>
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 
   <!-- iOS meta tags & icons -->
   <meta name="mobile-web-app-capable" content="yes">
@@ -27,12 +34,135 @@
   <link rel="apple-touch-icon" href="icons/Icon-192.png">
 
   <!-- Favicon -->
-  <link rel="icon" type="image/png" href="favicon.png"/>
+  <link rel="icon" type="image/png" href="favicon.png" />
 
   <title>PetTrace</title>
   <link rel="manifest" href="manifest.json">
+
+  <!-- Instant splash: pure inline CSS/SVG, paints before any Flutter file loads -->
+  <style>
+    html,
+    body {
+      margin: 0;
+      height: 100%;
+      background: #fff;
+    }
+
+    #splash {
+      position: fixed;
+      inset: 0;
+      z-index: 9999;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      background: #fff;
+      font-family: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+      transition: opacity .35s ease;
+    }
+
+    #splash.hide {
+      opacity: 0;
+      pointer-events: none;
+    }
+
+    #splash .badge {
+      width: 92px;
+      height: 92px;
+      border-radius: 50%;
+      background: linear-gradient(135deg, #FF8C00, #FF6600);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      box-shadow: 0 10px 30px rgba(255, 102, 0, .35);
+      animation: pulse 1.6s ease-in-out infinite;
+    }
+
+    #splash h1 {
+      margin: 22px 0 6px;
+      font-size: 26px;
+      font-weight: 700;
+      color: #1d1b1a;
+      letter-spacing: .3px;
+    }
+
+    #splash p {
+      margin: 0 0 26px;
+      font-size: 14px;
+      color: #6b6560;
+    }
+
+    #splash .bar {
+      width: 140px;
+      height: 4px;
+      border-radius: 4px;
+      background: #ffe3cf;
+      overflow: hidden;
+    }
+
+    #splash .bar::after {
+      content: '';
+      display: block;
+      width: 40%;
+      height: 100%;
+      border-radius: 4px;
+      background: #FF6600;
+      animation: slide 1.1s ease-in-out infinite;
+    }
+
+    @keyframes pulse {
+
+      0%,
+      100% {
+        transform: scale(1);
+      }
+
+      50% {
+        transform: scale(1.07);
+      }
+    }
+
+    @keyframes slide {
+      0% {
+        transform: translateX(-100%);
+      }
+
+      100% {
+        transform: translateX(350%);
+      }
+    }
+  </style>
 </head>
+
 <body>
+  <div id="splash" aria-label="Loading PetTrace">
+    <div class="badge">
+      <svg width="48" height="48" viewBox="0 0 24 24" fill="#fff" aria-hidden="true">
+        <circle cx="4.5" cy="10" r="2.2" />
+        <circle cx="9" cy="5.5" r="2.2" />
+        <circle cx="15" cy="5.5" r="2.2" />
+        <circle cx="19.5" cy="10" r="2.2" />
+        <path
+          d="M12 10.5c-3 0-6 3.2-6 6 0 2 1.6 3 3.2 3 1 0 1.8-.5 2.8-.5s1.8.5 2.8.5c1.6 0 3.2-1 3.2-3 0-2.8-3-6-6-6z" />
+      </svg>
+    </div>
+    <h1>PetTrace</h1>
+    <p>Getting things ready…</p>
+    <div class="bar"></div>
+  </div>
+  <script>
+    // Remove splash once Flutter has drawn its first frame (with a safety timeout).
+    (function () {
+      var s = document.getElementById('splash');
+      function hide() {
+        if (!s) return;
+        s.classList.add('hide');
+        setTimeout(function () { if (s && s.parentNode) s.parentNode.removeChild(s); s = null; }, 400);
+      }
+      window.addEventListener('flutter-first-frame', hide);
+      setTimeout(hide, 20000);
+    })();
+  </script>
   <!--
     You can customize the "flutter_bootstrap.js" script.
     This is useful to provide a custom configuration to the Flutter loader
@@ -43,4 +173,5 @@
   -->
   <script src="flutter_bootstrap.js" async></script>
 </body>
+
 </html>

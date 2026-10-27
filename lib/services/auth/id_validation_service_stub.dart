@@ -17,7 +17,8 @@ class IdValidationResult {
   final String validationStatus;
   final String? message;
 
-  bool get isUsableForRegistration => validationStatus == 'passed';
+  bool get isUsableForRegistration =>
+      validationStatus == 'passed' || validationStatus == 'needs_review';
 }
 
 class IdValidationService {
@@ -27,13 +28,15 @@ class IdValidationService {
     required String firstName,
     required String surname,
   }) async {
+    // On web/unsupported platforms, skip validation and flag for admin review.
+    // ID images will still be uploaded — admins will verify manually.
     return const IdValidationResult(
       frontQuality: 'not_checked',
       backQuality: 'not_checked',
       ocrExtractedText: '',
       nameMatchScore: 0,
-      validationStatus: 'unsupported_platform',
-      message: 'ID validation is available on Android and iOS only.',
+      validationStatus: 'needs_review',
+      message: 'ID validation skipped on this platform. Admin will review manually.',
     );
   }
 }

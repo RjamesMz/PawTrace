@@ -12,6 +12,7 @@ import '../../../core/app_toast.dart';
 import '../../../services/geo/no_signal_mask_service.dart';
 import '../../../widgets/admin/pet_location_map_dialog.dart' show PetLocationResult;
 import '../../../widgets/common/photo_placeholder.dart';
+import '../../../widgets/user/locate_pet/pet_geofence_layer.dart';
 
 /// Fullscreen Admin Pet GPS Tracking and Location Map screen.
 /// Supports live realtime collar updates, accurate staleness status (Live vs Offline),
@@ -386,6 +387,11 @@ class _AdminPetTrackingMapScreenState extends State<AdminPetTrackingMapScreen> {
                         PolygonLayer(
                           polygons: NoSignalMaskService.instance.polygons,
                         ),
+                      // ── Geofence boundary & Satellite GPS accuracy margin of error (±2.5m) ──
+                      PetGeofenceLayer(
+                        center: targetPoint,
+                        isGpsActive: isLive,
+                      ),
                       MarkerLayer(
                         markers: [
                           Marker(

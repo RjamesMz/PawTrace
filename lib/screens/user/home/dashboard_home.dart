@@ -6,6 +6,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../../core/app_colors.dart';
 import '../../../core/app_constants.dart';
 import '../../../core/app_routes.dart';
+import '../../../core/time_utils.dart';
 import '../../../services/auth/auth_service.dart';
 import '../../../widgets/common/notification_bell_button.dart';
 import '../../../widgets/user/lost_pet/lost_pet_card.dart';
@@ -28,14 +29,14 @@ class _DashboardHomeScreenState extends State<DashboardHomeScreen> {
 
   final TextEditingController _searchCtrl = TextEditingController();
 
-  // 0 = Recent (last 48h), 1 = This Week, 2 = This Month, 3 = Archived
+  // 0 = Recent (last 48h), 1 = This Week, 2 = This Month, 3 = De-active
   int _filterIndex = 0;
 
   static const List<String> _filterLabels = [
     'Recent',
     'This Week',
     'This Month',
-    'Archived',
+    'De-active',
   ];
 
   @override
@@ -102,7 +103,7 @@ class _DashboardHomeScreenState extends State<DashboardHomeScreen> {
   List<Map<String, dynamic>> get _filtered {
     List<Map<String, dynamic>> list;
     if (_filterIndex == 3) {
-      // Archived reports
+      // De-active reports
       list = _lostPetsList.where((r) {
         final st = (r['status'] ?? '').toString().toLowerCase();
         return st == 'archived' || st == 'resolved';
@@ -130,7 +131,7 @@ class _DashboardHomeScreenState extends State<DashboardHomeScreen> {
         final ts = r['reported_at']?.toString() ?? '';
         if (ts.isEmpty) return true;
         try {
-          return DateTime.parse(ts).isAfter(cutoff);
+          return TimeUtils.parseTimestamp(ts).isAfter(cutoff);
         } catch (_) {
           return true;
         }

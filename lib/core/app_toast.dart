@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'app_colors.dart';
+import 'app_constants.dart';
 
 /// Global key for ScaffoldMessenger so toasts can be shown even across route transitions.
 final GlobalKey<ScaffoldMessengerState> rootScaffoldMessengerKey =
@@ -72,14 +73,16 @@ class AppToast {
   }
 
   /// Shows an error toast with error icon and red background.
+  /// Automatically translates technical exception codes/strings into friendly messages.
   static void error(
     BuildContext context,
-    String message, {
+    dynamic message, {
     Duration duration = errorDuration,
   }) {
+    final cleanMessage = AppErrors.format(message);
     show(
       context,
-      message,
+      cleanMessage,
       duration: duration,
       backgroundColor: AppColors.error,
       icon: Icons.error_outline_rounded,

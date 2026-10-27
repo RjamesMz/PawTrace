@@ -5,6 +5,7 @@ import '../../../core/app_colors.dart';
 import '../../../core/app_toast.dart';
 import '../../../core/navigation_helpers.dart';
 import '../../../services/alerts/alert_service.dart';
+import '../../../services/pets/pet_photo_service.dart';
 import '../../../widgets/admin/admin_content_wrapper.dart';
 import '../../../widgets/admin/pet_location_map_dialog.dart';
 import '../../../widgets/common/photo_placeholder.dart';
@@ -56,6 +57,39 @@ class _AdminPetDetailScreenState extends State<AdminPetDetailScreen> {
         });
       }
     } catch (_) {}
+  }
+
+    Future<void> _handleChangePetPhoto() async {
+    final petId = pet['pet_id'] ?? pet['id'];
+    if (petId == null) return;
+    final petName = pet['name']?.toString() ?? 'Pet';
+
+    final pickedFile = await PetPhotoService.instance.pickPetImage(context);
+    if (pickedFile == null || !mounted) return;
+
+    setState(() => _isUpdating = true);
+    try {
+      final newUrl = await PetPhotoService.instance.updatePetPhoto(
+        petId: petId,
+        petName: petName,
+        imageFile: pickedFile,
+        modifiedByRole: 'Admin',
+      );
+
+      if (mounted) {
+        setState(() {
+          pet['photo_url'] = newUrl;
+          _isUpdating = false;
+        });
+        AppToast.success(context, '$petName\'s photo updated successfully! 📸');
+        await _fetchLatestPet();
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() => _isUpdating = false);
+        AppToast.error(context, 'Failed to update photo: $e');
+      }
+    }
   }
 
   Future<void> _repostLostPetToNews() async {
@@ -363,6 +397,40 @@ class _AdminPetDetailScreenState extends State<AdminPetDetailScreen> {
                         right: 14,
                         child: AdminPetStatusBadge(rawStatus: status),
                       ),
+                      Positioned(
+                        bottom: 12,
+                        right: 12,
+                        child: GestureDetector(
+                          onTap: _isUpdating ? null : _handleChangePetPhoto,
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 12, vertical: 6),
+                            decoration: BoxDecoration(
+                              color: Colors.black.withOpacity(0.65),
+                              borderRadius: BorderRadius.circular(999),
+                              border: Border.all(
+                                  color: Colors.white.withOpacity(0.4),
+                                  width: 1),
+                            ),
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                const Icon(Icons.camera_alt_rounded,
+                                    color: Colors.white, size: 14),
+                                const SizedBox(width: 5),
+                                Text(
+                                  'Change Photo',
+                                  style: GoogleFonts.inter(
+                                    color: Colors.white,
+                                    fontSize: 12,
+                                    fontWeight: FontWeight.w700,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                      ),
                     ],
                   ),
                 ),
@@ -550,6 +618,39 @@ class _AdminPetDetailScreenState extends State<AdminPetDetailScreen> {
                   top: 12,
                   right: 12,
                   child: AdminPetStatusBadge(rawStatus: status),
+                ),
+                Positioned(
+                  bottom: 12,
+                  right: 12,
+                  child: GestureDetector(
+                    onTap: _isUpdating ? null : _handleChangePetPhoto,
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 12, vertical: 6),
+                      decoration: BoxDecoration(
+                        color: Colors.black.withOpacity(0.65),
+                        borderRadius: BorderRadius.circular(999),
+                        border: Border.all(
+                            color: Colors.white.withOpacity(0.4), width: 1),
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          const Icon(Icons.camera_alt_rounded,
+                              color: Colors.white, size: 14),
+                          const SizedBox(width: 5),
+                          Text(
+                            'Change Photo',
+                            style: GoogleFonts.inter(
+                              color: Colors.white,
+                              fontSize: 12,
+                              fontWeight: FontWeight.w700,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
                 ),
               ],
             ),

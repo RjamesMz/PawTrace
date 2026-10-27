@@ -5,6 +5,7 @@ import '../../../core/app_colors.dart';
 import '../../../core/app_constants.dart';
 import '../../../core/app_toast.dart';
 import '../../../services/auth/auth_service.dart';
+import '../../../services/audit/user_audit_service.dart';
 
 class ChangeEmailDialog extends StatefulWidget {
   final String currentEmail;
@@ -74,6 +75,14 @@ class _ChangeEmailDialogState extends State<ChangeEmailDialog> {
             .from('users')
             .update({'email': newEmail}).eq('user_id', uid);
       } catch (_) {}
+
+      UserAuditService.instance.logUserModification(
+        userId: uid,
+        action: 'Email Change Requested',
+        changesSummary:
+            'Email change initiated: "${widget.currentEmail}" -> "$newEmail"',
+        userEmail: newEmail,
+      );
 
       widget.onSuccess(newEmail);
       AuthService.instance.updateProfileData({'email': newEmail});

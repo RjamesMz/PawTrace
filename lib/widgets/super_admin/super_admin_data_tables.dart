@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../../core/app_colors.dart';
+import '../../core/app_constants.dart';
 import '../../widgets/common/photo_placeholder.dart';
 
 /// DataTableSource for Recent Lost Reports in SuperAdmin web dashboard.
@@ -45,7 +46,7 @@ class RecentReportsDataTableSource extends DataTableSource {
     String formattedTime = '';
     if (reportedAt.isNotEmpty) {
       try {
-        final dt = DateTime.parse(reportedAt).toLocal();
+        final dt = AppConstants.parseLocalTime(reportedAt);
         formattedDate = '${dt.month}/${dt.day}/${dt.year}';
         final hour =
             dt.hour == 0 ? 12 : (dt.hour > 12 ? dt.hour - 12 : dt.hour);
@@ -76,7 +77,7 @@ class RecentReportsDataTableSource extends DataTableSource {
 
       if (rawFound != null && rawFound.isNotEmpty) {
         try {
-          final dt = DateTime.parse(rawFound).toLocal();
+          final dt = AppConstants.parseLocalTime(rawFound);
           formattedFoundDate = '${dt.month}/${dt.day}/${dt.year}';
           final hour =
               dt.hour == 0 ? 12 : (dt.hour > 12 ? dt.hour - 12 : dt.hour);
@@ -271,7 +272,7 @@ class RecentReportsDataTableSource extends DataTableSource {
             ),
           ),
         ),
-        // Archive Status Chip
+        // De-active Status Chip
         DataCell(
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
@@ -282,7 +283,7 @@ class RecentReportsDataTableSource extends DataTableSource {
               borderRadius: BorderRadius.circular(12),
             ),
             child: Text(
-              reportStatus == 'archived' ? 'ARCHIVED' : 'ACTIVE',
+              reportStatus == 'archived' ? 'DE-ACTIVE' : 'ACTIVE',
               style: GoogleFonts.inter(
                 fontSize: 11,
                 fontWeight: FontWeight.bold,

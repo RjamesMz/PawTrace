@@ -41,7 +41,30 @@ class LocatePetBottomCard extends StatelessWidget {
     required this.onShare,
   });
 
-  Widget _infoPill(IconData icon, String text, {IconData? trailingIcon}) {
+  IconData _getBatteryIcon(int level) {
+    if (level >= 85) return Icons.battery_full_rounded;
+    if (level >= 65) return Icons.battery_6_bar_rounded;
+    if (level >= 45) return Icons.battery_5_bar_rounded;
+    if (level >= 25) return Icons.battery_3_bar_rounded;
+    if (level >= 10) return Icons.battery_2_bar_rounded;
+    if (level > 0) return Icons.battery_alert_rounded;
+    return Icons.battery_unknown_rounded;
+  }
+
+  Color _getBatteryColor(int level) {
+    if (level >= 50) return const Color(0xFF16A34A); // Green
+    if (level >= 20) return const Color(0xFFD97706); // Amber
+    if (level > 0) return const Color(0xFFDC2626);   // Red
+    return const Color(0xFF94A3B8);                 // Slate / Unknown
+  }
+
+  Widget _infoPill(
+    IconData icon,
+    String text, {
+    IconData? trailingIcon,
+    Color? iconColor,
+    Color? textColor,
+  }) {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
       decoration: BoxDecoration(
@@ -51,19 +74,19 @@ class LocatePetBottomCard extends StatelessWidget {
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(icon, size: 14, color: AppColors.primary),
+          Icon(icon, size: 14, color: iconColor ?? AppColors.primary),
           const SizedBox(width: 4),
           Text(
             text,
             style: GoogleFonts.inter(
               fontSize: 12,
               fontWeight: FontWeight.w500,
-              color: AppColors.onSurfaceVariant,
+              color: textColor ?? AppColors.onSurfaceVariant,
             ),
           ),
           if (trailingIcon != null) ...[
             const SizedBox(width: 4),
-            Icon(trailingIcon, size: 12, color: AppColors.primary),
+            Icon(trailingIcon, size: 12, color: iconColor ?? AppColors.primary),
           ],
         ],
       ),
@@ -190,24 +213,43 @@ class LocatePetBottomCard extends StatelessWidget {
                                       ),
                                     ),
                                   ),
-                                  if (hasCollar && battery > 0) ...[
+                                  if (hasCollar && isGpsActive && battery > 0) ...[
                                     const SizedBox(width: 8),
-                                    Row(
-                                      children: [
-                                        const Icon(Icons.battery_full,
-                                            size: 13,
-                                            color: Color(0xFF22C55E)),
-                                        const SizedBox(width: 2),
-                                        Text(
-                                          '$battery%',
-                                          style: GoogleFonts.inter(
-                                            fontSize: 11,
-                                            fontWeight: FontWeight.w600,
-                                            color: AppColors
-                                                .onSurfaceVariant,
-                                          ),
+                                    Container(
+                                      padding: const EdgeInsets.symmetric(
+                                          horizontal: 7, vertical: 2),
+                                      decoration: BoxDecoration(
+                                        color: _getBatteryColor(battery)
+                                            .withOpacity(0.12),
+                                        borderRadius:
+                                            BorderRadius.circular(6),
+                                        border: Border.all(
+                                          color: _getBatteryColor(battery)
+                                              .withOpacity(0.35),
+                                          width: 1,
                                         ),
-                                      ],
+                                      ),
+                                      child: Row(
+                                        mainAxisSize: MainAxisSize.min,
+                                        children: [
+                                          Icon(
+                                            _getBatteryIcon(battery),
+                                            size: 13,
+                                            color: _getBatteryColor(battery),
+                                          ),
+                                          const SizedBox(width: 3),
+                                          Text(
+                                            battery > 0
+                                                ? '$battery%'
+                                                : '--%',
+                                            style: GoogleFonts.inter(
+                                              fontSize: 11,
+                                              fontWeight: FontWeight.w700,
+                                              color: _getBatteryColor(battery),
+                                            ),
+                                          ),
+                                        ],
+                                      ),
                                     ),
                                   ],
                                 ],
@@ -471,10 +513,14 @@ class LocatePetBottomCard extends StatelessWidget {
                                     ? 'Signal Live'
                                     : 'Signal Lost',
                               ),
-                              if (battery > 0)
+                              if (hasCollar && isGpsActive && battery > 0)
                                 _infoPill(
-                                  Icons.battery_full,
-                                  '$battery%',
+                                  _getBatteryIcon(battery),
+                                  '$battery% Battery',
+                                  iconColor: _getBatteryColor(battery),
+                                  textColor: battery < 20
+                                      ? const Color(0xFFDC2626)
+                                      : null,
                                 ),
                               InkWell(
                                 onTap: onManageCollar,
@@ -484,6 +530,10 @@ class LocatePetBottomCard extends StatelessWidget {
                                   currentCollarId!,
                                   trailingIcon: Icons.edit,
                                 ),
+                              ),
+                              _infoPill(
+                                Icons.radar_rounded,
+                                '±2.5m GPS Tolerance',
                               ),
                             ],
                           ),

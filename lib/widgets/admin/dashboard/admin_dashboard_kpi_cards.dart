@@ -210,27 +210,29 @@ class AdminDashboardKpiCards extends StatelessWidget {
                 ),
               ),
             ),
-            Row(
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
               children: [
                 Text(
                   title,
                   style: GoogleFonts.inter(
-                    fontSize: 13,
+                    fontSize: 12.5,
                     fontWeight: FontWeight.w700,
                     color: const Color(0xFF334155),
                   ),
+                  overflow: TextOverflow.ellipsis,
+                  maxLines: 1,
                 ),
-                const SizedBox(width: 5),
-                Expanded(
-                  child: Text(
-                    '• $subtitle',
-                    style: GoogleFonts.inter(
-                      fontSize: 10.5,
-                      color: const Color(0xFF94A3B8),
-                    ),
-                    overflow: TextOverflow.ellipsis,
-                    maxLines: 1,
+                const SizedBox(height: 2),
+                Text(
+                  subtitle,
+                  style: GoogleFonts.inter(
+                    fontSize: 10.5,
+                    color: const Color(0xFF94A3B8),
                   ),
+                  overflow: TextOverflow.ellipsis,
+                  maxLines: 1,
                 ),
               ],
             ),
@@ -348,29 +350,31 @@ class AdminDashboardKpiCards extends StatelessWidget {
               ),
             ),
           ),
-          Row(
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
             children: [
               Text(
                 title,
                 style: GoogleFonts.inter(
-                  fontSize: 11.5,
-                  fontWeight: FontWeight.w600,
+                  fontSize: 12,
+                  fontWeight: FontWeight.w700,
                   color: const Color(0xFF334155),
                 ),
+                overflow: TextOverflow.ellipsis,
+                maxLines: 1,
               ),
-              const SizedBox(width: 4),
-              Expanded(
-                child: Text(
-                  hasTrend
-                      ? (isImproved ? '• Faster' : '• Slower')
-                      : '• Incident to recovery',
-                  style: GoogleFonts.inter(
-                    fontSize: 10,
-                    color: const Color(0xFF94A3B8),
-                  ),
-                  overflow: TextOverflow.ellipsis,
-                  maxLines: 1,
+              const SizedBox(height: 2),
+              Text(
+                hasTrend
+                    ? (isImproved ? 'Faster recovery' : 'Slower recovery')
+                    : 'Incident to recovery',
+                style: GoogleFonts.inter(
+                  fontSize: 10,
+                  color: const Color(0xFF94A3B8),
                 ),
+                overflow: TextOverflow.ellipsis,
+                maxLines: 1,
               ),
             ],
           ),

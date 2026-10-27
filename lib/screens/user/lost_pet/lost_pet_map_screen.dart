@@ -4,6 +4,7 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:latlong2/latlong.dart' as ll;
 import '../../../core/app_colors.dart';
 import '../../../services/geo/no_signal_mask_service.dart';
+import '../../../widgets/user/locate_pet/pet_geofence_layer.dart';
 
 /// Simple Map Screen for displaying a lost pet's last reported location.
 class LostPetMapScreen extends StatelessWidget {
@@ -11,6 +12,7 @@ class LostPetMapScreen extends StatelessWidget {
   final double lat;
   final double lon;
   final String address;
+  final String locationSource;
 
   const LostPetMapScreen({
     super.key,
@@ -18,6 +20,7 @@ class LostPetMapScreen extends StatelessWidget {
     required this.lat,
     required this.lon,
     required this.address,
+    this.locationSource = 'Reported Location',
   });
 
   @override
@@ -51,6 +54,11 @@ class LostPetMapScreen extends StatelessWidget {
                 PolygonLayer(
                   polygons: NoSignalMaskService.instance.polygons,
                 ),
+              // Geofence & GPS Accuracy Tolerance Circle (±2.5m)
+              PetGeofenceLayer(
+                center: ll.LatLng(lat, lon),
+                isGpsActive: false,
+              ),
               MarkerLayer(
                 markers: [
                   Marker(
@@ -104,6 +112,46 @@ class LostPetMapScreen extends StatelessWidget {
             ],
           ),
           Positioned(
+            top: 16,
+            left: 16,
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+              decoration: BoxDecoration(
+                color: Colors.white.withOpacity(0.92),
+                borderRadius: BorderRadius.circular(20),
+                border: Border.all(
+                  color: AppColors.primary.withOpacity(0.35),
+                ),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withOpacity(0.08),
+                    blurRadius: 6,
+                    offset: const Offset(0, 2),
+                  ),
+                ],
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const Icon(
+                    Icons.radar_rounded,
+                    size: 14,
+                    color: AppColors.primary,
+                  ),
+                  const SizedBox(width: 5),
+                  Text(
+                    'GPS Margin of Error: ±2.5m',
+                    style: GoogleFonts.inter(
+                      fontSize: 11,
+                      fontWeight: FontWeight.w700,
+                      color: AppColors.onSurface,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+          Positioned(
             bottom: 30,
             left: 20,
             right: 20,
@@ -141,7 +189,7 @@ class LostPetMapScreen extends StatelessWidget {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Text(
-                          'Reported Location',
+                          locationSource,
                           style: GoogleFonts.inter(
                             fontSize: 12,
                             color: AppColors.onSurfaceVariant,

@@ -5,6 +5,8 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../../core/app_colors.dart';
 import '../../../core/app_toast.dart';
 import '../../../services/auth/user_id_service.dart';
+import '../../../services/audit/user_audit_service.dart';
+import 'user_audit_log_dialog.dart';
 
 /// Handles user actions such as viewing details and deactivating/reactivating accounts
 class UserActionHandler {
@@ -209,8 +211,25 @@ class UserActionHandler {
                   Padding(
                     padding: const EdgeInsets.fromLTRB(24, 0, 24, 24),
                     child: Row(
-                      mainAxisAlignment: MainAxisAlignment.end,
                       children: [
+                        OutlinedButton.icon(
+                          onPressed: () {
+                            Navigator.pop(ctx);
+                            showUserAuditLogDialog(context, user);
+                          },
+                          icon: const Icon(Icons.history_rounded, size: 16),
+                          label: const Text('Audit Trail'),
+                          style: OutlinedButton.styleFrom(
+                            foregroundColor: AppColors.primary,
+                            side: const BorderSide(color: AppColors.primary),
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 16, vertical: 12),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                          ),
+                        ),
+                        const Spacer(),
                         ElevatedButton(
                           onPressed: () => Navigator.pop(ctx),
                           style: ElevatedButton.styleFrom(
@@ -559,6 +578,17 @@ class UserActionHandler {
               'No user row was updated. Please check Supabase Row Level Security (RLS) policies on the users table.',
             );
           }
+
+          UserAuditService.instance.logUserModification(
+            userId: userId,
+            userEmail: email,
+            userName: fullName,
+            action:
+                isDeactivated ? 'Account Reactivated' : 'Account Deactivated',
+            changesSummary:
+                'Status changed from "$rawStatus" to "$targetStatus"',
+            modifierRole: 'admin',
+          );
         }
         await onRefresh();
         if (context.mounted) {

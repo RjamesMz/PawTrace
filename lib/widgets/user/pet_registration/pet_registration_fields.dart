@@ -371,3 +371,74 @@ class PetBarangayDropdown extends StatelessWidget {
     );
   }
 }
+
+/// Gender dropdown (Male / Female) - Permanent / locked after registration
+class PetGenderDropdown extends StatelessWidget {
+  final String? selectedGender;
+  final ValueChanged<String?> onChanged;
+
+  const PetGenderDropdown({
+    super.key,
+    required this.selectedGender,
+    required this.onChanged,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final effectiveValue =
+        (selectedGender == 'Female') ? 'Female' : 'Male';
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const Row(
+          children: [
+            PetFormLabel(text: 'Sex / Gender'),
+            SizedBox(width: 4),
+            Icon(
+              Icons.lock_outline_rounded,
+              size: 11,
+              color: AppColors.onSurfaceVariant,
+            ),
+          ],
+        ),
+        const SizedBox(height: 6),
+        DropdownButtonFormField<String>(
+          key: ValueKey('pet_gender_$effectiveValue'),
+          isExpanded: true,
+          value: effectiveValue,
+          items: const [
+            DropdownMenuItem(
+              value: 'Male',
+              child: Text('♂ Male'),
+            ),
+            DropdownMenuItem(
+              value: 'Female',
+              child: Text('♀ Female'),
+            ),
+          ],
+          onChanged: onChanged,
+          decoration: InputDecoration(
+            filled: true,
+            fillColor: AppColors.secondaryContainer.withOpacity(0.3),
+            border: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(16),
+              borderSide: BorderSide.none,
+            ),
+            focusedBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(16),
+              borderSide: const BorderSide(
+                color: AppColors.primaryContainer,
+                width: 2,
+              ),
+            ),
+            contentPadding:
+                const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
+          ),
+          style: GoogleFonts.inter(fontSize: 14, color: AppColors.onSurface),
+        ),
+      ],
+    );
+  }
+}
+

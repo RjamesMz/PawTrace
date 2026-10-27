@@ -4,6 +4,7 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../../../core/app_colors.dart';
+import '../../../core/time_utils.dart';
 import '../../../widgets/user/lost_pet/lost_pet_card.dart';
 
 export '../../../widgets/user/lost_pet/contact_owner_sheet.dart';
@@ -23,14 +24,14 @@ class _LostPetScreenState extends State<LostPetScreen> {
   bool _isLoading = true;
   final TextEditingController _searchCtrl = TextEditingController();
 
-  // 0 = Recent (last 48h), 1 = This Week, 2 = This Month, 3 = Archived
+  // 0 = Recent (last 48h), 1 = This Week, 2 = This Month, 3 = De-active
   int _filterIndex = 0;
 
   static const List<String> _filterLabels = [
     'Recent',
     'This Week',
     'This Month',
-    'Archived',
+    'De-active',
   ];
 
   @override
@@ -42,7 +43,7 @@ class _LostPetScreenState extends State<LostPetScreen> {
   List<Map<String, dynamic>> get _filtered {
     List<Map<String, dynamic>> list;
     if (_filterIndex == 3) {
-      // Archived reports
+      // De-active reports
       list = _lostPetsList.where((r) {
         final st = (r['status'] ?? '').toString().toLowerCase();
         return st == 'archived' || st == 'resolved';
@@ -70,7 +71,7 @@ class _LostPetScreenState extends State<LostPetScreen> {
         final ts = r['reported_at']?.toString() ?? '';
         if (ts.isEmpty) return true;
         try {
-          return DateTime.parse(ts).isAfter(cutoff);
+          return TimeUtils.parseTimestamp(ts).isAfter(cutoff);
         } catch (_) {
           return true;
         }

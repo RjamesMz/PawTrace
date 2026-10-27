@@ -6,6 +6,7 @@ import '../../core/app_colors.dart';
 import '../../core/app_constants.dart';
 import '../../core/app_toast.dart';
 import '../../services/auth/auth_service.dart';
+import '../../services/audit/user_audit_service.dart';
 
 enum _PasswordStep {
   requestLink,
@@ -187,6 +188,17 @@ class _ChangePasswordDialogState extends State<ChangePasswordDialog> {
       );
 
       if (!mounted) return;
+
+      final currentUid = _supabase.auth.currentUser?.id;
+      if (currentUid != null) {
+        UserAuditService.instance.logUserModification(
+          userId: currentUid,
+          action: 'Password Changed',
+          changesSummary: 'Account password securely updated',
+          userEmail: widget.email,
+        );
+      }
+
       setState(() {
         _isLoading = false;
         _step = _PasswordStep.success;

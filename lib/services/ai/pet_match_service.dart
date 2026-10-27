@@ -7,6 +7,7 @@ import 'pet_embedding_service.dart';
 class PetMatchResult {
   final String reportId;
   final String? petId;
+  final String? ownerId;
   final String name;
   final String breed;
   final String species;
@@ -17,10 +18,12 @@ class PetMatchResult {
   final String ownerPhone;
   final double similarity;
   final Map<String, dynamic> rawData;
+  final bool isOwnerNotified;
 
   const PetMatchResult({
     required this.reportId,
     this.petId,
+    this.ownerId,
     required this.name,
     required this.breed,
     required this.species,
@@ -31,7 +34,29 @@ class PetMatchResult {
     required this.ownerPhone,
     required this.similarity,
     required this.rawData,
+    this.isOwnerNotified = false,
   });
+
+  PetMatchResult copyWith({
+    bool? isOwnerNotified,
+  }) {
+    return PetMatchResult(
+      reportId: reportId,
+      petId: petId,
+      ownerId: ownerId,
+      name: name,
+      breed: breed,
+      species: species,
+      color: color,
+      barangay: barangay,
+      photoUrl: photoUrl,
+      ownerFullName: ownerFullName,
+      ownerPhone: ownerPhone,
+      similarity: similarity,
+      rawData: rawData,
+      isOwnerNotified: isOwnerNotified ?? this.isOwnerNotified,
+    );
+  }
 
   int get percent => (similarity * 100).round();
   String get percentString => (similarity * 100).toStringAsFixed(1);
@@ -153,11 +178,19 @@ class PetMatchService {
           }
         }
         final ownerPhone = (userData?['phone'] as String? ?? '').trim();
+        final ownerId = userData?['user_id']?.toString() ??
+            userData?['id']?.toString() ??
+            (report['owner_id'] is String
+                ? report['owner_id'] as String
+                : (report['owner_id'] is Map<String, dynamic>
+                    ? (report['owner_id'] as Map<String, dynamic>)['user_id']?.toString()
+                    : (report['user_id']?.toString() ?? petData['owner_id']?.toString())));
 
         results.add(
           PetMatchResult(
             reportId: (report['report_id'] ?? '').toString(),
             petId: (petData['pet_id'] ?? '').toString(),
+            ownerId: ownerId,
             name: (petData['name'] as String? ?? 'Unknown Pet').trim(),
             breed: (petData['breed'] as String? ?? 'Unknown Breed').trim(),
             species: (petData['species'] as String? ?? (isDog ? 'Dog' : 'Cat'))

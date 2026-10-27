@@ -1,6 +1,7 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter/painting.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import '../../core/app_constants.dart';
 
 /// Roles a PawTrace user can hold.
 /// There are exactly two roles: [user] and [admin].
@@ -92,6 +93,7 @@ class AuthService {
     String? suffix,
     String? address,
     String? barangay,
+    String? gender,
   }) async {
     // We send everything as user metadata. The database trigger will
     // read these fields and automatically insert them into public.users.
@@ -107,6 +109,7 @@ class AuthService {
         'phone': phone.trim(),
         'address': address?.trim(),
         'barangay': barangay,
+        'gender': gender ?? 'Male',
         'role': 'user',
         'status': 'unverified',
       },
@@ -380,30 +383,6 @@ class AuthService {
 
   /// Converts an [AuthException] message into a user-friendly string.
   static String friendlyError(AuthException e) {
-    final msg = e.message.toLowerCase();
-    if (msg.contains('invalid login credentials') ||
-        msg.contains('invalid_credentials')) {
-      return 'Invalid email or password.';
-    }
-    if (msg.contains('email not confirmed')) {
-      return 'Please confirm your email before signing in.';
-    }
-    if (msg.contains('user already registered') ||
-        msg.contains('already been registered')) {
-      return 'An account with that email already exists.';
-    }
-    if (msg.contains('weak password') || msg.contains('at least')) {
-      return 'Password must be at least 8 alphanumeric characters.';
-    }
-    if (msg.contains('invalid email') || msg.contains('not a valid')) {
-      return 'Please enter a valid email address.';
-    }
-    if (msg.contains('rate limit') || msg.contains('too many')) {
-      return 'Too many attempts. Please try again later.';
-    }
-    if (msg.contains('network') || msg.contains('socket')) {
-      return 'Network error. Check your connection.';
-    }
-    return e.message;
+    return AppErrors.format(e);
   }
 }

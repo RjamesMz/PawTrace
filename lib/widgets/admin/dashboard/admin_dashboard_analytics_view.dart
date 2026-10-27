@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../../../core/app_colors.dart';
+import '../../../core/time_utils.dart';
 import '../../../screens/admin/pets/admin_pets_screen.dart';
 import '../../../screens/admin/reports/admin_reports_screen.dart';
 import '../../../services/admin/admin_analytics_service.dart';
@@ -12,12 +13,14 @@ import 'user_registration_growth_chart.dart';
 
 class AdminDashboardAnalyticsView extends StatefulWidget {
   final String adminBarangay;
+  final bool isSuperAdmin;
   final List<Map<String, dynamic>>? pendingReports;
   final List<Map<String, dynamic>>? recentActivity;
 
   const AdminDashboardAnalyticsView({
     super.key,
     required this.adminBarangay,
+    this.isSuperAdmin = false,
     this.pendingReports,
     this.recentActivity,
   });
@@ -29,6 +32,22 @@ class AdminDashboardAnalyticsView extends StatefulWidget {
 
 class _AdminDashboardAnalyticsViewState
     extends State<AdminDashboardAnalyticsView> {
+  static const List<String> _municipalities = [
+    'All Catanduanes',
+    'Bagamanoc',
+    'Baras',
+    'Bato',
+    'Caramoran',
+    'Gigmoto',
+    'Pandan',
+    'Panganiban',
+    'San Andres',
+    'San Miguel',
+    'Viga',
+    'Virac',
+  ];
+
+  late String _currentBarangay;
   DashboardDateRange _selectedRange = DashboardDateRange.thisMonth;
   TrendGranularity _selectedGranularity = TrendGranularity.daily;
   bool _isLoading = true;
@@ -37,21 +56,32 @@ class _AdminDashboardAnalyticsViewState
   @override
   void initState() {
     super.initState();
+    _currentBarangay = widget.isSuperAdmin
+        ? (widget.adminBarangay.isEmpty ? 'All Catanduanes' : widget.adminBarangay)
+        : widget.adminBarangay;
     _loadAnalytics();
   }
 
   @override
   void didUpdateWidget(covariant AdminDashboardAnalyticsView oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (oldWidget.adminBarangay != widget.adminBarangay) {
+    if (oldWidget.adminBarangay != widget.adminBarangay ||
+        oldWidget.isSuperAdmin != widget.isSuperAdmin) {
+      _currentBarangay = widget.isSuperAdmin
+          ? (widget.adminBarangay.isEmpty ? 'All Catanduanes' : widget.adminBarangay)
+          : widget.adminBarangay;
       _loadAnalytics();
     }
   }
 
   Future<void> _loadAnalytics() async {
     setState(() => _isLoading = true);
+    final queryBarangay =
+        (_currentBarangay == 'All Catanduanes' || _currentBarangay == 'All')
+            ? ''
+            : _currentBarangay;
     final data = await AdminAnalyticsService.instance.fetchDashboardAnalytics(
-      barangay: widget.adminBarangay,
+      barangay: queryBarangay,
       dateRange: _selectedRange,
       granularity: _selectedGranularity,
     );
@@ -61,6 +91,69 @@ class _AdminDashboardAnalyticsViewState
         _isLoading = false;
       });
     }
+  }
+
+  Widget _buildMunicipalityDropdown() {
+    if (!widget.isSuperAdmin) return const SizedBox.shrink();
+    return Container(
+      height: 38,
+      margin: const EdgeInsets.only(right: 8),
+      padding: const EdgeInsets.symmetric(horizontal: 10),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: const Color(0xFFE2E8F0)),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.02),
+            blurRadius: 4,
+            offset: const Offset(0, 1),
+          ),
+        ],
+      ),
+      child: DropdownButtonHideUnderline(
+        child: DropdownButton<String>(
+          value: _municipalities.contains(_currentBarangay)
+              ? _currentBarangay
+              : 'All Catanduanes',
+          icon: const Icon(Icons.arrow_drop_down_rounded,
+              color: AppColors.primary),
+          style: GoogleFonts.inter(
+            fontSize: 12,
+            fontWeight: FontWeight.w600,
+            color: const Color(0xFF1E293B),
+          ),
+          borderRadius: BorderRadius.circular(12),
+          items: _municipalities.map((m) {
+            return DropdownMenuItem<String>(
+              value: m,
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(
+                    m == 'All Catanduanes'
+                        ? Icons.public_rounded
+                        : Icons.location_on_rounded,
+                    size: 14,
+                    color: m == 'All Catanduanes'
+                        ? AppColors.primary
+                        : const Color(0xFF64748B),
+                  ),
+                  const SizedBox(width: 6),
+                  Text(m),
+                ],
+              ),
+            );
+          }).toList(),
+          onChanged: (val) {
+            if (val != null && val != _currentBarangay) {
+              setState(() => _currentBarangay = val);
+              _loadAnalytics();
+            }
+          },
+        ),
+      ),
+    );
   }
 
   void _onRangeChanged(DashboardDateRange range) {
@@ -113,7 +206,15 @@ class _AdminDashboardAnalyticsViewState
         // Filter bar header (responsive to avoid right overflow)
         LayoutBuilder(
           builder: (context, constraints) {
-            final isNarrow = constraints.maxWidth < 680;
+            final isNarrow = constraints.maxWidth < 720;
+            final subtitleText = widget.isSuperAdmin
+                ? (_currentBarangay == 'All Catanduanes'
+                    ? 'Catanduanes Province real-time overview'
+                    : '$_currentBarangay real-time overview')
+                : (widget.adminBarangay.isNotEmpty && widget.adminBarangay != 'All'
+                    ? 'Brgy. ${widget.adminBarangay} real-time reporting'
+                    : 'Barangay real-time reporting');
+
             if (isNarrow) {
               return Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -131,9 +232,7 @@ class _AdminDashboardAnalyticsViewState
                       ),
                       const SizedBox(height: 2),
                       Text(
-                        widget.adminBarangay.isNotEmpty
-                            ? 'Brgy. ${widget.adminBarangay} real-time reporting'
-                            : 'Barangay real-time reporting',
+                        subtitleText,
                         style: GoogleFonts.inter(
                           fontSize: 11.5,
                           color: const Color(0xFF64748B),
@@ -144,9 +243,14 @@ class _AdminDashboardAnalyticsViewState
                   const SizedBox(height: 12),
                   SingleChildScrollView(
                     scrollDirection: Axis.horizontal,
-                    child: AdminDateRangeSelector(
-                      selectedRange: _selectedRange,
-                      onRangeChanged: _onRangeChanged,
+                    child: Row(
+                      children: [
+                        _buildMunicipalityDropdown(),
+                        AdminDateRangeSelector(
+                          selectedRange: _selectedRange,
+                          onRangeChanged: _onRangeChanged,
+                        ),
+                      ],
                     ),
                   ),
                 ],
@@ -169,9 +273,7 @@ class _AdminDashboardAnalyticsViewState
                       ),
                       const SizedBox(height: 2),
                       Text(
-                        widget.adminBarangay.isNotEmpty
-                            ? 'Brgy. ${widget.adminBarangay} real-time reporting'
-                            : 'Barangay real-time reporting',
+                        subtitleText,
                         style: GoogleFonts.inter(
                           fontSize: 11.5,
                           color: const Color(0xFF64748B),
@@ -183,9 +285,15 @@ class _AdminDashboardAnalyticsViewState
                   ),
                 ),
                 const SizedBox(width: 12),
-                AdminDateRangeSelector(
-                  selectedRange: _selectedRange,
-                  onRangeChanged: _onRangeChanged,
+                Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    _buildMunicipalityDropdown(),
+                    AdminDateRangeSelector(
+                      selectedRange: _selectedRange,
+                      onRangeChanged: _onRangeChanged,
+                    ),
+                  ],
                 ),
               ],
             );
@@ -336,18 +444,7 @@ class _DashboardOperationsHubCardState
   int _activeTab = 0; // 0: Lost Reports, 1: Activity
 
   String _formatRelativeTime(String timestamp) {
-    if (timestamp.isEmpty) return '';
-    try {
-      final dt = DateTime.parse(timestamp);
-      final diff = DateTime.now().difference(dt);
-      if (diff.inMinutes < 1) return 'Just now';
-      if (diff.inMinutes < 60) return '${diff.inMinutes}m ago';
-      if (diff.inHours < 24) return '${diff.inHours}h ago';
-      if (diff.inDays < 7) return '${diff.inDays}d ago';
-      return '${(diff.inDays / 7).floor()}w ago';
-    } catch (_) {
-      return '';
-    }
+    return TimeUtils.formatTimeAgo(timestamp);
   }
 
   @override
