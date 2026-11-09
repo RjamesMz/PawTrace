@@ -2,12 +2,12 @@ import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../../../core/app_colors.dart';
-import '../../../core/app_toast.dart';
 import '../../../core/time_utils.dart';
 import '../../../screens/user/lost_pet/lost_pet_detail_screen.dart';
 import 'contact_owner_sheet.dart';
 import '../../../screens/user/lost_pet/lost_pet_map_screen.dart';
 import '../../../services/geo/pet_location_resolver.dart';
+import '../../../screens/user/lost_pet/all_lost_pets_map_screen.dart';
 
 /// Card widget representing a lost pet report in LostPetScreen feed.
 class LostPetCard extends StatelessWidget {
@@ -35,9 +35,21 @@ class LostPetCard extends StatelessWidget {
     final rawAddress = pet['last_seen_address'] as String? ??
         pet['barangay'] as String? ??
         'Calatagan';
-    final location = rawAddress
+    var location = rawAddress
         .replaceAll(RegExp(r'\s*\(?Lat:\s*[-\d.]+,\s*Lng:\s*[-\d.]+\)?'), '')
         .trim();
+    if (location.contains('San Isidro Village') || pet['barangay'] == 'San Isidro Village') {
+      location = 'Catanduanes State University, Brgy. Calatagan, Virac';
+    }
+    final collarId =
+        (petData?['gps_id'] ?? pet['gps_id'] ?? '').toString().trim();
+    final hasLocation = (collarId.isNotEmpty &&
+            collarId.toUpperCase() != 'N/A' &&
+            collarId.toUpperCase() != 'NONE') ||
+        ((pet['last_seen_lat'] ?? petData?['last_seen_lat']) != null &&
+            (pet['last_seen_lon'] ?? petData?['last_seen_lon']) != null) ||
+        RegExp(r'Lat:\s*[-\d.]+,\s*(?:Lng|Lon):\s*[-\d.]+', caseSensitive: false)
+            .hasMatch(rawAddress);
     final note = pet['description'] as String? ?? '';
     final timeAgo = formatTimeAgo(pet['reported_at']);
     final status = (pet['status'] ?? 'active').toString().toLowerCase();
@@ -193,7 +205,7 @@ class LostPetCard extends StatelessWidget {
                       const SizedBox(width: 4),
                       Expanded(
                         child: Text(
-                          location,
+                          hasLocation ? location : 'No GPS connected',
                           style: GoogleFonts.inter(
                             fontSize: 13,
                             color: AppColors.onSurfaceVariant,
@@ -299,14 +311,20 @@ class LostPetCard extends StatelessWidget {
                                     lon: result.lon,
                                     address: location,
                                     locationSource: result.sourceLabel,
+                                    recordedAt: result.recordedAt,
+                                    photoUrl: imageUrl,
+                                    reportId: pet['report_id']?.toString(),
+                                    rawReport: pet,
                                   ),
                                 ),
                               );
                               return;
                             }
-                            AppToast.info(
+                            Navigator.push(
                               context,
-                              'No GPS coordinates available for this location.',
+                              MaterialPageRoute(
+                                builder: (_) => const AllLostPetsMapScreen(),
+                              ),
                             );
                           },
                           icon: const Icon(Icons.map_outlined, size: 16),

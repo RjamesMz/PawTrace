@@ -12,6 +12,7 @@ class PetsDataTableSource extends DataTableSource {
   final Function(Map<String, dynamic> pet)? onViewMap;
   final Function(Map<String, dynamic> pet) onRepost;
   final Function(Map<String, dynamic> pet)? onViewLogs;
+  final VoidCallback? onRefresh;
 
   PetsDataTableSource(
     this.pets,
@@ -20,6 +21,7 @@ class PetsDataTableSource extends DataTableSource {
     this.onViewMap,
     required this.onRepost,
     this.onViewLogs,
+    this.onRefresh,
   });
 
   String _formatDate(dynamic value) {
@@ -205,11 +207,10 @@ class PetsDataTableSource extends DataTableSource {
               children: [
                 ElevatedButton(
                   onPressed: () {
-                    Navigator.push(
+                    showAdminPetDetailsDialog(
                       context,
-                      MaterialPageRoute(
-                        builder: (_) => AdminPetDetailScreen(pet: p),
-                      ),
+                      p,
+                      onRefresh: onRefresh,
                     );
                   },
                   style: ElevatedButton.styleFrom(
@@ -314,12 +315,14 @@ class ArchivedPetsDataTableSource extends DataTableSource {
   final BuildContext context;
   final Function(Map<String, dynamic> pet) onContact;
   final Function(Map<String, dynamic> pet)? onViewLogs;
+  final VoidCallback? onRefresh;
 
   ArchivedPetsDataTableSource(
     this.pets,
     this.context, {
     required this.onContact,
     this.onViewLogs,
+    this.onRefresh,
   });
 
   String _formatDate(dynamic value) {
@@ -488,11 +491,10 @@ class ArchivedPetsDataTableSource extends DataTableSource {
               children: [
                 ElevatedButton(
                   onPressed: () {
-                    Navigator.push(
+                    showAdminPetDetailsDialog(
                       context,
-                      MaterialPageRoute(
-                        builder: (_) => AdminPetDetailScreen(pet: p),
-                      ),
+                      p,
+                      onRefresh: onRefresh,
                     );
                   },
                   style: ElevatedButton.styleFrom(

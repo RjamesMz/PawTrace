@@ -10,8 +10,10 @@ class ReportsDataTableSource extends DataTableSource {
   final List<Map<String, dynamic>> reports;
   final void Function(Map<String, dynamic> report)? onViewReport;
   final void Function(Map<String, dynamic> report)? onViewMap;
+  final VoidCallback? onViewAllMap;
 
-  ReportsDataTableSource(this.reports, {this.onViewReport, this.onViewMap});
+  ReportsDataTableSource(this.reports,
+      {this.onViewReport, this.onViewMap, this.onViewAllMap});
 
   @override
   DataRow? getRow(int index) {
@@ -315,7 +317,11 @@ class ReportsDataTableSource extends DataTableSource {
                   if (action == 'view') {
                     onViewReport?.call(report);
                   } else if (action == 'map') {
-                    onViewMap?.call(report);
+                    if (hasGps) {
+                      onViewMap?.call(report);
+                    } else {
+                      onViewAllMap?.call();
+                    }
                   } else if (action == 'found_photo' && foundPhotoUrl != null) {
                     _showPhotoLightbox(context, foundPhotoUrl, petName);
                   }
@@ -358,7 +364,7 @@ class ReportsDataTableSource extends DataTableSource {
                         ],
                       ),
                     ),
-                  if (hasGps && onViewMap != null)
+                  if (onViewMap != null)
                     PopupMenuItem(
                       value: 'map',
                       child: Row(

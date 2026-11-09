@@ -12,6 +12,7 @@ import '../../../core/navigation_helpers.dart';
 import '../../../core/time_utils.dart';
 import '../../../services/alerts/alert_service.dart';
 import '../../../services/auth/auth_service.dart';
+import '../../../services/geo/reverse_geocode_service.dart';
 import '../../../widgets/user/locate_pet/pet_geofence_layer.dart';
 
 /// Report Lost Pet screen – form for reporting a pet as missing.
@@ -31,12 +32,20 @@ class _ReportLostPetScreenState extends State<ReportLostPetScreen> {
   bool _isSaving = false;
 
   final MapController _mapController = MapController();
-  double _lastLat = 13.9747; // Default Virac / Catanduanes coordinates
-  double _lastLon = 124.2432;
+  double _lastLat = 13.5938; // Default Virac / Catanduanes coordinates
+  double _lastLon = 124.2381;
   String? _lastRecordedAt;
+  String? _detectedAddress;
   bool _hasCollarGps = false;
   bool _isGpsActive = false;
   bool _isLoadingGps = false;
+
+  Future<void> _updateDetectedAddress(double lat, double lon) async {
+    final addr = await ReverseGeocodeService.reverseGeocode(lat, lon);
+    if (mounted && addr != null && addr.isNotEmpty) {
+      setState(() => _detectedAddress = addr);
+    }
+  }
 
   @override
   void didChangeDependencies() {
@@ -58,7 +67,32 @@ class _ReportLostPetScreenState extends State<ReportLostPetScreen> {
   }
 
   Future<void> _fetchLastKnownLocation() async {
-    final collarId = _pet?['gps_id']?.toString().trim();
+    String? collarId = _pet?['gps_id']?.toString().trim();
+    final petId = _pet?['pet_id'] ?? _pet?['id'];
+
+    // 1. If collarId is missing from route args, look up the 'pets' database table
+    if (collarId == null ||
+        collarId.isEmpty ||
+        collarId.toUpperCase() == 'N/A' ||
+        collarId.toUpperCase() == 'NONE') {
+      if (petId != null) {
+        try {
+          final petDb = await Supabase.instance.client
+              .from('pets')
+              .select('gps_id, last_seen_lat, last_seen_lon, last_seen_at')
+              .eq('pet_id', petId)
+              .maybeSingle();
+          if (petDb != null) {
+            final fetchedCollar = petDb['gps_id']?.toString().trim();
+            if (fetchedCollar != null && fetchedCollar.isNotEmpty) {
+              collarId = fetchedCollar;
+              _pet?['gps_id'] = fetchedCollar;
+            }
+          }
+        } catch (_) {}
+      }
+    }
+
     final bool hasPairedCollar = collarId != null &&
         collarId.isNotEmpty &&
         collarId.toUpperCase() != 'N/A' &&
@@ -80,14 +114,15 @@ class _ReportLostPetScreenState extends State<ReportLostPetScreen> {
           final parsedLon = (data['lon'] as num?)?.toDouble();
           final rawRecordedAt = data['recorded_at']?.toString();
 
-          bool active = data['is_online'] == true;
+          // Only consider active if the collar transmitted a ping within the last 180 seconds.
+          bool active = false;
           if (rawRecordedAt != null && rawRecordedAt.isNotEmpty) {
             try {
               DateTime dt = DateTime.parse(rawRecordedAt);
               if (!rawRecordedAt.endsWith('Z') && !rawRecordedAt.contains('+')) {
                 dt = DateTime.parse('${rawRecordedAt}Z');
               }
-              final diff = DateTime.now().difference(dt.toLocal());
+              final diff = DateTime.now().toUtc().difference(dt.toUtc());
               if (!diff.isNegative && diff.inSeconds <= 180) {
                 active = true;
               }
@@ -103,7 +138,12 @@ class _ReportLostPetScreenState extends State<ReportLostPetScreen> {
               _isGpsActive = active;
               _isLoadingGps = false;
             });
-            _mapController.move(ll.LatLng(_lastLat, _lastLon), 16.0);
+            _updateDetectedAddress(_lastLat, _lastLon);
+            WidgetsBinding.instance.addPostFrameCallback((_) {
+              try {
+                _mapController.move(ll.LatLng(_lastLat, _lastLon), 16.0);
+              } catch (_) {}
+            });
             return;
           }
         }
@@ -120,7 +160,6 @@ class _ReportLostPetScreenState extends State<ReportLostPetScreen> {
 
     // If not in memory, query the 'pets' table or 'lost_reports' table for this pet
     if (retainedLat == null || retainedLon == null) {
-      final petId = _pet?['pet_id'];
       if (petId != null) {
         try {
           final petDb = await Supabase.instance.client
@@ -160,16 +199,29 @@ class _ReportLostPetScreenState extends State<ReportLostPetScreen> {
         _lastLat = retainedLat!;
         _lastLon = retainedLon!;
         _lastRecordedAt = retainedAt;
-        _hasCollarGps = true; // Pin and map WILL BE DISPLAYED!
-        _isGpsActive = false; // Collar is unpaired, so NOT live active, reporting is permitted!
-        _isLoadingGps = false;
-      });
-      _mapController.move(ll.LatLng(_lastLat, _lastLon), 16.0);
-    } else if (mounted) {
-      setState(() {
         _hasCollarGps = false;
         _isGpsActive = false;
         _isLoadingGps = false;
+      });
+      _updateDetectedAddress(_lastLat, _lastLon);
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        try {
+          _mapController.move(ll.LatLng(_lastLat, _lastLon), 16.0);
+        } catch (_) {}
+      });
+    } else if (mounted) {
+      setState(() {
+        _lastLat = 13.5938;
+        _lastLon = 124.2381;
+        _hasCollarGps = false;
+        _isGpsActive = false;
+        _isLoadingGps = false;
+      });
+      _updateDetectedAddress(_lastLat, _lastLon);
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        try {
+          _mapController.move(ll.LatLng(_lastLat, _lastLon), 15.0);
+        } catch (_) {}
       });
     }
   }
@@ -229,10 +281,15 @@ class _ReportLostPetScreenState extends State<ReportLostPetScreen> {
       final petId = pet['pet_id'];
       if (petId == null) throw Exception('Pet ID is missing.');
 
-      final barangay = pet['barangay']?.toString() ?? 'Santa Ana';
-      final String addressWithCoords = _hasCollarGps
-          ? '$barangay (Lat: ${_lastLat.toStringAsFixed(5)}, Lng: ${_lastLon.toStringAsFixed(5)})'
-          : barangay;
+      final detectedLocation =
+          _detectedAddress ?? pet['barangay']?.toString() ?? 'Unknown Location';
+      final String cleanAddress = detectedLocation;
+
+      String barangayToSave = detectedLocation;
+      if (detectedLocation.contains('Brgy.')) {
+        barangayToSave =
+            detectedLocation.split('Brgy.').last.split(',').first.trim();
+      }
 
       // 1. Update status and color in 'pets' table
       // Note: 'pets' table does not have last_seen_lat/lon/address/at columns.
@@ -253,13 +310,11 @@ class _ReportLostPetScreenState extends State<ReportLostPetScreen> {
       if (_colorCtrl.text.trim().isNotEmpty) {
         pet['color'] = _colorCtrl.text.trim();
       }
-      if (_hasCollarGps) {
-        pet['last_seen_lat'] = _lastLat;
-        pet['last_seen_lon'] = _lastLon;
-        pet['last_seen_address'] = addressWithCoords;
-        pet['last_seen_at'] =
-            _lastRecordedAt ?? DateTime.now().toUtc().toIso8601String();
-      }
+      pet['last_seen_lat'] = _lastLat;
+      pet['last_seen_lon'] = _lastLon;
+      pet['last_seen_address'] = cleanAddress;
+      pet['last_seen_at'] =
+          _lastRecordedAt ?? DateTime.now().toUtc().toIso8601String();
 
       final currentUserId = Supabase.instance.client.auth.currentUser?.id;
       final ownerId = currentUserId ?? pet['owner_id'];
@@ -268,17 +323,15 @@ class _ReportLostPetScreenState extends State<ReportLostPetScreen> {
       final reportInsertData = <String, dynamic>{
         'pet_id': petId,
         'owner_id': ownerId,
-        'last_seen_address': addressWithCoords,
-        'barangay': barangay,
+        'last_seen_address': cleanAddress,
+        'barangay': barangayToSave,
         'description': _descCtrl.text.trim(),
         'status': 'active',
         'reported_at': DateTime.now().toUtc().toIso8601String(),
         'photo_url': pet['photo_url'] ?? '',
+        'last_seen_lat': _lastLat,
+        'last_seen_lon': _lastLon,
       };
-      if (_hasCollarGps) {
-        reportInsertData['last_seen_lat'] = _lastLat;
-        reportInsertData['last_seen_lon'] = _lastLon;
-      }
 
       Map<String, dynamic>? reportRes;
       try {
@@ -609,7 +662,7 @@ class _ReportLostPetScreenState extends State<ReportLostPetScreen> {
                     ),
                     const SizedBox(height: 12),
                     Text(
-                      'Checking for GPS collar connection...',
+                      'Checking for GPS collar telemetry...',
                       style: GoogleFonts.inter(
                         fontSize: 12,
                         color: AppColors.onSurfaceVariant,
@@ -620,7 +673,7 @@ class _ReportLostPetScreenState extends State<ReportLostPetScreen> {
               ),
             ),
           )
-        else if (_hasCollarGps)
+        else
           Column(
             children: [
               ClipRRect(
@@ -638,8 +691,15 @@ class _ReportLostPetScreenState extends State<ReportLostPetScreen> {
                       initialCenter: ll.LatLng(_lastLat, _lastLon),
                       initialZoom: 15.5,
                       interactionOptions: const InteractionOptions(
-                        flags: InteractiveFlag.none,
+                        flags: InteractiveFlag.all,
                       ),
+                      onTap: (_, point) {
+                        setState(() {
+                          _lastLat = point.latitude;
+                          _lastLon = point.longitude;
+                        });
+                        _updateDetectedAddress(_lastLat, _lastLon);
+                      },
                     ),
                     children: [
                       TileLayer(
@@ -647,10 +707,13 @@ class _ReportLostPetScreenState extends State<ReportLostPetScreen> {
                             'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
                         userAgentPackageName: 'com.pettrace.app',
                       ),
-                      // Geofence & GPS Accuracy Tolerance Circle (±2.5m)
+                      // GPS Margin of Error Accuracy Circle (±2.5m)
                       PetGeofenceLayer(
                         center: ll.LatLng(_lastLat, _lastLon),
                         isGpsActive: false,
+                        showGeofence: false,
+                        marginOfErrorRadius: 5.0,
+                        customColor: const Color(0xFF64748B),
                       ),
                       MarkerLayer(
                         markers: [
@@ -675,31 +738,62 @@ class _ReportLostPetScreenState extends State<ReportLostPetScreen> {
                     mainAxisSize: MainAxisSize.min,
                     children: [
                       Icon(
-                        _isGpsActive
-                            ? Icons.my_location_rounded
-                            : Icons.location_on_outlined,
+                        _hasCollarGps
+                            ? (_isGpsActive
+                                ? Icons.my_location_rounded
+                                : Icons.location_on_outlined)
+                            : Icons.touch_app_outlined,
                         size: 13,
-                        color: const Color(0xFF2E7D32),
+                        color: _hasCollarGps
+                            ? const Color(0xFF2E7D32)
+                            : AppColors.primary,
                       ),
                       const SizedBox(width: 4),
                       Text(
-                        _isGpsActive
-                            ? 'Live Location detected'
-                            : 'Last known location',
+                        _hasCollarGps
+                            ? (_isGpsActive
+                                ? 'Live Location detected'
+                                : 'Last known GPS collar location')
+                            : 'Tap map to adjust last known location',
                         style: GoogleFonts.inter(
                           fontSize: 11,
                           fontWeight: FontWeight.w600,
-                          color: const Color(0xFF2E7D32),
+                          color: _hasCollarGps
+                              ? const Color(0xFF2E7D32)
+                              : AppColors.primary,
                         ),
                       ),
                     ],
                   ),
-                  if (_lastRecordedAt != null)
-                    Text(
-                      'Last ping: ${_formatLastPing(_lastRecordedAt)}',
-                      style: GoogleFonts.inter(
-                        fontSize: 11,
-                        color: AppColors.onSurfaceVariant.withOpacity(0.8),
+                  const SizedBox(width: 8),
+                  if (_hasCollarGps && _lastRecordedAt != null)
+                    Expanded(
+                      child: Text(
+                        _detectedAddress != null
+                            ? '$_detectedAddress (${_formatLastPing(_lastRecordedAt)})'
+                            : 'Last ping: ${_formatLastPing(_lastRecordedAt)}',
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        textAlign: TextAlign.end,
+                        style: GoogleFonts.inter(
+                          fontSize: 11,
+                          color: AppColors.onSurfaceVariant.withOpacity(0.8),
+                        ),
+                      ),
+                    )
+                  else
+                    Expanded(
+                      child: Text(
+                        _detectedAddress != null
+                            ? _detectedAddress!
+                            : 'Lat: ${_lastLat.toStringAsFixed(4)}, Lon: ${_lastLon.toStringAsFixed(4)}',
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        textAlign: TextAlign.end,
+                        style: GoogleFonts.inter(
+                          fontSize: 11,
+                          color: AppColors.onSurfaceVariant.withOpacity(0.8),
+                        ),
                       ),
                     ),
                 ],
@@ -754,82 +848,6 @@ class _ReportLostPetScreenState extends State<ReportLostPetScreen> {
                   ),
                 ),
               ],
-            ],
-          )
-        else
-          Column(
-            children: [
-              ClipRRect(
-                borderRadius: BorderRadius.circular(16),
-                child: Container(
-                  height: 180,
-                  width: double.infinity,
-                  decoration: BoxDecoration(
-                    color: const Color(0xFFF8FAFC),
-                    borderRadius: BorderRadius.circular(16),
-                    border: Border.all(
-                        color: AppColors.outlineVariant.withOpacity(0.35)),
-                  ),
-                  child: Center(
-                    child: Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 24),
-                      child: Column(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Container(
-                            padding: const EdgeInsets.all(12),
-                            decoration: const BoxDecoration(
-                              color: Color(0xFFF1F5F9),
-                              shape: BoxShape.circle,
-                            ),
-                            child: const Icon(
-                              Icons.gps_off_rounded,
-                              size: 26,
-                              color: Color(0xFF94A3B8),
-                            ),
-                          ),
-                          const SizedBox(height: 12),
-                          Text(
-                            'No GPS Connected',
-                            style: GoogleFonts.montserrat(
-                              fontSize: 15,
-                              fontWeight: FontWeight.w700,
-                              color: AppColors.onSurface,
-                            ),
-                          ),
-                          const SizedBox(height: 4),
-                          Text(
-                            'This pet does not have an active GPS collar paired.\nLocation will be reported using the registered barangay.',
-                            textAlign: TextAlign.center,
-                            style: GoogleFonts.inter(
-                              fontSize: 12,
-                              color: AppColors.onSurfaceVariant,
-                              height: 1.4,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ),
-                ),
-              ),
-              const SizedBox(height: 8),
-              Row(
-                children: [
-                  const Icon(Icons.location_on_outlined,
-                      size: 14, color: AppColors.onSurfaceVariant),
-                  const SizedBox(width: 4),
-                  Expanded(
-                    child: Text(
-                      'Registered area: ${_pet?['barangay']?.toString() ?? 'San Andres, Catanduanes'}',
-                      style: GoogleFonts.inter(
-                        fontSize: 11,
-                        color: AppColors.onSurfaceVariant,
-                      ),
-                    ),
-                  ),
-                ],
-              ),
             ],
           ),
       ],

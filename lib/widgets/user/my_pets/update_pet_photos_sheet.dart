@@ -2,6 +2,7 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../../../core/app_colors.dart';
+import '../../../services/ai/pet_embedding_service.dart';
 import '../../../services/pets/pet_photo_service.dart';
 import '../pet_registration/pet_photo_slot_card.dart';
 import '../pet_registration/pet_registration_biometrics_section.dart';
@@ -41,10 +42,18 @@ class UpdatePetPhotosSheet extends StatefulWidget {
 }
 
 class _UpdatePetPhotosSheetState extends State<UpdatePetPhotosSheet> {
+  static const double _kSimilarityThreshold = 0.75;
+
   File? _face;
   File? _left;
   File? _right;
   File? _unique;
+
+  final Map<PetPhotoSlot, bool> _slotValidating = {};
+  final Map<PetPhotoSlot, bool?> _slotValid = {};
+  final Map<PetPhotoSlot, double?> _slotSimilarity = {};
+  final Map<PetPhotoSlot, String?> _slotError = {};
+  final Map<PetPhotoSlot, List<double>?> _slotEmbeddings = {};
 
   Future<void> _pick(PetPhotoSlot slot) async {
     final file = await PetPhotoService.instance.pickPetImage(context);
@@ -61,13 +70,139 @@ class _UpdatePetPhotosSheetState extends State<UpdatePetPhotosSheet> {
           _unique = file;
       }
     });
+
+    await _validateSlot(slot, file);
+  }
+
+  Future<void> _validateSlot(PetPhotoSlot slot, File file) async {
+    setState(() {
+      _slotValidating[slot] = true;
+      _slotValid[slot] = null;
+      _slotSimilarity[slot] = null;
+      _slotError[slot] = null;
+    });
+
+    try {
+      final detected = await PetEmbeddingService.instance.detectSpecies(file);
+      final isAccepted = detected['isAccepted'] == true;
+      final isDog = detected['isDog'] == true;
+      final isCat = detected['isCat'] == true;
+
+      if (!isAccepted || (!isDog && !isCat)) {
+        if (mounted) {
+          setState(() {
+            _slotValid[slot] = false;
+            _slotError[slot] = 'Not recognized as a pet';
+            _slotEmbeddings[slot] = null;
+          });
+        }
+        return;
+      }
+
+      final emb = await PetEmbeddingService.instance.extractEmbedding(file);
+      if (!mounted) return;
+      if (emb == null) {
+        setState(() {
+          _slotValid[slot] = false;
+          _slotError[slot] = 'Embedding failed';
+          _slotEmbeddings[slot] = null;
+        });
+        return;
+      }
+      _slotEmbeddings[slot] = emb;
+
+      if (slot == PetPhotoSlot.face) {
+        setState(() {
+          _slotValid[slot] = true;
+          _slotSimilarity[slot] = 1.0;
+          _slotError[slot] = null;
+        });
+        await _revalidateSecondarySlots();
+      } else {
+        final faceEmb = _slotEmbeddings[PetPhotoSlot.face];
+        if (faceEmb != null) {
+          final sim = PetEmbeddingService.cosineSimilarity(faceEmb, emb);
+          final passes = sim >= _kSimilarityThreshold;
+          setState(() {
+            _slotSimilarity[slot] = sim;
+            _slotValid[slot] = passes;
+            _slotError[slot] = passes
+                ? null
+                : 'Mismatch (${(sim * 100).toStringAsFixed(0)}% < 75%)';
+          });
+        } else {
+          setState(() {
+            _slotValid[slot] = null;
+            _slotSimilarity[slot] = null;
+            _slotError[slot] = 'Upload face photo to verify';
+          });
+        }
+      }
+    } catch (e) {
+      debugPrint('[PetTrace] Update sheet slot validation error: $e');
+      if (mounted) {
+        setState(() {
+          _slotValid[slot] = false;
+          _slotError[slot] = 'Recognition failed';
+        });
+      }
+    } finally {
+      if (mounted) {
+        setState(() {
+          _slotValidating[slot] = false;
+        });
+      }
+    }
+  }
+
+  Future<void> _revalidateSecondarySlots() async {
+    final faceEmb = _slotEmbeddings[PetPhotoSlot.face];
+    if (faceEmb == null) return;
+
+    for (final slot in [
+      PetPhotoSlot.leftBody,
+      PetPhotoSlot.rightBody,
+      PetPhotoSlot.uniqueFeature,
+    ]) {
+      final emb = _slotEmbeddings[slot];
+      if (emb != null) {
+        final sim = PetEmbeddingService.cosineSimilarity(faceEmb, emb);
+        final passes = sim >= _kSimilarityThreshold;
+        if (mounted) {
+          setState(() {
+            _slotSimilarity[slot] = sim;
+            _slotValid[slot] = passes;
+            _slotError[slot] = passes
+                ? null
+                : 'Mismatch (${(sim * 100).toStringAsFixed(0)}% < 75%)';
+          });
+        }
+      }
+    }
   }
 
   void _remove(PetPhotoSlot slot) {
     setState(() {
+      _slotValidating[slot] = false;
+      _slotValid[slot] = null;
+      _slotSimilarity[slot] = null;
+      _slotError[slot] = null;
+      _slotEmbeddings[slot] = null;
+
       switch (slot) {
         case PetPhotoSlot.face:
           _face = null;
+          for (final s in [
+            PetPhotoSlot.leftBody,
+            PetPhotoSlot.rightBody,
+            PetPhotoSlot.uniqueFeature
+          ]) {
+            if (_slotEmbeddings[s] != null) {
+              _slotValid[s] = null;
+              _slotSimilarity[s] = null;
+              _slotError[s] = 'Upload face photo to verify';
+            }
+          }
         case PetPhotoSlot.leftBody:
           _left = null;
         case PetPhotoSlot.rightBody:
@@ -76,6 +211,18 @@ class _UpdatePetPhotosSheetState extends State<UpdatePetPhotosSheet> {
           _unique = null;
       }
     });
+  }
+
+  bool get _canSave {
+    if (_face == null) return false;
+    if (_slotValidating.values.any((v) => v)) return false;
+    if (_slotValid[PetPhotoSlot.face] == false) return false;
+    if (_left != null && _slotValid[PetPhotoSlot.leftBody] == false) return false;
+    if (_right != null && _slotValid[PetPhotoSlot.rightBody] == false) return false;
+    if (_unique != null && _slotValid[PetPhotoSlot.uniqueFeature] == false) {
+      return false;
+    }
+    return true;
   }
 
   @override
@@ -113,7 +260,7 @@ class _UpdatePetPhotosSheetState extends State<UpdatePetPhotosSheet> {
               ),
               const SizedBox(height: 6),
               Text(
-                'Re-upload the face, side profiles and unique mark so AI recognition stays accurate. Angles left empty will not be used for matching.',
+                'Re-upload face, side profiles, and unique markings. Photos are analyzed with AI to ensure they match the same pet (≥ 75% match threshold).',
                 style: GoogleFonts.inter(
                   fontSize: 12,
                   color: AppColors.onSurfaceVariant,
@@ -130,14 +277,17 @@ class _UpdatePetPhotosSheetState extends State<UpdatePetPhotosSheet> {
                     uniqueFeatureImage: _unique,
                     onPickImage: _pick,
                     onRemoveImage: _remove,
+                    slotValidating: _slotValidating,
+                    slotValid: _slotValid,
+                    slotSimilarity: _slotSimilarity,
+                    slotError: _slotError,
                   ),
                 ),
               ),
               const SizedBox(height: 14),
               ElevatedButton(
-                onPressed: _face == null
-                    ? null
-                    : () => Navigator.pop(
+                onPressed: _canSave
+                    ? () => Navigator.pop(
                           context,
                           PetPhotoSelection(
                             face: _face!,
@@ -145,7 +295,8 @@ class _UpdatePetPhotosSheetState extends State<UpdatePetPhotosSheet> {
                             right: _right,
                             unique: _unique,
                           ),
-                        ),
+                        )
+                    : null,
                 style: ElevatedButton.styleFrom(
                   backgroundColor: AppColors.primary,
                   foregroundColor: Colors.white,

@@ -193,6 +193,9 @@
         cardDesc.textContent = 'Your reset link is verified! Redirecting to PetTrace so you can enter your new password...';
         btnText.textContent = 'Enter New Password';
         if (footerNote) footerNote.textContent = 'Tap the button above if PetTrace does not open automatically.';
+        if (targetDeepLink.indexOf('type=recovery') === -1) {
+          targetDeepLink += (targetDeepLink.indexOf('?') === -1 ? '?type=recovery' : '&type=recovery');
+        }
       }
 
       openAppBtn.href = targetDeepLink;

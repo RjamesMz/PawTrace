@@ -64,6 +64,10 @@ class PetPhotoSlotCard extends StatelessWidget {
   final VoidCallback onTap;
   final VoidCallback onRemove;
   final bool isWide;
+  final bool isValidating;
+  final bool? isValid;
+  final double? similarityScore;
+  final String? validationError;
 
   const PetPhotoSlotCard({
     super.key,
@@ -76,6 +80,10 @@ class PetPhotoSlotCard extends StatelessWidget {
     required this.onTap,
     required this.onRemove,
     this.isWide = false,
+    this.isValidating = false,
+    this.isValid,
+    this.similarityScore,
+    this.validationError,
   });
 
   @override
@@ -83,6 +91,16 @@ class PetPhotoSlotCard extends StatelessWidget {
     final hasImage = imageFile != null;
     final cardHeight =
         hasImage ? (isWide ? 140.0 : 130.0) : (isWide ? 88.0 : 120.0);
+
+    final borderColor = isValid == false
+        ? AppColors.error
+        : (isValid == true
+            ? const Color(0xFF16A34A)
+            : (hasImage
+                ? Colors.transparent
+                : AppColors.outlineVariant.withOpacity(0.45)));
+
+    final borderWidth = isValid == false ? 2.5 : (isValid == true ? 1.8 : 1.0);
 
     return GestureDetector(
       onTap: onTap,
@@ -92,17 +110,26 @@ class PetPhotoSlotCard extends StatelessWidget {
           color: hasImage ? Colors.black : const Color(0xFFF7F8FA),
           borderRadius: BorderRadius.circular(12),
           border: Border.all(
-            color: hasImage
-                ? Colors.transparent
-                : AppColors.outlineVariant.withOpacity(0.45),
-            width: 1,
+            color: borderColor,
+            width: borderWidth,
           ),
+          boxShadow: isValid == false
+              ? [
+                  BoxShadow(
+                    color: AppColors.error.withOpacity(0.25),
+                    blurRadius: 8,
+                    spreadRadius: 1,
+                  ),
+                ]
+              : null,
           image: hasImage
               ? DecorationImage(
                   image: FileImage(imageFile!),
                   fit: BoxFit.cover,
                   colorFilter: ColorFilter.mode(
-                    Colors.black.withOpacity(0.08),
+                    isValid == false
+                        ? AppColors.error.withOpacity(0.12)
+                        : Colors.black.withOpacity(0.08),
                     BlendMode.darken,
                   ),
                 )
@@ -180,7 +207,58 @@ class PetPhotoSlotCard extends StatelessWidget {
                       ),
               ),
 
-            // Filled state: small "✓ title" label bottom-left
+            // Filled state: Validation / Match status badge top-left
+            if (hasImage && isValid != null)
+              Positioned(
+                top: 6,
+                left: 6,
+                child: Container(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 7, vertical: 3.5),
+                  decoration: BoxDecoration(
+                    color: isValid == false
+                        ? AppColors.error
+                        : const Color(0xFF16A34A),
+                    borderRadius: BorderRadius.circular(6),
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.black.withOpacity(0.25),
+                        blurRadius: 4,
+                        offset: const Offset(0, 1),
+                      ),
+                    ],
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(
+                        isValid == false
+                            ? Icons.warning_amber_rounded
+                            : Icons.check_circle_rounded,
+                        size: 11,
+                        color: Colors.white,
+                      ),
+                      const SizedBox(width: 3.5),
+                      Text(
+                        isValid == false
+                            ? (similarityScore != null
+                                ? '${(similarityScore! * 100).toStringAsFixed(0)}% (<75%)'
+                                : (validationError ?? 'Unrecognized'))
+                            : (similarityScore != null
+                                ? '${(similarityScore! * 100).toStringAsFixed(0)}% Match'
+                                : 'Verified'),
+                        style: GoogleFonts.inter(
+                          fontSize: 9,
+                          fontWeight: FontWeight.w700,
+                          color: Colors.white,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+
+            // Filled state: small "title" label bottom-left
             if (hasImage)
               Positioned(
                 bottom: 8,
@@ -189,15 +267,21 @@ class PetPhotoSlotCard extends StatelessWidget {
                   padding:
                       const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                   decoration: BoxDecoration(
-                    color: Colors.black.withOpacity(0.50),
+                    color: Colors.black.withOpacity(0.55),
                     borderRadius: BorderRadius.circular(6),
                   ),
                   child: Row(
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      const Icon(Icons.check_rounded,
-                          size: 11, color: Colors.white),
-                      const SizedBox(width: 4),
+                      if (isValid == true) ...[
+                        const Icon(Icons.check_rounded,
+                            size: 11, color: Color(0xFF4ADE80)),
+                        const SizedBox(width: 4),
+                      ] else if (isValid == false) ...[
+                        const Icon(Icons.close_rounded,
+                            size: 11, color: Color(0xFFF87171)),
+                        const SizedBox(width: 4),
+                      ],
                       Text(
                         title,
                         style: GoogleFonts.inter(
@@ -221,11 +305,47 @@ class PetPhotoSlotCard extends StatelessWidget {
                   child: Container(
                     padding: const EdgeInsets.all(4),
                     decoration: BoxDecoration(
-                      color: Colors.black.withOpacity(0.50),
+                      color: Colors.black.withOpacity(0.55),
                       shape: BoxShape.circle,
                     ),
                     child: const Icon(Icons.close_rounded,
                         color: Colors.white, size: 13),
+                  ),
+                ),
+              ),
+
+            // AI Analyzing loading overlay
+            if (hasImage && isValidating)
+              Positioned.fill(
+                child: Container(
+                  decoration: BoxDecoration(
+                    color: Colors.black.withOpacity(0.55),
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  child: Center(
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        const SizedBox(
+                          width: 18,
+                          height: 18,
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2,
+                            valueColor:
+                                AlwaysStoppedAnimation<Color>(Colors.white),
+                          ),
+                        ),
+                        const SizedBox(height: 6),
+                        Text(
+                          'Checking Match...',
+                          style: GoogleFonts.inter(
+                            fontSize: 9.5,
+                            fontWeight: FontWeight.w600,
+                            color: Colors.white,
+                          ),
+                        ),
+                      ],
+                    ),
                   ),
                 ),
               ),

@@ -127,7 +127,7 @@ class _ChangePasswordDialogState extends State<ChangePasswordDialog> {
     try {
       await _supabase.auth.resetPasswordForEmail(
         widget.email,
-        redirectTo: 'https://rjamesmz.github.io/PawTrace/web/verified.html',
+        redirectTo: 'https://rjamesmz.github.io/PawTrace/web/verified.html?type=recovery',
       );
 
       if (!mounted) return;
@@ -499,20 +499,11 @@ class _ChangePasswordDialogState extends State<ChangePasswordDialog> {
         ),
         const SizedBox(height: 16),
         Text(
-          'We sent a password reset link to:',
+          'We sent a password reset link to your email.',
           textAlign: TextAlign.center,
           style: GoogleFonts.inter(
-            fontSize: 13,
-            color: AppColors.onSurfaceVariant,
-          ),
-        ),
-        const SizedBox(height: 4),
-        Text(
-          widget.email,
-          textAlign: TextAlign.center,
-          style: GoogleFonts.montserrat(
             fontSize: 14,
-            fontWeight: FontWeight.w700,
+            fontWeight: FontWeight.w600,
             color: AppColors.onSurface,
           ),
         ),

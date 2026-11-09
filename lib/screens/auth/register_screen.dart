@@ -10,6 +10,7 @@ import '../../core/app_toast.dart';
 import '../../services/auth/auth_service.dart';
 import '../../services/auth/id_validation_service.dart';
 import '../../services/auth/id_upload_edge_service.dart';
+import '../../services/auth/id_watermark_service.dart';
 
 /// Standalone Register / Sign-up screen for PawTrace.
 ///
@@ -50,11 +51,15 @@ class _RegisterScreenState extends State<RegisterScreen> {
 
   // ── Valid ID uploads ───────────────────────────────────────────────────────
   Uint8List? _idFrontBytes;
-  String _idFrontExt = 'jpg';
+  Uint8List? _rawIdFrontBytes;
+  String _idFrontExt = 'png';
   Uint8List? _idBackBytes;
-  String _idBackExt = 'jpg';
+  Uint8List? _rawIdBackBytes;
+  String _idBackExt = 'png';
   String? _selectedIdType;
   bool _idUploadError = false;
+  bool _isWatermarkingFront = false;
+  bool _isWatermarkingBack = false;
   IdValidationResult? _idValidationResult;
   User? _registrationUser;
 
@@ -133,8 +138,8 @@ class _RegisterScreenState extends State<RegisterScreen> {
     });
     try {
       final validation = await IdValidationService.validate(
-        frontBytes: _idFrontBytes!,
-        backBytes: _idBackBytes!,
+        frontBytes: _rawIdFrontBytes ?? _idFrontBytes!,
+        backBytes: _rawIdBackBytes ?? _idBackBytes!,
         firstName: firstName,
         surname: surname,
       );
@@ -1073,23 +1078,46 @@ class _RegisterScreenState extends State<RegisterScreen> {
     try {
       final picked = await picker.pickImage(source: source, imageQuality: 85);
       if (picked != null) {
-        final bytes = await picked.readAsBytes();
-        final ext = picked.name.contains('.')
-            ? picked.name.split('.').last.toLowerCase()
-            : 'jpg';
+        final rawBytes = await picked.readAsBytes();
         setState(() {
           if (isFront) {
-            _idFrontBytes = bytes;
-            _idFrontExt = ext;
+            _isWatermarkingFront = true;
           } else {
-            _idBackBytes = bytes;
-            _idBackExt = ext;
+            _isWatermarkingBack = true;
+          }
+        });
+
+        // Apply anti-fraud watermark so ID cannot be repurposed for fake identity
+        final watermarkedBytes =
+            await IdWatermarkService.addAntiFraudWatermark(rawBytes);
+
+        if (!mounted) return;
+        setState(() {
+          if (isFront) {
+            _rawIdFrontBytes = rawBytes;
+            _idFrontBytes = watermarkedBytes;
+            _idFrontExt = 'png';
+            _isWatermarkingFront = false;
+          } else {
+            _rawIdBackBytes = rawBytes;
+            _idBackBytes = watermarkedBytes;
+            _idBackExt = 'png';
+            _isWatermarkingBack = false;
           }
           _idUploadError = false;
         });
       }
     } catch (e) {
-      if (mounted) AppToast.error(context, 'Could not select image: $e');
+      if (mounted) {
+        setState(() {
+          if (isFront) {
+            _isWatermarkingFront = false;
+          } else {
+            _isWatermarkingBack = false;
+          }
+        });
+        AppToast.error(context, 'Could not select image: $e');
+      }
     }
   }
 
@@ -1133,10 +1161,38 @@ class _RegisterScreenState extends State<RegisterScreen> {
         ),
         const SizedBox(height: 4),
         Text(
-          'Upload clear photos of both sides of your valid government ID.',
+          'Upload clear photos of both sides of your valid government ID. '
+          'An anti-fraud security watermark is permanently applied to protect your identity.',
           style: GoogleFonts.inter(
             fontSize: 12,
             color: AppColors.secondary,
+          ),
+        ),
+        const SizedBox(height: 8),
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
+          decoration: BoxDecoration(
+            color: const Color(0xFFF0FDF4),
+            borderRadius: BorderRadius.circular(10),
+            border: Border.all(color: const Color(0xFFBBF7D0)),
+          ),
+          child: Row(
+            children: [
+              const Icon(Icons.shield_rounded,
+                  size: 15, color: Color(0xFF16A34A)),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  'Anti-Fraud Protection: ID is permanently stamped "FOR PETTRACE VERIFICATION ONLY" so it cannot be used for fake identity or unauthorized accounts.',
+                  style: GoogleFonts.inter(
+                    fontSize: 11,
+                    fontWeight: FontWeight.w600,
+                    color: const Color(0xFF166534),
+                    height: 1.35,
+                  ),
+                ),
+              ),
+            ],
           ),
         ),
         const SizedBox(height: 12),
@@ -1151,11 +1207,13 @@ class _RegisterScreenState extends State<RegisterScreen> {
               label: 'ID Front',
               bytes: _idFrontBytes,
               isFront: true,
+              isWatermarking: _isWatermarkingFront,
             );
             final cardBack = _buildIdUploadCard(
               label: 'ID Back',
               bytes: _idBackBytes,
               isFront: false,
+              isWatermarking: _isWatermarkingBack,
             );
 
             if (isNarrow) {
@@ -1232,6 +1290,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
     required String label,
     required Uint8List? bytes,
     required bool isFront,
+    bool isWatermarking = false,
   }) {
     final bool hasImage = bytes != null;
 
@@ -1283,8 +1342,10 @@ class _RegisterScreenState extends State<RegisterScreen> {
                         setState(() {
                           if (isFront) {
                             _idFrontBytes = null;
+                            _rawIdFrontBytes = null;
                           } else {
                             _idBackBytes = null;
+                            _rawIdBackBytes = null;
                           }
                         });
                       },
@@ -1298,7 +1359,40 @@ class _RegisterScreenState extends State<RegisterScreen> {
                 ],
               ),
               const SizedBox(height: 8),
-              if (hasImage) ...[
+              if (isWatermarking) ...[
+                Container(
+                  height: 100,
+                  width: double.infinity,
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFF1F5F9),
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  child: Center(
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        const SizedBox(
+                          width: 20,
+                          height: 20,
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2,
+                            color: AppColors.primary,
+                          ),
+                        ),
+                        const SizedBox(height: 8),
+                        Text(
+                          'Applying anti-fraud watermark...',
+                          style: GoogleFonts.inter(
+                            fontSize: 11,
+                            fontWeight: FontWeight.w600,
+                            color: AppColors.primary,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ] else if (hasImage) ...[
                 ClipRRect(
                   borderRadius: BorderRadius.circular(10),
                   child: SizedBox(
@@ -1308,6 +1402,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
                       fit: StackFit.expand,
                       children: [
                         Image.memory(bytes, fit: BoxFit.cover),
+                        const IdWatermarkOverlay(showBadge: true),
                         Positioned(
                           right: 6,
                           bottom: 6,

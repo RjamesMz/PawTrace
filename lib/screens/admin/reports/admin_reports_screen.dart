@@ -2,13 +2,13 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:responsive_framework/responsive_framework.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
-import 'package:excel/excel.dart' hide Border;
 import '../../../core/app_colors.dart';
 import '../../../core/app_constants.dart';
 import '../../../core/time_utils.dart';
 import '../../../services/admin/admin_analytics_service.dart';
 import '../../../services/auth/auth_service.dart';
-import '../../../services/export/file_export_service.dart';
+import '../../../services/export/pdf_export_service.dart';
+import '../../user/lost_pet/all_lost_pets_map_screen.dart';
 import '../../../widgets/admin/admin_content_wrapper.dart';
 import '../../../widgets/admin/admin_layout.dart';
 import '../../../widgets/admin/pet_location_map_dialog.dart';
@@ -111,7 +111,11 @@ class _AdminReportsScreenState extends State<AdminReportsScreen> {
 
       if (_currentUserRole != UserRole.superAdmin &&
           _adminBarangay.isNotEmpty) {
-        query = query.eq('barangay', _adminBarangay);
+        if (_adminBarangay.toLowerCase() == 'calatagan') {
+          query = query.inFilter('barangay', ['Calatagan', 'San Isidro Village']);
+        } else {
+          query = query.eq('barangay', _adminBarangay);
+        }
       }
 
       final data = await query.order('reported_at', ascending: false);
@@ -335,10 +339,12 @@ class _AdminReportsScreenState extends State<AdminReportsScreen> {
             const SizedBox(width: 12),
             _buildDateFilterButton(),
             const SizedBox(width: 12),
+            _buildViewAllMapButton(),
+            const SizedBox(width: 12),
             ElevatedButton.icon(
-              onPressed: _filtered.isEmpty ? null : _exportToExcel,
-              icon: const Icon(Icons.table_chart_outlined, size: 18),
-              label: Text('Export to Excel',
+              onPressed: _filtered.isEmpty ? null : _exportToPdf,
+              icon: const Icon(Icons.picture_as_pdf_outlined, size: 18),
+              label: Text('Export to PDF',
                   style: GoogleFonts.inter(
                       fontSize: 13, fontWeight: FontWeight.w600)),
               style: ElevatedButton.styleFrom(
@@ -419,6 +425,16 @@ class _AdminReportsScreenState extends State<AdminReportsScreen> {
                     _filtered,
                     onViewReport: _showReportDetailsDialog,
                     onViewMap: _showReportMapDialog,
+                    onViewAllMap: () => Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (_) => AllLostPetsMapScreen(
+                          barangay: _adminBarangay.isNotEmpty
+                              ? _adminBarangay
+                              : null,
+                        ),
+                      ),
+                    ),
                   ),
                 ),
               );
@@ -558,10 +574,12 @@ class _AdminReportsScreenState extends State<AdminReportsScreen> {
                       const SizedBox(width: 8),
                       _buildDateFilterButton(isCompact: true),
                       const SizedBox(width: 8),
+                      _buildViewAllMapButton(isCompact: true),
+                      const SizedBox(width: 8),
                       IconButton.filled(
-                        onPressed: _filtered.isEmpty ? null : _exportToExcel,
-                        icon: const Icon(Icons.table_chart_outlined, size: 18),
-                        tooltip: 'Export to Excel',
+                        onPressed: _filtered.isEmpty ? null : _exportToPdf,
+                        icon: const Icon(Icons.picture_as_pdf_outlined, size: 18),
+                        tooltip: 'Export to PDF',
                         style: IconButton.styleFrom(
                           backgroundColor: const Color(0xFF1D6F42),
                           foregroundColor: Colors.white,
@@ -635,10 +653,12 @@ class _AdminReportsScreenState extends State<AdminReportsScreen> {
                       const SizedBox(width: 8),
                       _buildDateFilterButton(isCompact: true),
                       const SizedBox(width: 8),
+                      _buildViewAllMapButton(isCompact: true),
+                      const SizedBox(width: 8),
                       IconButton.filled(
-                        onPressed: _filtered.isEmpty ? null : _exportToExcel,
-                        icon: const Icon(Icons.table_chart_outlined, size: 18),
-                        tooltip: 'Export to Excel',
+                        onPressed: _filtered.isEmpty ? null : _exportToPdf,
+                        icon: const Icon(Icons.picture_as_pdf_outlined, size: 18),
+                        tooltip: 'Export to PDF',
                         style: IconButton.styleFrom(
                           backgroundColor: const Color(0xFF1D6F42),
                           foregroundColor: Colors.white,
@@ -904,6 +924,66 @@ class _AdminReportsScreenState extends State<AdminReportsScreen> {
     );
   }
 
+  Widget _buildViewAllMapButton({bool isCompact = false}) {
+    return Tooltip(
+      message: 'View all active lost pet pinpoints on map',
+      child: InkWell(
+        onTap: () {
+          Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder: (_) => const AllLostPetsMapScreen(),
+            ),
+          );
+        },
+        borderRadius: BorderRadius.circular(999),
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 200),
+          height: 38,
+          padding: EdgeInsets.symmetric(
+            horizontal: isCompact ? 10 : 14,
+            vertical: 8,
+          ),
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(999),
+            border: Border.all(
+              color: AppColors.primary.withOpacity(0.4),
+              width: 1,
+            ),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withOpacity(0.02),
+                blurRadius: 4,
+              ),
+            ],
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Icon(
+                Icons.map_outlined,
+                size: 16,
+                color: AppColors.primary,
+              ),
+              if (!isCompact) ...[
+                const SizedBox(width: 6),
+                Text(
+                  'View All Map',
+                  style: GoogleFonts.inter(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w600,
+                    color: AppColors.primary,
+                  ),
+                ),
+              ],
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
   Future<void> _showDateFilterMenu(BuildContext buttonContext) async {
     final renderBox = buttonContext.findRenderObject() as RenderBox?;
     final offset = renderBox?.localToGlobal(Offset.zero) ?? Offset.zero;
@@ -1132,201 +1212,13 @@ class _AdminReportsScreenState extends State<AdminReportsScreen> {
     return AdminReportCard(report: report);
   }
 
-  /// Exports the currently filtered reports to an Excel (.xlsx) file.
-  /// On web: triggers a browser download. On mobile: opens the share sheet.
-  Future<void> _exportToExcel() async {
-    try {
-      final excel = Excel.createExcel();
-      final sheet = excel['Lost Pet Reports'];
-      excel.delete('Sheet1'); // Remove default sheet
-
-      // ── Header row ──────────────────────────────────────────────
-      const headers = [
-        'Pet Name',
-        'Breed',
-        'Species',
-        'Owner',
-        'Owner Phone',
-        'Barangay',
-        'Date Reported',
-        'Time Reported',
-        'Date Found',
-        'Time Found',
-        'Pet Status',
-        'De-active Status',
-        'Where Pet Last Seen',
-      ];
-      final headerStyle = CellStyle(
-        bold: true,
-        backgroundColorHex: ExcelColor.fromHexString('#1D6F42'),
-        fontColorHex: ExcelColor.fromHexString('#FFFFFF'),
-        horizontalAlign: HorizontalAlign.Center,
-      );
-      for (var c = 0; c < headers.length; c++) {
-        final cell =
-            sheet.cell(CellIndex.indexByColumnRow(columnIndex: c, rowIndex: 0));
-        cell.value = TextCellValue(headers[c]);
-        cell.cellStyle = headerStyle;
-        sheet.setColumnWidth(c, c == 12 ? 32 : 20);
-      }
-
-      // ── Data rows ────────────────────────────────────────────────
-      for (var r = 0; r < _filtered.length; r++) {
-        final report = _filtered[r];
-        final pet = report['pets'];
-        final owner = report['owner_id'];
-
-        final petName = pet is Map ? (pet['name']?.toString() ?? '') : '';
-        final breed = pet is Map ? (pet['breed']?.toString() ?? '') : '';
-        final species = pet is Map ? (pet['species']?.toString() ?? '') : '';
-        final ownerName = owner is Map
-            ? [
-                owner['first_name'],
-                owner['middle_name'],
-                owner['surname'],
-                owner['suffix']
-              ].where((s) => s != null && s.toString().isNotEmpty).join(' ')
-            : '';
-        final phone = owner is Map ? (owner['phone']?.toString() ?? '') : '';
-        final barangay = report['barangay']?.toString() ?? '';
-        final reportStatus =
-            (report['status']?.toString() ?? 'active').toLowerCase();
-
-        final bool isFound = isReportFound(report);
-        final String petCondition = isFound ? 'FOUND' : 'LOST';
-        final archiveStatus =
-            reportStatus == 'archived' ? 'DE-ACTIVE' : 'ACTIVE';
-
-        final lastSeenRaw = report['last_seen_address']?.toString() ?? '';
-        final cleanLastSeen = lastSeenRaw
-            .replaceAll(
-                RegExp(r'\s*\(?Lat:\s*[-\d.]+,\s*Lng:\s*[-\d.]+\)?',
-                    caseSensitive: false),
-                '')
-            .trim();
-        final whereLastSeen = cleanLastSeen.isNotEmpty
-            ? cleanLastSeen
-            : (barangay.isNotEmpty ? barangay : '-');
-
-        String dateStr = '', timeStr = '';
-        final raw = report['reported_at']?.toString() ?? '';
-        if (raw.isNotEmpty) {
-          try {
-            final dt = AppConstants.parseLocalTime(raw);
-            const months = [
-              'Jan',
-              'Feb',
-              'Mar',
-              'Apr',
-              'May',
-              'Jun',
-              'Jul',
-              'Aug',
-              'Sep',
-              'Oct',
-              'Nov',
-              'Dec'
-            ];
-            dateStr = '${months[dt.month - 1]} ${dt.day}, ${dt.year}';
-            final h =
-                dt.hour == 0 ? 12 : (dt.hour > 12 ? dt.hour - 12 : dt.hour);
-            final m = dt.minute.toString().padLeft(2, '0');
-            timeStr = '$h:$m ${dt.hour < 12 ? 'AM' : 'PM'}';
-          } catch (_) {}
-        }
-
-        String foundDateStr = '', foundTimeStr = '';
-        if (isFound) {
-          String? rawFound = report['found_at']?.toString() ??
-              report['resolved_at']?.toString() ??
-              report['updated_at']?.toString();
-          if (rawFound == null && pet is Map) {
-            rawFound =
-                pet['updated_at']?.toString() ?? pet['modified_at']?.toString();
-          }
-          if (rawFound != null && rawFound.isNotEmpty) {
-            try {
-              final dt = AppConstants.parseLocalTime(rawFound);
-              const months = [
-                'Jan',
-                'Feb',
-                'Mar',
-                'Apr',
-                'May',
-                'Jun',
-                'Jul',
-                'Aug',
-                'Sep',
-                'Oct',
-                'Nov',
-                'Dec'
-              ];
-              foundDateStr = '${months[dt.month - 1]} ${dt.day}, ${dt.year}';
-              final h =
-                  dt.hour == 0 ? 12 : (dt.hour > 12 ? dt.hour - 12 : dt.hour);
-              final m = dt.minute.toString().padLeft(2, '0');
-              foundTimeStr = '$h:$m ${dt.hour < 12 ? 'AM' : 'PM'}';
-            } catch (_) {
-              foundDateStr = rawFound;
-            }
-          }
-        }
-
-        final rowData = [
-          petName,
-          breed,
-          species,
-          ownerName,
-          phone,
-          barangay,
-          dateStr,
-          timeStr,
-          foundDateStr.isNotEmpty ? foundDateStr : '-',
-          foundTimeStr.isNotEmpty ? foundTimeStr : '-',
-          petCondition,
-          archiveStatus,
-          whereLastSeen,
-        ];
-        final rowStyle = CellStyle(
-          backgroundColorHex: r.isEven
-              ? ExcelColor.fromHexString('#FFFFFF')
-              : ExcelColor.fromHexString('#F0FDF4'),
-        );
-        for (var c = 0; c < rowData.length; c++) {
-          final cell = sheet.cell(
-              CellIndex.indexByColumnRow(columnIndex: c, rowIndex: r + 1));
-          cell.value = TextCellValue(rowData[c]);
-          cell.cellStyle = rowStyle;
-        }
-      }
-
-      final bytes = excel.encode()!;
-      final now = DateTime.now();
-      final filename =
-          'lost_reports_${now.year}${now.month.toString().padLeft(2, '0')}${now.day.toString().padLeft(2, '0')}.xlsx';
-
-      await saveAndShareFile(bytes, filename);
-
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-          content: Text('Exported $filename successfully.',
-              style: GoogleFonts.inter()),
-          backgroundColor: const Color(0xFF1D6F42),
-          behavior: SnackBarBehavior.floating,
-          shape:
-              RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-        ));
-      }
-    } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-          content: Text('Export failed: $e', style: GoogleFonts.inter()),
-          backgroundColor: AppColors.error,
-          behavior: SnackBarBehavior.floating,
-          shape:
-              RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-        ));
-      }
-    }
+  /// Exports the currently filtered reports to a PDF document.
+  Future<void> _exportToPdf() async {
+    final dateFilterLabel = _getDateFilterLabel();
+    await PdfExportService.exportReportsToPdf(
+      context,
+      _filtered,
+      dateFilterLabel: dateFilterLabel,
+    );
   }
 }

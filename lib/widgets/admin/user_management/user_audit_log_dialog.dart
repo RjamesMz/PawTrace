@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../../../core/app_colors.dart';
 import '../../../services/audit/user_audit_service.dart';
+import '../../../services/export/pdf_export_service.dart';
 
 /// Displays a modal dialog with the chronological audit and modification history for a user account.
 Future<void> showUserAuditLogDialog(
@@ -59,10 +60,10 @@ class _UserAuditLogDialogState extends State<_UserAuditLogDialog> {
     if (_cachedLogs.isEmpty) return;
     setState(() => _isExporting = true);
     try {
-      await UserAuditService.instance.exportAuditLogsToExcel(
+      await PdfExportService.exportUserAuditToPdf(
         context,
-        widget.userName,
-        _cachedLogs,
+        user: widget.user,
+        logs: _cachedLogs,
       );
     } finally {
       if (mounted) setState(() => _isExporting = false);
@@ -329,8 +330,8 @@ class _UserAuditLogDialogState extends State<_UserAuditLogDialog> {
                             height: 14,
                             child: CircularProgressIndicator(strokeWidth: 2, color: AppColors.primary),
                           )
-                        : const Icon(Icons.file_download_outlined, size: 16),
-                    label: const Text('Export Excel'),
+                        : const Icon(Icons.picture_as_pdf_outlined, size: 16),
+                    label: const Text('Export PDF'),
                     style: OutlinedButton.styleFrom(
                       foregroundColor: AppColors.primary,
                       side: const BorderSide(color: AppColors.primary),

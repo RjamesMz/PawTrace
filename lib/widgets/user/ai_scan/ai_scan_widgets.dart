@@ -235,26 +235,49 @@ class AiMatchCard extends StatelessWidget {
                     ),
                     const SizedBox(width: 8),
 
-                    // Match badge on the right in orange
+                    // Match badge on the right
                     Container(
                       padding: const EdgeInsets.symmetric(
                           horizontal: 10, vertical: 6),
                       decoration: BoxDecoration(
-                        color: const Color(0xFFFFF3E0),
+                        color: result.similarity >= 0.75
+                            ? const Color(0xFFF0FDF4)
+                            : const Color(0xFFFFFBEB),
                         borderRadius: BorderRadius.circular(12),
                         border: Border.all(
-                          color: const Color(0xFFFFB74D).withOpacity(0.8),
+                          color: result.similarity >= 0.75
+                              ? const Color(0xFF86EFAC)
+                              : const Color(0xFFFCD34D),
                         ),
                       ),
                       child: FittedBox(
                         fit: BoxFit.scaleDown,
-                        child: Text(
-                          '${result.percent}% Match',
-                          style: GoogleFonts.montserrat(
-                            fontSize: 12,
-                            fontWeight: FontWeight.w800,
-                            color: const Color(0xFFE65100),
-                          ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(
+                              result.similarity >= 0.75
+                                  ? Icons.verified_rounded
+                                  : Icons.help_outline_rounded,
+                              size: 13,
+                              color: result.similarity >= 0.75
+                                  ? const Color(0xFF16A34A)
+                                  : const Color(0xFFD97706),
+                            ),
+                            const SizedBox(width: 4),
+                            Text(
+                              result.similarity >= 0.75
+                                  ? '${result.percent}% High Match'
+                                  : '${result.percent}% Possible',
+                              style: GoogleFonts.montserrat(
+                                fontSize: 11.5,
+                                fontWeight: FontWeight.w800,
+                                color: result.similarity >= 0.75
+                                    ? const Color(0xFF15803D)
+                                    : const Color(0xFFB45309),
+                              ),
+                            ),
+                          ],
                         ),
                       ),
                     ),

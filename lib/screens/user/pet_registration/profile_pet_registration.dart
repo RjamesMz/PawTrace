@@ -47,12 +47,19 @@ class _ProfilePetRegistrationScreenState
   double? _detectedConfidence;
   bool _isDetecting = false;
 
-  // Multi-angle biometric photos
+  // Multi-angle biometric photos & AI verification (>= 75% similarity threshold)
+  static const double _kSimilarityThreshold = 0.75;
   File? _faceImage;
   File? _leftBodyImage;
   File? _rightBodyImage;
   File? _uniqueFeatureImage;
   bool _isSaving = false;
+
+  final Map<PetPhotoSlot, bool> _slotValidating = {};
+  final Map<PetPhotoSlot, bool?> _slotValid = {};
+  final Map<PetPhotoSlot, double?> _slotSimilarity = {};
+  final Map<PetPhotoSlot, String?> _slotError = {};
+  final Map<PetPhotoSlot, List<double>?> _slotEmbeddings = {};
 
   final _supabase = Supabase.instance.client;
   static const Set<String> _allowedSpecies = {'Dog', 'Cat'};
@@ -135,41 +142,161 @@ class _ProfilePetRegistrationScreenState
         }
       });
 
-      // Auto-detect species if the face photo was chosen
+      // Run biometric validation & consistency check
+      await _validateSlot(slot, imgFile);
+    }
+  }
+
+  Future<void> _validateSlot(PetPhotoSlot slot, File imgFile) async {
+    setState(() {
+      _slotValidating[slot] = true;
+      _slotValid[slot] = null;
+      _slotSimilarity[slot] = null;
+      _slotError[slot] = null;
       if (slot == PetPhotoSlot.face) {
-        setState(() => _isDetecting = true);
-        try {
-          final detected =
-              await PetEmbeddingService.instance.detectSpecies(imgFile);
-          if (mounted) {
-            final conf = (detected['confidence'] as num?)?.toDouble() ?? 0.0;
-            if (detected['isDog'] == true) {
-              setState(() {
-                _detectedSpecies = 'Dog';
-                _detectedConfidence = conf;
-                _selectedSpecies = 'Dog';
-                _selectedBreed = 'Aspin';
-                _otherBreedCtrl.clear();
-              });
-            } else if (detected['isCat'] == true) {
-              setState(() {
-                _detectedSpecies = 'Cat';
-                _detectedConfidence = conf;
-                _selectedSpecies = 'Cat';
-                _selectedBreed = 'Puspin';
-                _otherBreedCtrl.clear();
-              });
-            } else {
-              setState(() {
-                _detectedSpecies = (detected['label'] as String?) ?? 'Not a Pet';
-                _detectedConfidence = conf;
-              });
+        _isDetecting = true;
+      }
+    });
+
+    try {
+      // 1. Detect species & pet acceptance using YOLO/AI
+      final detected = await PetEmbeddingService.instance.detectSpecies(imgFile);
+      final isAccepted = detected['isAccepted'] == true;
+      final conf = (detected['confidence'] as num?)?.toDouble() ?? 0.0;
+      final detectedLabel = (detected['label'] ?? detected['species'] ?? '').toString();
+      final isDog = detected['isDog'] == true || detectedLabel.toLowerCase() == 'dog';
+      final isCat = detected['isCat'] == true || detectedLabel.toLowerCase() == 'cat';
+
+      if (!isAccepted || (!isDog && !isCat)) {
+        if (mounted) {
+          setState(() {
+            _slotValid[slot] = false;
+            _slotError[slot] = 'Not recognized as a pet';
+            _slotEmbeddings[slot] = null;
+            if (slot == PetPhotoSlot.face) {
+              _detectedSpecies = detectedLabel.isNotEmpty ? detectedLabel : 'Not a Pet';
+              _detectedConfidence = conf;
             }
+          });
+        }
+        return;
+      }
+
+      // If Face slot, update selected species/breed
+      if (slot == PetPhotoSlot.face) {
+        final speciesStr = isCat ? 'Cat' : 'Dog';
+        if (mounted) {
+          setState(() {
+            _detectedSpecies = speciesStr;
+            _detectedConfidence = conf;
+            _selectedSpecies = speciesStr;
+            _selectedBreed = (speciesStr == 'Cat') ? 'Puspin' : 'Aspin';
+            _otherBreedCtrl.clear();
+          });
+        }
+      } else {
+        // For secondary slots, make sure species matches the target registration species
+        final targetSpecies = _selectedSpecies?.toLowerCase() ?? '';
+        final thisSlotSpecies = isCat ? 'cat' : 'dog';
+        if (targetSpecies.isNotEmpty && targetSpecies != thisSlotSpecies) {
+          if (mounted) {
+            setState(() {
+              _slotValid[slot] = false;
+              _slotError[slot] = 'Different species ($thisSlotSpecies)';
+              _slotEmbeddings[slot] = null;
+            });
           }
-        } catch (e) {
-          debugPrint('[PetTrace] Auto-detect on photo pick: $e');
-        } finally {
-          if (mounted) setState(() => _isDetecting = false);
+          return;
+        }
+      }
+
+      // 2. Extract DINOv2 768-dim embedding
+      final emb = await PetEmbeddingService.instance.extractEmbedding(imgFile);
+      if (!mounted) return;
+      if (emb == null) {
+        setState(() {
+          _slotValid[slot] = false;
+          _slotError[slot] = 'Embedding failed';
+          _slotEmbeddings[slot] = null;
+        });
+        return;
+      }
+      _slotEmbeddings[slot] = emb;
+
+      // 3. Biometric comparison against Face slot
+      if (slot == PetPhotoSlot.face) {
+        setState(() {
+          _slotValid[slot] = true;
+          _slotSimilarity[slot] = 1.0;
+          _slotError[slot] = null;
+        });
+
+        // Re-validate any already-uploaded secondary slots against the new face baseline
+        await _revalidateSecondarySlots();
+      } else {
+        final faceEmb = _slotEmbeddings[PetPhotoSlot.face];
+        if (faceEmb != null) {
+          final sim = PetEmbeddingService.cosineSimilarity(faceEmb, emb);
+          final passes = sim >= _kSimilarityThreshold;
+          setState(() {
+            _slotSimilarity[slot] = sim;
+            _slotValid[slot] = passes;
+            _slotError[slot] = passes
+                ? null
+                : 'Mismatch (${(sim * 100).toStringAsFixed(0)}% < 75%)';
+          });
+        } else {
+          // Face not uploaded yet, slot is recognized pet pending face verification
+          setState(() {
+            _slotValid[slot] = null;
+            _slotSimilarity[slot] = null;
+            _slotError[slot] = 'Upload face photo to verify';
+          });
+        }
+      }
+    } catch (e) {
+      debugPrint('[PetTrace] Slot validation error for $slot: $e');
+      if (mounted) {
+        setState(() {
+          _slotValid[slot] = false;
+          _slotError[slot] = 'Recognition failed';
+        });
+      }
+    } finally {
+      if (mounted) {
+        setState(() {
+          _slotValidating[slot] = false;
+          if (slot == PetPhotoSlot.face) {
+            _isDetecting = false;
+          }
+        });
+      }
+    }
+  }
+
+  Future<void> _revalidateSecondarySlots() async {
+    final faceEmb = _slotEmbeddings[PetPhotoSlot.face];
+    if (faceEmb == null) return;
+
+    final secondarySlots = [
+      PetPhotoSlot.leftBody,
+      PetPhotoSlot.rightBody,
+      PetPhotoSlot.uniqueFeature,
+    ];
+
+    for (final slot in secondarySlots) {
+      final emb = _slotEmbeddings[slot];
+      if (emb != null) {
+        final sim = PetEmbeddingService.cosineSimilarity(faceEmb, emb);
+        final passes = sim >= _kSimilarityThreshold;
+        if (mounted) {
+          setState(() {
+            _slotSimilarity[slot] = sim;
+            _slotValid[slot] = passes;
+            _slotError[slot] = passes
+                ? null
+                : 'Mismatch (${(sim * 100).toStringAsFixed(0)}% < 75%)';
+          });
         }
       }
     }
@@ -177,11 +304,28 @@ class _ProfilePetRegistrationScreenState
 
   void _removePhoto(PetPhotoSlot slot) {
     setState(() {
+      _slotValidating[slot] = false;
+      _slotValid[slot] = null;
+      _slotSimilarity[slot] = null;
+      _slotError[slot] = null;
+      _slotEmbeddings[slot] = null;
+
       switch (slot) {
         case PetPhotoSlot.face:
           _faceImage = null;
           _detectedSpecies = null;
           _detectedConfidence = null;
+          for (final s in [
+            PetPhotoSlot.leftBody,
+            PetPhotoSlot.rightBody,
+            PetPhotoSlot.uniqueFeature
+          ]) {
+            if (_slotEmbeddings[s] != null) {
+              _slotValid[s] = null;
+              _slotSimilarity[s] = null;
+              _slotError[s] = 'Upload face photo to verify';
+            }
+          }
           break;
         case PetPhotoSlot.leftBody:
           _leftBodyImage = null;
@@ -424,6 +568,36 @@ class _ProfilePetRegistrationScreenState
       return;
     }
 
+    // Guard: Check if any slots are still actively analyzing
+    if (_slotValidating.values.any((v) => v)) {
+      _showError('AI is currently verifying pet photos. Please wait a moment.');
+      return;
+    }
+
+    // Guard: Check if any uploaded photos failed AI verification
+    final invalidSlots = <String>[];
+    if (_faceImage != null && _slotValid[PetPhotoSlot.face] == false) {
+      invalidSlots.add('Face photo');
+    }
+    if (_leftBodyImage != null && _slotValid[PetPhotoSlot.leftBody] == false) {
+      invalidSlots.add('Left Side Profile');
+    }
+    if (_rightBodyImage != null && _slotValid[PetPhotoSlot.rightBody] == false) {
+      invalidSlots.add('Right Side Profile');
+    }
+    if (_uniqueFeatureImage != null &&
+        _slotValid[PetPhotoSlot.uniqueFeature] == false) {
+      invalidSlots.add('Unique Feature');
+    }
+
+    if (invalidSlots.isNotEmpty) {
+      _showError(
+        'Some photos did not pass AI biometric verification (${invalidSlots.join(', ')}). '
+        'Please ensure all photos belong to the same $selectedSpecies and match ≥ 75% similarity.',
+      );
+      return;
+    }
+
     setState(() => _isSaving = true);
 
     try {
@@ -543,22 +717,25 @@ class _ProfilePetRegistrationScreenState
       if (petId != null) {
         try {
           debugPrint('[PetTrace] Starting multi-angle embedding generation...');
-          final faceEmb =
+          final faceEmb = _slotEmbeddings[PetPhotoSlot.face] ??
               await PetEmbeddingService.instance.extractEmbedding(_faceImage!);
           List<double>? leftEmb;
           if (_leftBodyImage != null) {
-            leftEmb = await PetEmbeddingService.instance
-                .extractEmbedding(_leftBodyImage!);
+            leftEmb = _slotEmbeddings[PetPhotoSlot.leftBody] ??
+                await PetEmbeddingService.instance
+                    .extractEmbedding(_leftBodyImage!);
           }
           List<double>? rightEmb;
           if (_rightBodyImage != null) {
-            rightEmb = await PetEmbeddingService.instance
-                .extractEmbedding(_rightBodyImage!);
+            rightEmb = _slotEmbeddings[PetPhotoSlot.rightBody] ??
+                await PetEmbeddingService.instance
+                    .extractEmbedding(_rightBodyImage!);
           }
           List<double>? uniqueEmb;
           if (_uniqueFeatureImage != null) {
-            uniqueEmb = await PetEmbeddingService.instance
-                .extractEmbedding(_uniqueFeatureImage!);
+            uniqueEmb = _slotEmbeddings[PetPhotoSlot.uniqueFeature] ??
+                await PetEmbeddingService.instance
+                    .extractEmbedding(_uniqueFeatureImage!);
           }
 
           final fused = _fuseEmbeddings(
@@ -696,6 +873,10 @@ class _ProfilePetRegistrationScreenState
             uniqueFeatureImage: _uniqueFeatureImage,
             onPickImage: _pickImage,
             onRemoveImage: _removePhoto,
+            slotValidating: _slotValidating,
+            slotValid: _slotValid,
+            slotSimilarity: _slotSimilarity,
+            slotError: _slotError,
           ),
           if (_isDetecting) ...[
             const SizedBox(height: 12),

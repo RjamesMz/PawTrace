@@ -8,25 +8,65 @@ import '../../widgets/common/change_password_dialog.dart';
 
 /// Screen displayed when an email confirmation or password reset link redirects to the app.
 class EmailVerifiedScreen extends StatefulWidget {
-  const EmailVerifiedScreen({super.key});
+  final bool isRecovery;
+  const EmailVerifiedScreen({super.key, this.isRecovery = false});
 
   @override
   State<EmailVerifiedScreen> createState() => _EmailVerifiedScreenState();
 }
 
 class _EmailVerifiedScreenState extends State<EmailVerifiedScreen> {
-  bool _isRecovery = false;
+  late bool _isRecovery;
   String? _userEmail;
   Timer? _autoRedirectTimer;
+  StreamSubscription<AuthState>? _authSub;
 
   @override
   void initState() {
     super.initState();
+    _isRecovery = widget.isRecovery;
+
+    // Listen to Supabase auth events in case recovery event fires dynamically
+    _authSub = Supabase.instance.client.auth.onAuthStateChange.listen((data) {
+      if (data.event == AuthChangeEvent.passwordRecovery) {
+        _autoRedirectTimer?.cancel();
+        if (mounted) {
+          setState(() {
+            _isRecovery = true;
+            _userEmail = data.session?.user.email ??
+                Supabase.instance.client.auth.currentUser?.email;
+          });
+        }
+      }
+    });
+
     _checkStatus();
   }
 
   @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    _checkRouteForRecovery();
+  }
+
+  void _checkRouteForRecovery() {
+    if (_isRecovery) return;
+    final routeName = ModalRoute.of(context)?.settings.name ?? '';
+    if (routeName.contains('type=recovery') ||
+        routeName.contains('recovery') ||
+        routeName.contains('reset-password')) {
+      _autoRedirectTimer?.cancel();
+      if (mounted) {
+        setState(() {
+          _isRecovery = true;
+        });
+      }
+    }
+  }
+
+  @override
   void dispose() {
+    _authSub?.cancel();
     _autoRedirectTimer?.cancel();
     super.dispose();
   }
@@ -36,9 +76,10 @@ class _EmailVerifiedScreenState extends State<EmailVerifiedScreen> {
     final uri = Uri.base;
     final fragment = uri.fragment;
     final query = uri.query;
-    final fullUrl = '$query&$fragment';
+    final fullUrl = '${uri.path}?$query#$fragment';
 
-    if (fullUrl.contains('type=recovery')) {
+    if (fullUrl.contains('type=recovery') || fullUrl.contains('recovery')) {
+      _autoRedirectTimer?.cancel();
       if (mounted) {
         setState(() {
           _isRecovery = true;
@@ -56,10 +97,13 @@ class _EmailVerifiedScreenState extends State<EmailVerifiedScreen> {
         _userEmail = user?.email;
       });
 
+      // Never auto-redirect to app if user is recovering password
+      if (_isRecovery) return;
+
       // If user is already authenticated, automatically continue after 2.5s
       if (user != null) {
         _autoRedirectTimer = Timer(const Duration(milliseconds: 2500), () {
-          if (mounted) _goToApp();
+          if (mounted && !_isRecovery) _goToApp();
         });
       }
     }

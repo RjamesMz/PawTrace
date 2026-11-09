@@ -10,6 +10,8 @@ class PetGeofenceLayer extends StatelessWidget {
   final bool isGpsActive;
   final double marginOfErrorRadius; // in meters (represents ±2.5m GPS CEP satellite error)
   final double geofenceRadius; // in meters (represents geofence safe perimeter)
+  final bool showGeofence;
+  final Color? customColor;
 
   const PetGeofenceLayer({
     super.key,
@@ -17,31 +19,35 @@ class PetGeofenceLayer extends StatelessWidget {
     this.isGpsActive = true,
     this.marginOfErrorRadius = 4.5,
     this.geofenceRadius = 18.0,
+    this.showGeofence = true,
+    this.customColor,
   });
 
   @override
   Widget build(BuildContext context) {
-    final baseColor = isGpsActive ? AppColors.primary : const Color(0xFF64748B);
+    final baseColor = customColor ??
+        (isGpsActive ? AppColors.primary : const Color(0xFF64748B));
 
     return CircleLayer(
       circles: [
-        // 1. Outer Geofence Boundary / Safe Perimeter (18m radius)
-        CircleMarker(
-          point: center,
-          radius: geofenceRadius,
-          useRadiusInMeter: true,
-          color: baseColor.withOpacity(0.08),
-          borderColor: baseColor.withOpacity(0.40),
-          borderStrokeWidth: 1.4,
-        ),
+        // 1. Outer Geofence Boundary / Safe Perimeter (only when enabled, e.g. at home)
+        if (showGeofence)
+          CircleMarker(
+            point: center,
+            radius: geofenceRadius,
+            useRadiusInMeter: true,
+            color: baseColor.withOpacity(0.08),
+            borderColor: baseColor.withOpacity(0.40),
+            borderStrokeWidth: 1.4,
+          ),
         // 2. Satellite GPS Margin of Error Tolerance Zone (±2.5m)
         CircleMarker(
           point: center,
           radius: marginOfErrorRadius,
           useRadiusInMeter: true,
-          color: baseColor.withOpacity(0.24),
-          borderColor: baseColor.withOpacity(0.90),
-          borderStrokeWidth: 2.0,
+          color: baseColor.withOpacity(0.18),
+          borderColor: baseColor.withOpacity(0.75),
+          borderStrokeWidth: 1.8,
         ),
       ],
     );

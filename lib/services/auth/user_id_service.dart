@@ -104,116 +104,150 @@ class UserIdService {
     }
   }
 
-  /// Retrieves ID documents for a given user map
-  static Future<Map<String, dynamic>> getIdData(
-      Map<String, dynamic> user) async {
-    final uid = (user['user_id'] ?? user['id'] ?? '').toString();
-    final email = (user['email'] ?? '').toString().trim().toLowerCase();
+    // In-memory cache for fast lookup across active session
+    static final Map<String, (Map<String, dynamic> data, DateTime expiry)> _idDataCache = {};
+    static final Map<String, (String url, DateTime expiry)> _signedUrlCache = {};
 
-    String? frontUrl = user['id_front_url']?.toString();
-    String? backUrl = user['id_back_url']?.toString();
-    String? uploadedAt = user['id_uploaded_at']?.toString();
-    String? idType = user['id_type']?.toString();
-    String? ocrExtractedText = user['ocr_extracted_text']?.toString();
-    dynamic nameMatchScore = user['name_match_score'];
-    String? imageQuality = user['image_quality']?.toString();
+    /// Retrieves ID documents for a given user map with fast caching
+    static Future<Map<String, dynamic>> getIdData(
+        Map<String, dynamic> user) async {
+      final uid = (user['user_id'] ?? user['id'] ?? '').toString();
+      final now = DateTime.now();
 
-    // ID validation is stored separately from the user profile. Prefer the
-    // latest submission so resubmissions remain supported.
-    if (uid.isNotEmpty) {
-      try {
-        final validation = await _supabase
-            .from('id_validations')
-            .select()
-            .eq('user_id', uid)
-            .order('created_at', ascending: false)
-            .limit(1)
-            .maybeSingle();
-        if (validation != null) {
-          frontUrl = validation['id_front_url']?.toString();
-          backUrl = validation['id_back_url']?.toString();
-          uploadedAt = validation['created_at']?.toString();
-          idType = validation['id_type']?.toString();
-          ocrExtractedText = validation['ocr_extracted_text']?.toString();
-          nameMatchScore = validation['name_match_score'];
-          imageQuality = validation['image_quality']?.toString();
+      // Return fast cached data if available (instant 0ms loading)
+      if (uid.isNotEmpty && _idDataCache.containsKey(uid)) {
+        final cached = _idDataCache[uid]!;
+        if (cached.$2.isAfter(now)) {
+          return cached.$1;
         }
+      }
+
+      final email = (user['email'] ?? '').toString().trim().toLowerCase();
+
+      String? frontUrl = user['id_front_url']?.toString();
+      String? backUrl = user['id_back_url']?.toString();
+      String? uploadedAt = user['id_uploaded_at']?.toString();
+      String? idType = user['id_type']?.toString();
+      String? ocrExtractedText = user['ocr_extracted_text']?.toString();
+      dynamic nameMatchScore = user['name_match_score'];
+      String? imageQuality = user['image_quality']?.toString();
+
+      // Check ID validation table if not provided on user object
+      if (uid.isNotEmpty && (frontUrl == null || frontUrl.isEmpty)) {
+        try {
+          final validation = await _supabase
+              .from('id_validations')
+              .select()
+              .eq('user_id', uid)
+              .order('created_at', ascending: false)
+              .limit(1)
+              .maybeSingle();
+          if (validation != null) {
+            frontUrl = validation['id_front_url']?.toString();
+            backUrl = validation['id_back_url']?.toString();
+            uploadedAt = validation['created_at']?.toString();
+            idType = validation['id_type']?.toString();
+            ocrExtractedText = validation['ocr_extracted_text']?.toString();
+            nameMatchScore = validation['name_match_score'];
+            imageQuality = validation['image_quality']?.toString();
+          }
+        } catch (e) {
+          debugPrint('ID validation lookup error: $e');
+        }
+      }
+
+      // Check user_metadata if available
+      if (user['raw_user_meta_data'] is Map) {
+        final meta = user['raw_user_meta_data'] as Map;
+        frontUrl ??= meta['id_front_url']?.toString();
+        backUrl ??= meta['id_back_url']?.toString();
+        uploadedAt ??= meta['id_uploaded_at']?.toString();
+        idType ??= meta['id_type']?.toString();
+        ocrExtractedText ??= meta['ocr_extracted_text']?.toString();
+        nameMatchScore ??= meta['name_match_score'];
+        imageQuality ??= meta['image_quality']?.toString();
+      }
+
+      // Check legacy in-memory cache
+      if ((frontUrl == null || frontUrl.isEmpty) ||
+          (backUrl == null || backUrl.isEmpty)) {
+        Map<String, dynamic>? cached;
+        if (uid.isNotEmpty && _memoryCache.containsKey(uid)) {
+          cached = _memoryCache[uid];
+        }
+        if (cached == null &&
+            email.isNotEmpty &&
+            _memoryCache.containsKey(email)) {
+          cached = _memoryCache[email];
+        }
+
+        if (cached != null) {
+          frontUrl ??= cached['id_front_url']?.toString();
+          backUrl ??= cached['id_back_url']?.toString();
+          uploadedAt ??= cached['id_uploaded_at']?.toString();
+          idType ??= cached['id_type']?.toString();
+          ocrExtractedText ??= cached['ocr_extracted_text']?.toString();
+          nameMatchScore ??= cached['name_match_score'];
+          imageQuality ??= cached['image_quality']?.toString();
+        }
+      }
+
+      uploadedAt ??= user['created_at']?.toString();
+
+      // Parallelize resolution of front and back URLs for 2x faster loading
+      final resolved = await Future.wait([
+        _resolveForAdmin(frontUrl),
+        _resolveForAdmin(backUrl),
+      ]);
+      frontUrl = resolved[0];
+      backUrl = resolved[1];
+
+      final result = {
+        'id_front_url': frontUrl,
+        'id_back_url': backUrl,
+        'id_uploaded_at': uploadedAt,
+        'id_type': idType,
+        'ocr_extracted_text': ocrExtractedText,
+        'name_match_score':
+            nameMatchScore is num ? nameMatchScore.toDouble() : null,
+        'image_quality': imageQuality,
+        'has_ids': (frontUrl != null && frontUrl.isNotEmpty) ||
+            (backUrl != null && backUrl.isNotEmpty),
+      };
+
+      if (uid.isNotEmpty) {
+        _idDataCache[uid] = (result, now.add(const Duration(minutes: 5)));
+      }
+
+      return result;
+    }
+
+    /// Converts private Storage references to short-lived URLs with caching.
+    static Future<String?> _resolveForAdmin(String? reference) async {
+      if (reference == null || !reference.startsWith('storage://')) {
+        return reference;
+      }
+
+      final now = DateTime.now();
+      final cached = _signedUrlCache[reference];
+      if (cached != null && cached.$2.isAfter(now)) {
+        return cached.$1;
+      }
+
+      final separator = reference.indexOf('/', 'storage://'.length);
+      if (separator == -1) return null;
+
+      final bucket = reference.substring('storage://'.length, separator);
+      final path = reference.substring(separator + 1);
+      try {
+        final signedUrl =
+            await _supabase.storage.from(bucket).createSignedUrl(path, 3600);
+        _signedUrlCache[reference] =
+            (signedUrl, now.add(const Duration(minutes: 50)));
+        return signedUrl;
       } catch (e) {
-        debugPrint('ID validation lookup error: $e');
+        debugPrint('Failed to create signed ID URL: $e');
+        return null;
       }
     }
-
-    // Check user_metadata if available
-    if (user['raw_user_meta_data'] is Map) {
-      final meta = user['raw_user_meta_data'] as Map;
-      frontUrl ??= meta['id_front_url']?.toString();
-      backUrl ??= meta['id_back_url']?.toString();
-      uploadedAt ??= meta['id_uploaded_at']?.toString();
-      idType ??= meta['id_type']?.toString();
-      ocrExtractedText ??= meta['ocr_extracted_text']?.toString();
-      nameMatchScore ??= meta['name_match_score'];
-      imageQuality ??= meta['image_quality']?.toString();
-    }
-
-    // Check in-memory cache
-    if ((frontUrl == null || frontUrl.isEmpty) ||
-        (backUrl == null || backUrl.isEmpty)) {
-      Map<String, dynamic>? cached;
-      if (uid.isNotEmpty && _memoryCache.containsKey(uid)) {
-        cached = _memoryCache[uid];
-      }
-      if (cached == null &&
-          email.isNotEmpty &&
-          _memoryCache.containsKey(email)) {
-        cached = _memoryCache[email];
-      }
-
-      if (cached != null) {
-        frontUrl ??= cached['id_front_url']?.toString();
-        backUrl ??= cached['id_back_url']?.toString();
-        uploadedAt ??= cached['id_uploaded_at']?.toString();
-        idType ??= cached['id_type']?.toString();
-        ocrExtractedText ??= cached['ocr_extracted_text']?.toString();
-        nameMatchScore ??= cached['name_match_score'];
-        imageQuality ??= cached['image_quality']?.toString();
-      }
-    }
-
-    uploadedAt ??= user['created_at']?.toString();
-
-    frontUrl = await _resolveForAdmin(frontUrl);
-    backUrl = await _resolveForAdmin(backUrl);
-
-    return {
-      'id_front_url': frontUrl,
-      'id_back_url': backUrl,
-      'id_uploaded_at': uploadedAt,
-      'id_type': idType,
-      'ocr_extracted_text': ocrExtractedText,
-      'name_match_score':
-          nameMatchScore is num ? nameMatchScore.toDouble() : null,
-      'image_quality': imageQuality,
-      'has_ids': (frontUrl != null && frontUrl.isNotEmpty) ||
-          (backUrl != null && backUrl.isNotEmpty),
-    };
-  }
-
-  /// Converts private Storage references to short-lived URLs for authorized viewers.
-  static Future<String?> _resolveForAdmin(String? reference) async {
-    if (reference == null || !reference.startsWith('storage://')) {
-      return reference;
-    }
-
-    final separator = reference.indexOf('/', 'storage://'.length);
-    if (separator == -1) return null;
-
-    final bucket = reference.substring('storage://'.length, separator);
-    final path = reference.substring(separator + 1);
-    try {
-      return await _supabase.storage.from(bucket).createSignedUrl(path, 3600);
-    } catch (e) {
-      debugPrint('Failed to create signed ID URL: $e');
-      return null;
-    }
-  }
 }

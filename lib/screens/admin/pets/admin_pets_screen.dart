@@ -509,8 +509,15 @@ class _AdminPetsScreenState extends State<AdminPetsScreen> {
     return filteredPets;
   }
 
-  Future<void> _exportCurrentToExcel() async {
-    await PetsExportService.exportPetsToExcel(context, _currentExportPets);
+  Future<void> _exportCurrentToPdf() async {
+    final category = _tableSegmentIndex == 0
+        ? 'Active Pets'
+        : (_tableSegmentIndex == 1 ? 'Archived Pets' : 'All Registered Pets');
+    await PetsExportService.exportPetsToPdf(
+      context,
+      _currentExportPets,
+      categoryLabel: category,
+    );
   }
 
 
@@ -658,9 +665,9 @@ class _AdminPetsScreenState extends State<AdminPetsScreen> {
             const SizedBox(width: 12),
             ElevatedButton.icon(
               onPressed:
-                  _currentExportPets.isEmpty ? null : _exportCurrentToExcel,
-              icon: const Icon(Icons.table_chart_outlined, size: 18),
-              label: Text('Export to Excel',
+                  _currentExportPets.isEmpty ? null : _exportCurrentToPdf,
+              icon: const Icon(Icons.picture_as_pdf_outlined, size: 18),
+              label: Text('Export to PDF',
                   style: GoogleFonts.inter(
                       fontSize: 13, fontWeight: FontWeight.w600)),
               style: ElevatedButton.styleFrom(
@@ -926,6 +933,7 @@ class _AdminPetsScreenState extends State<AdminPetsScreen> {
             onViewMap: _showLocationDialog,
             onRepost: _repostPetToNews,
             onViewLogs: (pet) => showPetAuditLogDialog(context, pet),
+            onRefresh: fetchAllPets,
           ),
         ),
       ),
@@ -1095,6 +1103,7 @@ class _AdminPetsScreenState extends State<AdminPetsScreen> {
             onViewMap: _showLocationDialog,
             onRepost: _repostPetToNews,
             onViewLogs: (pet) => showPetAuditLogDialog(context, pet),
+            onRefresh: fetchAllPets,
           ),
         ),
       ),
@@ -1262,6 +1271,7 @@ class _AdminPetsScreenState extends State<AdminPetsScreen> {
             context,
             onContact: _showContactDialog,
             onViewLogs: (pet) => showPetAuditLogDialog(context, pet),
+            onRefresh: fetchAllPets,
           ),
         ),
       ),
@@ -1349,9 +1359,9 @@ class _AdminPetsScreenState extends State<AdminPetsScreen> {
                 IconButton.filled(
                   onPressed: _currentExportPets.isEmpty
                       ? null
-                      : _exportCurrentToExcel,
-                  icon: const Icon(Icons.table_chart_outlined, size: 18),
-                  tooltip: 'Export to Excel',
+                      : _exportCurrentToPdf,
+                  icon: const Icon(Icons.picture_as_pdf_outlined, size: 18),
+                  tooltip: 'Export to PDF',
                   style: IconButton.styleFrom(
                     backgroundColor: const Color(0xFF1D6F42),
                     foregroundColor: Colors.white,
@@ -1447,10 +1457,10 @@ class _AdminPetsScreenState extends State<AdminPetsScreen> {
                         ElevatedButton.icon(
                           onPressed: _currentExportPets.isEmpty
                               ? null
-                              : _exportCurrentToExcel,
+                              : _exportCurrentToPdf,
                           icon:
-                              const Icon(Icons.table_chart_outlined, size: 18),
-                          label: Text('Export to Excel',
+                              const Icon(Icons.picture_as_pdf_outlined, size: 18),
+                          label: Text('Export to PDF',
                               style: GoogleFonts.inter(
                                   fontSize: 13, fontWeight: FontWeight.w600)),
                           style: ElevatedButton.styleFrom(
@@ -1648,14 +1658,11 @@ class _AdminPetsScreenState extends State<AdminPetsScreen> {
   Widget _buildPetCard(Map<String, dynamic> pet) {
     return AdminPetCard(
       pet: pet,
-      onTap: () async {
-        await Navigator.push(
-          context,
-          MaterialPageRoute(builder: (_) => AdminPetDetailScreen(pet: pet)),
-        );
-        // Refresh list when returning from detail screen
-        fetchAllPets();
-      },
+      onTap: () => showAdminPetDetailsDialog(
+        context,
+        pet,
+        onRefresh: fetchAllPets,
+      ),
       onContact: () => _showContactDialog(pet),
       onViewMap: () => _showLocationDialog(pet),
       onRepost: () => _repostPetToNews(pet),

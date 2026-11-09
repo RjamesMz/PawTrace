@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../../../core/app_constants.dart';
+import '../../../screens/user/lost_pet/all_lost_pets_map_screen.dart';
 import '../pet_location_map_dialog.dart';
 import 'admin_report_image_banner.dart';
 import 'admin_report_details_content.dart';
@@ -203,6 +204,10 @@ class AdminReportCard extends StatelessWidget {
           formatTime: formatTime,
           hasGps: hasGps,
           onViewMap: hasGps ? handleViewMap : null,
+          onViewAllMap: () => Navigator.push(
+            context,
+            MaterialPageRoute(builder: (_) => const AllLostPetsMapScreen()),
+          ),
           foundAt: foundAt,
           foundPhotoUrl: foundPhotoUrl,
           isFound: isFound,

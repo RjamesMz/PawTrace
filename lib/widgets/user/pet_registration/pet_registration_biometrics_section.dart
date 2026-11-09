@@ -12,6 +12,10 @@ class PetRegistrationBiometricsSection extends StatelessWidget {
   final File? uniqueFeatureImage;
   final Function(PetPhotoSlot slot) onPickImage;
   final Function(PetPhotoSlot slot) onRemoveImage;
+  final Map<PetPhotoSlot, bool> slotValidating;
+  final Map<PetPhotoSlot, bool?> slotValid;
+  final Map<PetPhotoSlot, double?> slotSimilarity;
+  final Map<PetPhotoSlot, String?> slotError;
 
   const PetRegistrationBiometricsSection({
     super.key,
@@ -21,6 +25,10 @@ class PetRegistrationBiometricsSection extends StatelessWidget {
     required this.uniqueFeatureImage,
     required this.onPickImage,
     required this.onRemoveImage,
+    this.slotValidating = const {},
+    this.slotValid = const {},
+    this.slotSimilarity = const {},
+    this.slotError = const {},
   });
 
   @override
@@ -52,7 +60,7 @@ class PetRegistrationBiometricsSection extends StatelessWidget {
         ),
         const SizedBox(height: 6),
         Text(
-          'Upload a clear face photo (required). Side angles and distinctive markings are optional but recommended to boost AI recognition accuracy.',
+          'Upload a clear face photo (required). Secondary angles are automatically analyzed with AI to ensure they match the same pet (≥ 75% match threshold).',
           style: GoogleFonts.inter(
             fontSize: 12,
             color: AppColors.onSurfaceVariant,
@@ -72,6 +80,10 @@ class PetRegistrationBiometricsSection extends StatelessWidget {
           isWide: true,
           onTap: () => onPickImage(PetPhotoSlot.face),
           onRemove: () => onRemoveImage(PetPhotoSlot.face),
+          isValidating: slotValidating[PetPhotoSlot.face] ?? false,
+          isValid: slotValid[PetPhotoSlot.face],
+          similarityScore: slotSimilarity[PetPhotoSlot.face],
+          validationError: slotError[PetPhotoSlot.face],
         ),
         const SizedBox(height: 12),
 
@@ -88,6 +100,10 @@ class PetRegistrationBiometricsSection extends StatelessWidget {
                 imageFile: leftBodyImage,
                 onTap: () => onPickImage(PetPhotoSlot.leftBody),
                 onRemove: () => onRemoveImage(PetPhotoSlot.leftBody),
+                isValidating: slotValidating[PetPhotoSlot.leftBody] ?? false,
+                isValid: slotValid[PetPhotoSlot.leftBody],
+                similarityScore: slotSimilarity[PetPhotoSlot.leftBody],
+                validationError: slotError[PetPhotoSlot.leftBody],
               ),
             ),
             const SizedBox(width: 12),
@@ -101,6 +117,10 @@ class PetRegistrationBiometricsSection extends StatelessWidget {
                 imageFile: rightBodyImage,
                 onTap: () => onPickImage(PetPhotoSlot.rightBody),
                 onRemove: () => onRemoveImage(PetPhotoSlot.rightBody),
+                isValidating: slotValidating[PetPhotoSlot.rightBody] ?? false,
+                isValid: slotValid[PetPhotoSlot.rightBody],
+                similarityScore: slotSimilarity[PetPhotoSlot.rightBody],
+                validationError: slotError[PetPhotoSlot.rightBody],
               ),
             ),
           ],
@@ -119,6 +139,10 @@ class PetRegistrationBiometricsSection extends StatelessWidget {
           isWide: true,
           onTap: () => onPickImage(PetPhotoSlot.uniqueFeature),
           onRemove: () => onRemoveImage(PetPhotoSlot.uniqueFeature),
+          isValidating: slotValidating[PetPhotoSlot.uniqueFeature] ?? false,
+          isValid: slotValid[PetPhotoSlot.uniqueFeature],
+          similarityScore: slotSimilarity[PetPhotoSlot.uniqueFeature],
+          validationError: slotError[PetPhotoSlot.uniqueFeature],
         ),
       ],
     );

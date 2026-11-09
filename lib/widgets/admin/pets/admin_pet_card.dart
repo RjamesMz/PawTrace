@@ -171,7 +171,7 @@ class AdminPetCard extends StatelessWidget {
                     borderRadius: BorderRadius.circular(6),
                   ),
                   child: Text(
-                    isArchived ? 'Archived' : (isLost ? 'Lost' : 'Active'),
+                    isArchived ? 'De-active' : (isLost ? 'Lost' : 'Active'),
                     style: GoogleFonts.inter(
                       fontSize: 10,
                       fontWeight: FontWeight.w700,

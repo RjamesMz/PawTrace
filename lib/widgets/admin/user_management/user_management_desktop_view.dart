@@ -13,6 +13,7 @@ class UserManagementDesktopView extends StatelessWidget {
   final Widget roleSegmentedSwitcher;
   final Widget searchBar;
   final Widget filterPills;
+  final Widget? barangayFilter;
   final VoidCallback onRefresh;
   final VoidCallback onShowAddAdminModal;
   final void Function(String action, Map<String, dynamic> user) onAction;
@@ -26,6 +27,7 @@ class UserManagementDesktopView extends StatelessWidget {
     required this.roleSegmentedSwitcher,
     required this.searchBar,
     required this.filterPills,
+    this.barangayFilter,
     required this.onRefresh,
     required this.onShowAddAdminModal,
     required this.onAction,
@@ -61,7 +63,11 @@ class UserManagementDesktopView extends StatelessWidget {
                     child: Row(
                       children: [
                         Expanded(child: searchBar),
-                        const SizedBox(width: 16),
+                        if (barangayFilter != null) ...[
+                          const SizedBox(width: 14),
+                          barangayFilter!,
+                        ],
+                        const SizedBox(width: 14),
                         filterPills,
                       ],
                     ),
@@ -142,7 +148,11 @@ class UserManagementDesktopView extends StatelessWidget {
                     child: Row(
                       children: [
                         Expanded(child: searchBar),
-                        const SizedBox(width: 16),
+                        if (barangayFilter != null) ...[
+                          const SizedBox(width: 14),
+                          barangayFilter!,
+                        ],
+                        const SizedBox(width: 14),
                         filterPills,
                       ],
                     ),

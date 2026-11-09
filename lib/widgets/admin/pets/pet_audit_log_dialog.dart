@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../../../core/app_colors.dart';
 import '../../../services/audit/pet_audit_service.dart';
+import '../../../services/export/pdf_export_service.dart';
 
 /// Shows the administrative modal dialog displaying the modification history and audit log for a pet.
 Future<void> showPetAuditLogDialog(
@@ -56,10 +57,10 @@ class _PetAuditLogDialogState extends State<_PetAuditLogDialog> {
     if (_cachedLogs.isEmpty) return;
     setState(() => _isExporting = true);
     try {
-      await PetAuditService.instance.exportAuditLogsToExcel(
+      await PdfExportService.exportPetAuditToPdf(
         context,
-        widget.petName,
-        _cachedLogs,
+        pet: widget.pet,
+        logs: _cachedLogs,
       );
     } finally {
       if (mounted) setState(() => _isExporting = false);
@@ -244,9 +245,9 @@ class _PetAuditLogDialogState extends State<_PetAuditLogDialog> {
                                   AlwaysStoppedAnimation<Color>(Colors.white),
                             ),
                           )
-                        : const Icon(Icons.file_download_outlined, size: 16),
+                        : const Icon(Icons.picture_as_pdf_outlined, size: 16),
                     label: Text(
-                      _isExporting ? 'Exporting...' : 'Export Log (.xlsx)',
+                      _isExporting ? 'Exporting...' : 'Export Log (.pdf)',
                       style: GoogleFonts.inter(
                         fontSize: 12,
                         fontWeight: FontWeight.w700,

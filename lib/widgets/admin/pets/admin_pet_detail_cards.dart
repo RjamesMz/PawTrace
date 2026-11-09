@@ -24,7 +24,7 @@ class AdminPetStatusBadge extends StatelessWidget {
         bg = const Color(0xFFF1F5F9);
         fg = const Color(0xFF475569);
         dotColor = const Color(0xFF64748B);
-        label = 'ARCHIVED';
+        label = 'DE-ACTIVE';
         icon = Icons.archive_outlined;
         break;
       case 'lost':

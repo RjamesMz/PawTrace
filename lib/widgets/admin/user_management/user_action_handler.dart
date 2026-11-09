@@ -5,6 +5,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../../core/app_colors.dart';
 import '../../../core/app_toast.dart';
 import '../../../services/auth/user_id_service.dart';
+import '../../../services/auth/id_watermark_service.dart';
 import '../../../services/audit/user_audit_service.dart';
 import 'user_audit_log_dialog.dart';
 
@@ -1207,45 +1208,51 @@ class UserActionHandler {
                         ),
                       ),
                     )
-                  : url.startsWith('data:image')
-                      ? Image.memory(
-                          base64Decode(url.split(',').last),
-                          fit: BoxFit.contain,
-                        )
-                      : Image.network(
-                          url,
-                          fit: BoxFit.contain,
-                          loadingBuilder: (ctx, child, progress) {
-                            if (progress == null) return child;
-                            return const Center(
-                              child: SizedBox(
-                                width: 24,
-                                height: 24,
-                                child: CircularProgressIndicator(
-                                  strokeWidth: 2,
-                                  color: AppColors.primary,
-                                ),
-                              ),
-                            );
-                          },
-                          errorBuilder: (_, __, ___) => Center(
-                            child: Column(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                const Icon(Icons.broken_image_rounded,
-                                    size: 32, color: Color(0xFFCBD5E1)),
-                                const SizedBox(height: 6),
-                                Text(
-                                  'Image unavailable',
-                                  style: GoogleFonts.inter(
-                                    fontSize: 11,
-                                    color: const Color(0xFF94A3B8),
+                  : Stack(
+                      fit: StackFit.expand,
+                      children: [
+                        url.startsWith('data:image')
+                            ? Image.memory(
+                                base64Decode(url.split(',').last),
+                                fit: BoxFit.contain,
+                              )
+                            : Image.network(
+                                url,
+                                fit: BoxFit.contain,
+                                loadingBuilder: (ctx, child, progress) {
+                                  if (progress == null) return child;
+                                  return const Center(
+                                    child: SizedBox(
+                                      width: 24,
+                                      height: 24,
+                                      child: CircularProgressIndicator(
+                                        strokeWidth: 2,
+                                        color: AppColors.primary,
+                                      ),
+                                    ),
+                                  );
+                                },
+                                errorBuilder: (_, __, ___) => Center(
+                                  child: Column(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      const Icon(Icons.broken_image_rounded,
+                                          size: 32, color: Color(0xFFCBD5E1)),
+                                      const SizedBox(height: 6),
+                                      Text(
+                                        'Image unavailable',
+                                        style: GoogleFonts.inter(
+                                          fontSize: 11,
+                                          color: const Color(0xFF94A3B8),
+                                        ),
+                                      ),
+                                    ],
                                   ),
                                 ),
-                              ],
-                            ),
-                          ),
-                        ),
+                              ),
+                        const IdWatermarkOverlay(showBadge: false),
+                      ],
+                    ),
             ),
           ),
         ],
@@ -1294,15 +1301,43 @@ class UserActionHandler {
                     panEnabled: true,
                     minScale: 0.5,
                     maxScale: 4.0,
-                    child: url.startsWith('data:image')
-                        ? Image.memory(
-                            base64Decode(url.split(',').last),
-                            fit: BoxFit.contain,
-                          )
-                        : Image.network(
-                            url,
-                            fit: BoxFit.contain,
-                          ),
+                    child: Stack(
+                      alignment: Alignment.center,
+                      children: [
+                        url.startsWith('data:image')
+                            ? Image.memory(
+                                base64Decode(url.split(',').last),
+                                fit: BoxFit.contain,
+                              )
+                            : Image.network(
+                                url,
+                                fit: BoxFit.contain,
+                                loadingBuilder: (ctx, child, progress) {
+                                  if (progress == null) return child;
+                                  return const Center(
+                                    child: SizedBox(
+                                      width: 32,
+                                      height: 32,
+                                      child: CircularProgressIndicator(
+                                        strokeWidth: 2,
+                                        color: AppColors.primary,
+                                      ),
+                                    ),
+                                  );
+                                },
+                                errorBuilder: (_, __, ___) => const Center(
+                                  child: Icon(
+                                    Icons.broken_image_rounded,
+                                    size: 40,
+                                    color: Colors.white54,
+                                  ),
+                                ),
+                              ),
+                        const Positioned.fill(
+                          child: IdWatermarkOverlay(showBadge: false),
+                        ),
+                      ],
+                    ),
                   ),
                 ),
               ),
@@ -1313,3 +1348,4 @@ class UserActionHandler {
     );
   }
 }
+

@@ -252,7 +252,7 @@ class PetDemographicsDonutCharts extends StatelessWidget {
           ),
           const SizedBox(height: 1),
           Text(
-            'Safety, incident, and archive breakdown',
+            'Safety, incident, and de-active breakdown',
             style: GoogleFonts.inter(
               fontSize: 10.5,
               color: const Color(0xFF64748B),
@@ -300,7 +300,7 @@ class PetDemographicsDonutCharts extends StatelessWidget {
                               ),
                               PieChartSectionData(
                                 color:
-                                    const Color(0xFF94A3B8), // Slate Archived
+                                    const Color(0xFF94A3B8), // Slate De-active
                                 value: archivedPetCount > 0
                                     ? archivedPetCount.toDouble()
                                     : 0.001,
@@ -337,7 +337,7 @@ class PetDemographicsDonutCharts extends StatelessWidget {
                             const SizedBox(height: 4),
                             _buildLegendRow(
                               color: const Color(0xFF94A3B8),
-                              label: 'Archived',
+                              label: 'De-active',
                               count: archivedPetCount,
                             ),
                           ],

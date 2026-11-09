@@ -37,6 +37,26 @@ class _UserManagementScreenState extends State<UserManagementScreen> {
   bool _isLoading = true;
   String _adminBarangay = '';
   UserRole _currentUserRole = UserRole.user;
+  String _selectedBarangay = 'All';
+
+  List<String> get _availableBarangays {
+    final set = <String>{'All'};
+    for (final b in AppConstants.barangays) {
+      final trimmed = b.trim();
+      if (trimmed.isNotEmpty) set.add(trimmed);
+    }
+    for (final u in _citizenUsers) {
+      final b = (u['barangay'] ?? '').toString().trim();
+      if (b.isNotEmpty) set.add(b);
+    }
+    for (final a in _barangayAdmins) {
+      final b = (a['barangay'] ?? '').toString().trim();
+      if (b.isNotEmpty) set.add(b);
+    }
+    final sorted = set.where((e) => e != 'All').toList()
+      ..sort((a, b) => a.toLowerCase().compareTo(b.toLowerCase()));
+    return ['All', ...sorted];
+  }
 
 
   int _selectedUserTypeTab = 0; // 0 = Citizen Users, 1 = Barangay Admins
@@ -161,6 +181,12 @@ class _UserManagementScreenState extends State<UserManagementScreen> {
             barangay.contains(q);
       }).toList();
     }
+    if (_currentUserRole == UserRole.superAdmin && _selectedBarangay != 'All') {
+      list = list.where((u) {
+        final b = (u['barangay'] ?? '').toString().trim().toLowerCase();
+        return b == _selectedBarangay.toLowerCase();
+      }).toList();
+    }
     return list;
   }
 
@@ -200,6 +226,12 @@ class _UserManagementScreenState extends State<UserManagementScreen> {
             sName.contains(q) ||
             email.contains(q) ||
             barangay.contains(q);
+      }).toList();
+    }
+    if (_currentUserRole == UserRole.superAdmin && _selectedBarangay != 'All') {
+      list = list.where((u) {
+        final b = (u['barangay'] ?? '').toString().trim().toLowerCase();
+        return b == _selectedBarangay.toLowerCase();
       }).toList();
     }
     return list;
@@ -383,6 +415,9 @@ class _UserManagementScreenState extends State<UserManagementScreen> {
       filteredAdmins: _filteredAdmins,
       roleSegmentedSwitcher: _buildRoleSegmentedSwitcher(),
       searchBar: _buildSearchBar(),
+      barangayFilter: _currentUserRole == UserRole.superAdmin
+          ? _buildBarangayDropdown()
+          : null,
       filterPills: _buildFilterPills(),
       onRefresh: _fetchUsers,
       onShowAddAdminModal: _showAddAdminModal,
@@ -449,6 +484,10 @@ class _UserManagementScreenState extends State<UserManagementScreen> {
           _buildUsersSectionHeader(),
           const SizedBox(height: 14),
           _buildSearchBar(),
+          if (isSuperAdmin) ...[
+            const SizedBox(height: 10),
+            _buildBarangayDropdown(isCompact: true),
+          ],
           const SizedBox(height: 12),
           _buildFilterPills(),
           const SizedBox(height: 16),
@@ -480,6 +519,10 @@ class _UserManagementScreenState extends State<UserManagementScreen> {
           _buildAdminsSectionHeader(),
           const SizedBox(height: 14),
           _buildSearchBar(),
+          if (isSuperAdmin) ...[
+            const SizedBox(height: 10),
+            _buildBarangayDropdown(isCompact: true),
+          ],
           const SizedBox(height: 12),
           _buildFilterPills(),
           const SizedBox(height: 16),
@@ -530,7 +573,11 @@ class _UserManagementScreenState extends State<UserManagementScreen> {
             Row(
               children: [
                 Expanded(child: _buildSearchBar()),
-                const SizedBox(width: 16),
+                if (isSuperAdmin) ...[
+                  const SizedBox(width: 14),
+                  _buildBarangayDropdown(),
+                ],
+                const SizedBox(width: 14),
                 _buildFilterPills(),
               ],
             ),
@@ -566,7 +613,11 @@ class _UserManagementScreenState extends State<UserManagementScreen> {
             Row(
               children: [
                 Expanded(child: _buildSearchBar()),
-                const SizedBox(width: 16),
+                if (isSuperAdmin) ...[
+                  const SizedBox(width: 14),
+                  _buildBarangayDropdown(),
+                ],
+                const SizedBox(width: 14),
                 _buildFilterPills(),
               ],
             ),
@@ -823,6 +874,83 @@ class _UserManagementScreenState extends State<UserManagementScreen> {
             ),
           );
         },
+      ),
+    );
+  }
+
+  Widget _buildBarangayDropdown({bool isCompact = false}) {
+    final barangays = _availableBarangays;
+    final currentSelection =
+        barangays.contains(_selectedBarangay) ? _selectedBarangay : 'All';
+
+    final activeColor = _selectedUserTypeTab == 1
+        ? const Color(0xFF00796B)
+        : AppColors.primary;
+
+    return Container(
+      height: 38,
+      padding: const EdgeInsets.symmetric(horizontal: 12),
+      decoration: BoxDecoration(
+        color: AppColors.surfaceContainerHigh,
+        borderRadius: BorderRadius.circular(999),
+        border: Border.all(
+          color: _selectedBarangay != 'All'
+              ? activeColor.withOpacity(0.5)
+              : AppColors.outlineVariant.withOpacity(0.2),
+        ),
+      ),
+      child: DropdownButtonHideUnderline(
+        child: DropdownButton<String>(
+          value: currentSelection,
+          icon: const Icon(
+            Icons.arrow_drop_down_rounded,
+            color: AppColors.onSurfaceVariant,
+            size: 20,
+          ),
+          borderRadius: BorderRadius.circular(16),
+          dropdownColor: Colors.white,
+          isDense: true,
+          style: GoogleFonts.inter(
+            fontSize: 12,
+            fontWeight: FontWeight.w600,
+            color: _selectedBarangay != 'All'
+                ? activeColor
+                : AppColors.onSurfaceVariant,
+          ),
+          items: barangays.map((b) {
+            return DropdownMenuItem<String>(
+              value: b,
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(
+                    Icons.location_on_rounded,
+                    size: 14,
+                    color: b == 'All'
+                        ? AppColors.onSurfaceVariant
+                        : activeColor,
+                  ),
+                  const SizedBox(width: 6),
+                  Text(
+                    b == 'All' ? 'All Barangays' : b,
+                    style: GoogleFonts.inter(
+                      fontSize: 12,
+                      fontWeight: b == currentSelection
+                          ? FontWeight.w700
+                          : FontWeight.w500,
+                      color: AppColors.onSurface,
+                    ),
+                  ),
+                ],
+              ),
+            );
+          }).toList(),
+          onChanged: (val) {
+            if (val != null) {
+              setState(() => _selectedBarangay = val);
+            }
+          },
+        ),
       ),
     );
   }

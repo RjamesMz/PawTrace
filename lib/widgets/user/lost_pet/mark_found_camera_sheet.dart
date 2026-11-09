@@ -1,6 +1,6 @@
+import 'dart:convert';
 import 'dart:io';
 import 'dart:math';
-import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:image_picker/image_picker.dart';
@@ -9,32 +9,55 @@ import '../../../core/app_colors.dart';
 import '../../../core/app_toast.dart';
 import '../../../services/ai/pet_embedding_service.dart';
 
+/// Result returned when a user successfully captures and confirms a found pet.
+class MarkFoundResult {
+  final String photoUrl;
+  final double? similarity;
+  final bool appearanceChanged;
+  final String? changeReason;
+
+  const MarkFoundResult({
+    required this.photoUrl,
+    this.similarity,
+    this.appearanceChanged = false,
+    this.changeReason,
+  });
+}
+
 /// Modal bottom sheet allowing an owner to capture or pick a proof photo
 /// of their found pet before marking the report as resolved/found.
 class MarkFoundCameraSheet extends StatefulWidget {
   final String petName;
   final String reportId;
+  final Map<String, dynamic>? petData;
+  final dynamic petId;
 
   const MarkFoundCameraSheet({
     super.key,
     required this.petName,
     required this.reportId,
+    this.petData,
+    this.petId,
   });
 
-  /// Displays the sheet and returns the uploaded public URL of the found photo,
-  /// or null if the user dismissed or cancelled.
-  static Future<String?> show(
+  /// Displays the sheet and returns the MarkFoundResult with photo URL, similarity,
+  /// and appearance change confirmations, or null if cancelled.
+  static Future<MarkFoundResult?> show(
     BuildContext context, {
     required String petName,
     required String reportId,
+    Map<String, dynamic>? petData,
+    dynamic petId,
   }) {
-    return showModalBottomSheet<String>(
+    return showModalBottomSheet<MarkFoundResult>(
       context: context,
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
       builder: (ctx) => MarkFoundCameraSheet(
         petName: petName,
         reportId: reportId,
+        petData: petData,
+        petId: petId,
       ),
     );
   }
@@ -53,7 +76,72 @@ class _MarkFoundCameraSheetState extends State<MarkFoundCameraSheet> {
   bool _isValidatingAi = false;
   bool? _isPetDetected;
   String? _detectedSpecies;
-  double? _detectedConfidence;
+  String? _aiServerError;
+
+  // Similarity & Changed Appearance State
+  List<double>? _targetEmbedding;
+  double? _similarity;
+  bool _isHighMatch = false;
+  bool _isAppearanceChanged = false;
+  bool _isMismatch = false;
+  bool _confirmedAppearanceChanged = false;
+  String? _selectedReason;
+
+  @override
+  void initState() {
+    super.initState();
+    _resolveTargetEmbedding();
+  }
+
+  Future<void> _resolveTargetEmbedding() async {
+    // 1. Check if embedding is present in widget.petData
+    final rawEmb = widget.petData?['embedding'];
+    if (rawEmb != null) {
+      _targetEmbedding = _parseEmbedding(rawEmb);
+    }
+
+    // 2. If null, fetch from database using petId or reportId
+    if (_targetEmbedding == null) {
+      try {
+        String? petId = (widget.petId ?? widget.petData?['pet_id'])?.toString();
+        if (petId == null || petId.isEmpty) {
+          final rep = await Supabase.instance.client
+              .from('lost_reports')
+              .select('pet_id, photo_url')
+              .eq('report_id', widget.reportId)
+              .maybeSingle();
+          petId = rep?['pet_id']?.toString();
+        }
+
+        if (petId != null && petId.isNotEmpty) {
+          final petRow = await Supabase.instance.client
+              .from('pets')
+              .select('embedding, photo_url')
+              .eq('pet_id', widget.petId ?? widget.petData?['pet_id'] ?? petId)
+              .maybeSingle();
+          if (petRow != null && petRow['embedding'] != null) {
+            _targetEmbedding = _parseEmbedding(petRow['embedding']);
+          }
+        }
+      } catch (e) {
+        debugPrint('[MarkFound] Error resolving pet embedding: $e');
+      }
+    }
+  }
+
+  List<double>? _parseEmbedding(dynamic raw) {
+    if (raw is List) {
+      return raw.map((e) => (e as num).toDouble()).toList();
+    } else if (raw is String && raw.isNotEmpty) {
+      try {
+        final decoded = jsonDecode(raw);
+        if (decoded is List) {
+          return decoded.map((e) => (e as num).toDouble()).toList();
+        }
+      } catch (_) {}
+    }
+    return null;
+  }
 
   Future<void> _pickPhoto(ImageSource source) async {
     try {
@@ -69,7 +157,13 @@ class _MarkFoundCameraSheetState extends State<MarkFoundCameraSheet> {
           _capturedImage = file;
           _isPetDetected = null;
           _detectedSpecies = null;
-          _detectedConfidence = null;
+          _aiServerError = null;
+          _similarity = null;
+          _isHighMatch = false;
+          _isAppearanceChanged = false;
+          _isMismatch = false;
+          _confirmedAppearanceChanged = false;
+          _selectedReason = null;
           _isValidatingAi = true;
         });
 
@@ -84,46 +178,102 @@ class _MarkFoundCameraSheetState extends State<MarkFoundCameraSheet> {
   }
 
   Future<void> _verifyPhotoWithAi(File file) async {
-    setState(() => _isValidatingAi = true);
+    setState(() {
+      _isValidatingAi = true;
+      _aiServerError = null;
+    });
     try {
-      if (kIsWeb) {
-        setState(() {
-          _isPetDetected = true;
-          _isValidatingAi = false;
-        });
-        return;
-      }
-
+      // Step 1: Detect species (Dog or Cat)
       final detected =
           await PetEmbeddingService.instance.detectSpecies(file);
       final isAccepted = detected['isAccepted'] == true;
       final isDog = detected['isDog'] == true;
       final isCat = detected['isCat'] == true;
-      final conf = (detected['confidence'] as num?)?.toDouble() ?? 0.0;
       final species =
           isDog ? 'Dog' : (isCat ? 'Cat' : (detected['species']?.toString() ?? ''));
 
-      if (!mounted) return;
-      setState(() {
-        _isPetDetected = isAccepted && (isDog || isCat);
-        _detectedSpecies = species;
-        _detectedConfidence = conf;
-        _isValidatingAi = false;
-      });
-
-      if (!_isPetDetected!) {
+      if (!isAccepted || (!isDog && !isCat)) {
+        if (!mounted) return;
+        setState(() {
+          _isPetDetected = false;
+          _detectedSpecies = species;
+          _isValidatingAi = false;
+        });
         AppToast.error(
           context,
           'No pet detected! Please capture a clear photo of your recovered pet.',
         );
+        return;
       }
+
+      _isPetDetected = true;
+      _detectedSpecies = species;
+
+      // Step 2: Extract embedding of newly captured photo
+      if (_targetEmbedding == null) {
+        await _resolveTargetEmbedding();
+      }
+      final newEmbedding =
+          await PetEmbeddingService.instance.extractEmbedding(file);
+      if (newEmbedding == null) {
+        if (!mounted) return;
+        setState(() {
+          _isValidatingAi = false;
+          _isPetDetected = null;
+          _isHighMatch = false;
+          _aiServerError =
+              'Failed to extract biometric features from photo. Please retry or take a clearer photo.';
+        });
+        AppToast.error(context, _aiServerError!);
+        return;
+      }
+
+      // Step 3: Compare with registered pet embedding
+      if (_targetEmbedding != null && _targetEmbedding!.isNotEmpty) {
+        final sim = PetEmbeddingService.cosineSimilarity(
+            newEmbedding, _targetEmbedding!);
+        final clampedSim = sim.clamp(0.0, 1.0);
+        _similarity = clampedSim;
+
+        if (clampedSim >= 0.75) {
+          _isHighMatch = true;
+          _isAppearanceChanged = false;
+          _isMismatch = false;
+        } else if (clampedSim >= 0.45) {
+          _isHighMatch = false;
+          _isAppearanceChanged = true;
+          _isMismatch = false;
+        } else {
+          _isHighMatch = false;
+          _isAppearanceChanged = false;
+          _isMismatch = true;
+        }
+      } else {
+        // Fallback: If pet had no precomputed embedding in DB, allow species match
+        _isHighMatch = true;
+        _similarity = null;
+      }
+
+      if (!mounted) return;
+      setState(() {
+        _isValidatingAi = false;
+      });
     } catch (e) {
       debugPrint('[MarkFound] AI verification error: $e');
       if (!mounted) return;
       setState(() {
         _isValidatingAi = false;
         _isPetDetected = null;
+        _isHighMatch = false;
+        _isAppearanceChanged = false;
+        _isMismatch = false;
+        _aiServerError =
+            'Could not connect to the AI verification server. It may be offline. Please try again.';
       });
+      AppToast.error(
+        context,
+        'AI server is unreachable. Verification is required before marking as found.',
+      );
     }
   }
 
@@ -244,6 +394,16 @@ class _MarkFoundCameraSheetState extends State<MarkFoundCameraSheet> {
     );
   }
 
+  bool get _canSubmit {
+    if (_capturedImage == null) return false;
+    if (_isUploading || _isValidatingAi) return false;
+    if (_aiServerError != null) return false;
+    if (_isPetDetected != true) return false;
+    if (_isMismatch) return false;
+    if (_isAppearanceChanged && !_confirmedAppearanceChanged) return false;
+    return true;
+  }
+
   Future<void> _confirmAndUpload() async {
     if (_capturedImage == null) {
       AppToast.error(
@@ -251,47 +411,21 @@ class _MarkFoundCameraSheetState extends State<MarkFoundCameraSheet> {
       return;
     }
 
-    // Strict AI validation check: only allow confirmed pets!
-    if (!kIsWeb) {
-      if (_isValidatingAi) {
-        AppToast.info(context, 'Please wait, AI is analyzing your photo…');
-        return;
+    if (!_canSubmit) {
+      if (_aiServerError != null) {
+        await _verifyPhotoWithAi(_capturedImage!);
+      } else if (_isMismatch) {
+        AppToast.error(
+          context,
+          'This photo does not match ${widget.petName} (< 45% similarity). Please retake a photo of your pet.',
+        );
+      } else if (_isAppearanceChanged && !_confirmedAppearanceChanged) {
+        AppToast.info(
+          context,
+          'Please confirm your pet\'s appearance change below before submitting.',
+        );
       }
-
-      if (_isPetDetected == false) {
-        await _showNotAPetDialog();
-        return;
-      }
-
-      // If AI check hasn't run yet, run it now before uploading
-      if (_isPetDetected == null) {
-        setState(() {
-          _isUploading = true;
-          _uploadStatusText = 'Verifying pet with AI…';
-        });
-
-        try {
-          final detected = await PetEmbeddingService.instance
-              .detectSpecies(_capturedImage!);
-          final isAccepted = detected['isAccepted'] == true;
-          final isDog = detected['isDog'] == true;
-          final isCat = detected['isCat'] == true;
-
-          if (!isAccepted || (!isDog && !isCat)) {
-            setState(() {
-              _isUploading = false;
-              _isPetDetected = false;
-            });
-            await _showNotAPetDialog();
-            return;
-          }
-
-          _isPetDetected = true;
-          _detectedSpecies = isDog ? 'Dog' : 'Cat';
-        } catch (e) {
-          debugPrint('[MarkFound] Verification warning: $e');
-        }
-      }
+      return;
     }
 
     setState(() {
@@ -312,7 +446,15 @@ class _MarkFoundCameraSheetState extends State<MarkFoundCameraSheet> {
       final publicUrl = storage.getPublicUrl(fileName);
 
       if (!mounted) return;
-      Navigator.pop(context, publicUrl);
+      Navigator.pop(
+        context,
+        MarkFoundResult(
+          photoUrl: publicUrl,
+          similarity: _similarity,
+          appearanceChanged: _isAppearanceChanged,
+          changeReason: _selectedReason,
+        ),
+      );
     } catch (e) {
       if (!mounted) return;
       setState(() => _isUploading = false);
@@ -325,6 +467,9 @@ class _MarkFoundCameraSheetState extends State<MarkFoundCameraSheet> {
     final bottomInset = MediaQuery.of(context).viewInsets.bottom;
 
     return Container(
+      constraints: BoxConstraints(
+        maxHeight: MediaQuery.of(context).size.height * 0.90,
+      ),
       padding: EdgeInsets.fromLTRB(20, 16, 20, 20 + bottomInset),
       decoration: const BoxDecoration(
         color: Colors.white,
@@ -332,10 +477,11 @@ class _MarkFoundCameraSheetState extends State<MarkFoundCameraSheet> {
       ),
       child: SafeArea(
         top: false,
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.center,
-          children: [
+        child: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.center,
+            children: [
             // Drag handle
             Container(
               width: 44,
@@ -436,26 +582,26 @@ class _MarkFoundCameraSheetState extends State<MarkFoundCameraSheet> {
                 Container(
                   margin: const EdgeInsets.only(top: 10),
                   padding:
-                      const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                      const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
                   decoration: BoxDecoration(
                     color: const Color(0xFFF1F5F9),
-                    borderRadius: BorderRadius.circular(12),
+                    borderRadius: BorderRadius.circular(14),
                     border: Border.all(color: const Color(0xFFCBD5E1)),
                   ),
                   child: Row(
                     children: [
                       const SizedBox(
-                        width: 16,
-                        height: 16,
+                        width: 18,
+                        height: 18,
                         child: CircularProgressIndicator(
                           strokeWidth: 2,
                           color: AppColors.primary,
                         ),
                       ),
-                      const SizedBox(width: 10),
+                      const SizedBox(width: 12),
                       Expanded(
                         child: Text(
-                          'AI scanning photo for pet verification…',
+                          'AI analyzing pet features & calculating match…',
                           style: GoogleFonts.inter(
                             fontSize: 12,
                             fontWeight: FontWeight.w600,
@@ -466,28 +612,28 @@ class _MarkFoundCameraSheetState extends State<MarkFoundCameraSheet> {
                     ],
                   ),
                 ),
-              ] else if (_isPetDetected == true) ...[
+              ] else if (_aiServerError != null) ...[
                 Container(
                   margin: const EdgeInsets.only(top: 10),
                   padding:
-                      const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                      const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
                   decoration: BoxDecoration(
-                    color: const Color(0xFFF0FDF4),
-                    borderRadius: BorderRadius.circular(12),
-                    border: Border.all(color: const Color(0xFF86EFAC)),
+                    color: const Color(0xFFFEF2F2),
+                    borderRadius: BorderRadius.circular(14),
+                    border: Border.all(color: const Color(0xFFFCA5A5)),
                   ),
                   child: Row(
                     children: [
-                      const Icon(Icons.check_circle_rounded,
-                          color: Color(0xFF16A34A), size: 18),
+                      const Icon(Icons.cloud_off_rounded,
+                          color: Color(0xFFDC2626), size: 20),
                       const SizedBox(width: 10),
                       Expanded(
                         child: Text(
-                          ' Pet Verified (${_detectedSpecies ?? "Pet"}${_detectedConfidence != null && _detectedConfidence! > 0 ? " · ${(_detectedConfidence! * 100).round()}%" : ""}) · Valid recovery proof',
+                          _aiServerError!,
                           style: GoogleFonts.inter(
                             fontSize: 12,
                             fontWeight: FontWeight.w700,
-                            color: const Color(0xFF15803D),
+                            color: const Color(0xFFB91C1C),
                           ),
                         ),
                       ),
@@ -498,16 +644,16 @@ class _MarkFoundCameraSheetState extends State<MarkFoundCameraSheet> {
                 Container(
                   margin: const EdgeInsets.only(top: 10),
                   padding:
-                      const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                      const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
                   decoration: BoxDecoration(
                     color: const Color(0xFFFEF2F2),
-                    borderRadius: BorderRadius.circular(12),
+                    borderRadius: BorderRadius.circular(14),
                     border: Border.all(color: const Color(0xFFFCA5A5)),
                   ),
                   child: Row(
                     children: [
                       const Icon(Icons.cancel_rounded,
-                          color: Color(0xFFDC2626), size: 18),
+                          color: Color(0xFFDC2626), size: 20),
                       const SizedBox(width: 10),
                       Expanded(
                         child: Text(
@@ -522,6 +668,259 @@ class _MarkFoundCameraSheetState extends State<MarkFoundCameraSheet> {
                     ],
                   ),
                 ),
+              ] else if (_isPetDetected == true) ...[
+                // Tier 1: High Similarity Match (>= 75%)
+                if (_isHighMatch) ...[
+                  Container(
+                    margin: const EdgeInsets.only(top: 10),
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 14, vertical: 12),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFF0FDF4),
+                      borderRadius: BorderRadius.circular(14),
+                      border: Border.all(color: const Color(0xFF86EFAC)),
+                    ),
+                    child: Row(
+                      children: [
+                        Container(
+                          padding: const EdgeInsets.all(6),
+                          decoration: const BoxDecoration(
+                            color: Color(0xFFDCFCE7),
+                            shape: BoxShape.circle,
+                          ),
+                          child: const Icon(Icons.verified_rounded,
+                              color: Color(0xFF16A34A), size: 20),
+                        ),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                _similarity != null
+                                    ? 'High AI Match: ${(_similarity! * 100).toStringAsFixed(1)}% Verified'
+                                    : 'Pet Verified (${_detectedSpecies ?? "Pet"})',
+                                style: GoogleFonts.montserrat(
+                                  fontSize: 13,
+                                  fontWeight: FontWeight.w700,
+                                  color: const Color(0xFF15803D),
+                                ),
+                              ),
+                              const SizedBox(height: 2),
+                              Text(
+                                'Meets 75%+ requirement. Confirmed match for ${widget.petName}\'s registered features.',
+                                style: GoogleFonts.inter(
+                                  fontSize: 11.5,
+                                  color: const Color(0xFF166534),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ]
+                // Tier 2: Changed Appearance (45% - 74%)
+                else if (_isAppearanceChanged) ...[
+                  Container(
+                    margin: const EdgeInsets.only(top: 10),
+                    padding: const EdgeInsets.all(14),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFFFFBEB),
+                      borderRadius: BorderRadius.circular(16),
+                      border: Border.all(color: const Color(0xFFFCD34D)),
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          children: [
+                            Container(
+                              padding: const EdgeInsets.all(6),
+                              decoration: const BoxDecoration(
+                                color: Color(0xFFFEF3C7),
+                                shape: BoxShape.circle,
+                              ),
+                              child: const Icon(Icons.help_outline_rounded,
+                                  color: Color(0xFFD97706), size: 20),
+                            ),
+                            const SizedBox(width: 10),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    'Similarity: ${(_similarity! * 100).toStringAsFixed(1)}% · Below 75% Threshold',
+                                    style: GoogleFonts.montserrat(
+                                      fontSize: 12.5,
+                                      fontWeight: FontWeight.w700,
+                                      color: const Color(0xFFB45309),
+                                    ),
+                                  ),
+                                  Text(
+                                    'Has ${widget.petName}\'s appearance changed while missing?',
+                                    style: GoogleFonts.inter(
+                                      fontSize: 11.5,
+                                      color: const Color(0xFF92400E),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 10),
+                        // Confirmation Checkbox
+                        InkWell(
+                          onTap: () {
+                            setState(() {
+                              _confirmedAppearanceChanged =
+                                  !_confirmedAppearanceChanged;
+                            });
+                          },
+                          borderRadius: BorderRadius.circular(8),
+                          child: Padding(
+                            padding: const EdgeInsets.symmetric(vertical: 4),
+                            child: Row(
+                              children: [
+                                SizedBox(
+                                  width: 24,
+                                  height: 24,
+                                  child: Checkbox(
+                                    value: _confirmedAppearanceChanged,
+                                    activeColor: const Color(0xFFD97706),
+                                    shape: RoundedRectangleBorder(
+                                      borderRadius: BorderRadius.circular(4),
+                                    ),
+                                    onChanged: (val) {
+                                      setState(() =>
+                                          _confirmedAppearanceChanged =
+                                              val ?? false);
+                                    },
+                                  ),
+                                ),
+                                const SizedBox(width: 8),
+                                Expanded(
+                                  child: Text(
+                                    'I confirm this is my pet whose appearance changed',
+                                    style: GoogleFonts.inter(
+                                      fontSize: 12,
+                                      fontWeight: FontWeight.w700,
+                                      color: const Color(0xFF78350F),
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                        // Quick Reason Chips
+                        if (_confirmedAppearanceChanged) ...[
+                          const SizedBox(height: 8),
+                          Text(
+                            'Select primary reason (optional):',
+                            style: GoogleFonts.inter(
+                              fontSize: 11,
+                              color: const Color(0xFF92400E),
+                              fontWeight: FontWeight.w500,
+                            ),
+                          ),
+                          const SizedBox(height: 6),
+                          Wrap(
+                            spacing: 6,
+                            runSpacing: 6,
+                            children: [
+                              'Lost Weight',
+                              'Muddy / Dirty Fur',
+                              'Shaved / Groomed',
+                              'Injured / Bandaged',
+                              'Dark / Flash Lighting',
+                            ].map((reason) {
+                              final isSel = _selectedReason == reason;
+                              return ChoiceChip(
+                                label: Text(reason),
+                                selected: isSel,
+                                selectedColor: const Color(0xFFFDE68A),
+                                backgroundColor: Colors.white,
+                                labelStyle: GoogleFonts.inter(
+                                  fontSize: 11,
+                                  fontWeight: isSel
+                                      ? FontWeight.w700
+                                      : FontWeight.w500,
+                                  color: isSel
+                                      ? const Color(0xFF78350F)
+                                      : const Color(0xFF92400E),
+                                ),
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(12),
+                                  side: BorderSide(
+                                    color: isSel
+                                        ? const Color(0xFFD97706)
+                                        : const Color(0xFFFCD34D),
+                                  ),
+                                ),
+                                onSelected: (selected) {
+                                  setState(() => _selectedReason =
+                                      selected ? reason : null);
+                                },
+                              );
+                            }).toList(),
+                          ),
+                        ],
+                      ],
+                    ),
+                  ),
+                ]
+                // Tier 3: Mismatch (< 45%)
+                else if (_isMismatch) ...[
+                  Container(
+                    margin: const EdgeInsets.only(top: 10),
+                    padding: const EdgeInsets.all(14),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFFEF2F2),
+                      borderRadius: BorderRadius.circular(16),
+                      border: Border.all(color: const Color(0xFFFCA5A5)),
+                    ),
+                    child: Row(
+                      children: [
+                        Container(
+                          padding: const EdgeInsets.all(6),
+                          decoration: const BoxDecoration(
+                            color: Color(0xFFFEE2E2),
+                            shape: BoxShape.circle,
+                          ),
+                          child: const Icon(Icons.error_outline_rounded,
+                              color: Color(0xFFDC2626), size: 20),
+                        ),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                'Mismatch: ${(_similarity! * 100).toStringAsFixed(1)}% Similarity',
+                                style: GoogleFonts.montserrat(
+                                  fontSize: 13,
+                                  fontWeight: FontWeight.w700,
+                                  color: const Color(0xFF991B1B),
+                                ),
+                              ),
+                              const SizedBox(height: 2),
+                              Text(
+                                'This photo does not match ${widget.petName} (< 45% similarity). Please retake a photo of your actual pet.',
+                                style: GoogleFonts.inter(
+                                  fontSize: 11.5,
+                                  color: const Color(0xFFB91C1C),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
               ],
               const SizedBox(height: 16),
             ] else ...[
@@ -618,7 +1017,11 @@ class _MarkFoundCameraSheetState extends State<MarkFoundCameraSheet> {
                       : Icon(
                           _isPetDetected == false
                               ? Icons.block_rounded
-                              : Icons.check_circle_rounded,
+                              : (_aiServerError != null
+                                  ? Icons.refresh_rounded
+                                  : (_canSubmit
+                                      ? Icons.check_circle_rounded
+                                      : Icons.info_outline_rounded)),
                           size: 20,
                         ),
                   label: Text(
@@ -626,20 +1029,37 @@ class _MarkFoundCameraSheetState extends State<MarkFoundCameraSheet> {
                         ? (_uploadStatusText ?? 'Uploading…')
                         : _isValidatingAi
                             ? 'Analyzing Photo…'
-                            : _isPetDetected == false
-                                ? 'Invalid Photo (No Pet Detected)'
-                                : 'Confirm & Mark as Found',
+                            : _aiServerError != null
+                                ? 'AI Server Offline · Tap to Retry'
+                                : _isPetDetected == false
+                                    ? 'Invalid Photo (No Pet Detected)'
+                                    : _isMismatch
+                                        ? 'Mismatch (< 45% Similarity) · Please Retake'
+                                        : (_isAppearanceChanged &&
+                                                !_confirmedAppearanceChanged)
+                                            ? 'Confirm Appearance Change to Proceed'
+                                            : 'Confirm & Mark as Found',
                     style: GoogleFonts.montserrat(
-                      fontSize: 15,
+                      fontSize: 14,
                       fontWeight: FontWeight.w700,
                     ),
                   ),
                   style: ElevatedButton.styleFrom(
-                    backgroundColor: _isPetDetected == false
+                    backgroundColor: (_isPetDetected == false ||
+                            _isMismatch ||
+                            _aiServerError != null)
                         ? const Color(0xFFEF4444)
-                        : const Color(0xFF16A34A),
+                        : (_canSubmit
+                            ? const Color(0xFF16A34A)
+                            : const Color(0xFFD97706)),
                     foregroundColor: Colors.white,
-                    elevation: 2,
+                    disabledBackgroundColor: _isMismatch
+                        ? const Color(0xFFFCA5A5)
+                        : const Color(0xFFE2E8F0),
+                    disabledForegroundColor: _isMismatch
+                        ? const Color(0xFF7F1D1D)
+                        : const Color(0xFF94A3B8),
+                    elevation: _canSubmit ? 2 : 0,
                     shape: RoundedRectangleBorder(
                       borderRadius: BorderRadius.circular(16),
                     ),
@@ -665,7 +1085,8 @@ class _MarkFoundCameraSheetState extends State<MarkFoundCameraSheet> {
                 ),
               ),
             ),
-          ],
+            ],
+          ),
         ),
       ),
     );

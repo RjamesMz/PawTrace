@@ -9,12 +9,14 @@ class FileExportIo implements FileExportPlatform {
     final dir = await getTemporaryDirectory();
     final file = File('${dir.path}/$filename');
     await file.writeAsBytes(bytes, flush: true);
+    final mimeType = filename.toLowerCase().endsWith('.pdf')
+        ? 'application/pdf'
+        : 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
     await Share.shareXFiles(
       [
         XFile(
           file.path,
-          mimeType:
-              'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+          mimeType: mimeType,
         )
       ],
       subject: filename,

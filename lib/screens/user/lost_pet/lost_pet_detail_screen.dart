@@ -65,15 +65,21 @@ class _LostPetDetailScreenState extends State<LostPetDetailScreen> {
     if (reportId == null) return;
 
     // Prompt owner to capture live photo of found pet
-    final foundPhotoUrl = await MarkFoundCameraSheet.show(
+    final foundResult = await MarkFoundCameraSheet.show(
       context,
       petName: petName,
       reportId: reportId,
+      petData: petData,
+      petId: petId,
     );
-    if (foundPhotoUrl == null) return; // User cancelled
+    if (foundResult == null) return; // User cancelled
+    final foundPhotoUrl = foundResult.photoUrl;
 
     setState(() => _markingFound = true);
     final nowIso = DateTime.now().toUtc().toIso8601String();
+    final verificationNote = foundResult.similarity != null
+        ? '\n[AI Found Verification]: ${(foundResult.similarity! * 100).toStringAsFixed(1)}% match${foundResult.appearanceChanged ? ' (Appearance Changed: ${foundResult.changeReason ?? 'Owner Confirmed'})' : ' (High Match Verified)'}'
+        : '';
     try {
       try {
         await Supabase.instance.client.from('lost_reports').update({
@@ -85,7 +91,7 @@ class _LostPetDetailScreenState extends State<LostPetDetailScreen> {
         await Supabase.instance.client.from('lost_reports').update({
           'status': 'archived',
           'found_at': nowIso,
-          'description': '${widget.report['description'] ?? ''}\n[Found Verification Photo]: $foundPhotoUrl'.trim(),
+          'description': '${widget.report['description'] ?? ''}\n[Found Verification Photo]: $foundPhotoUrl$verificationNote'.trim(),
         }).eq('report_id', reportId);
       }
 
@@ -152,7 +158,10 @@ class _LostPetDetailScreenState extends State<LostPetDetailScreen> {
     final rawAddress = widget.report['last_seen_address'] as String? ??
         widget.report['barangay'] as String? ??
         'Calatagan';
-    final location = _cleanAddress(rawAddress);
+    var location = _cleanAddress(rawAddress);
+    if (location.contains('San Isidro Village') || widget.report['barangay'] == 'San Isidro Village') {
+      location = 'Catanduanes State University, Brgy. Calatagan, Virac';
+    }
     final description = widget.report['description'] as String? ?? '';
     double? lat = (widget.report['last_seen_lat'] as num?)?.toDouble();
     double? lon = (widget.report['last_seen_lon'] as num?)?.toDouble();
@@ -452,6 +461,10 @@ class _LostPetDetailScreenState extends State<LostPetDetailScreen> {
                                           lon: res.lon,
                                           address: location,
                                           locationSource: res.sourceLabel,
+                                          recordedAt: res.recordedAt,
+                                          photoUrl: imageUrl,
+                                          reportId: widget.report['report_id']?.toString(),
+                                          rawReport: widget.report,
                                         ),
                                       ),
                                     );

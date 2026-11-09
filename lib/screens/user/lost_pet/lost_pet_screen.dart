@@ -6,6 +6,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../../core/app_colors.dart';
 import '../../../core/time_utils.dart';
 import '../../../widgets/user/lost_pet/lost_pet_card.dart';
+import 'all_lost_pets_map_screen.dart';
 
 export '../../../widgets/user/lost_pet/contact_owner_sheet.dart';
 export '../../../widgets/user/lost_pet/lost_pet_card.dart';
@@ -384,6 +385,18 @@ class _LostPetScreenState extends State<LostPetScreen> {
                         color: AppColors.onSurface)),
               ],
             ),
+          ),
+          IconButton(
+            onPressed: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (_) => const AllLostPetsMapScreen(),
+                ),
+              );
+            },
+            icon: const Icon(Icons.map_outlined, color: AppColors.primary),
+            tooltip: 'View all on map',
           ),
           IconButton(
               onPressed: _fetchLostPets,

@@ -4,9 +4,18 @@ import 'package:excel/excel.dart' hide Border;
 import '../../../core/app_colors.dart';
 import '../../../services/audit/pet_audit_service.dart';
 import '../../../services/export/file_export_service.dart';
+import '../../../services/export/pdf_export_service.dart';
 
-/// Helper to export filtered pets to an Excel (.xlsx) file.
+/// Helper to export filtered pets to a PDF or Excel file.
 class PetsExportService {
+  static Future<void> exportPetsToPdf(
+    BuildContext context,
+    List<Map<String, dynamic>> pets, {
+    String categoryLabel = 'All Pets',
+  }) async {
+    await PdfExportService.exportPetsToPdf(context, pets, categoryLabel: categoryLabel);
+  }
+
   static Future<void> exportPetsToExcel(
     BuildContext context,
     List<Map<String, dynamic>> pets,

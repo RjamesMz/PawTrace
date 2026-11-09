@@ -21,13 +21,47 @@ export '../../../widgets/admin/pets/pet_audit_log_dialog.dart';
 
 /// Admin Pet Detail screen – displays full pet details with admin actions
 /// (Mark as Lost, Remove Pet). Receives a pet Map via constructor.
+/// Can be rendered as a full-page route or as a modal dialog pop-up.
 class AdminPetDetailScreen extends StatefulWidget {
   final Map<String, dynamic> pet;
+  final bool isDialog;
+  final VoidCallback? onClose;
 
-  const AdminPetDetailScreen({super.key, required this.pet});
+  const AdminPetDetailScreen({
+    super.key,
+    required this.pet,
+    this.isDialog = false,
+    this.onClose,
+  });
 
   @override
   State<AdminPetDetailScreen> createState() => _AdminPetDetailScreenState();
+}
+
+/// Opens the Pet Details inside a modal pop-up without redirecting from the current page.
+Future<void> showAdminPetDetailsDialog(
+  BuildContext context,
+  Map<String, dynamic> pet, {
+  VoidCallback? onRefresh,
+}) async {
+  await showDialog(
+    context: context,
+    barrierDismissible: true,
+    builder: (ctx) => Dialog(
+      backgroundColor: Colors.transparent,
+      elevation: 0,
+      insetPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 24),
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 880),
+        child: AdminPetDetailScreen(
+          pet: pet,
+          isDialog: true,
+          onClose: () => Navigator.pop(ctx),
+        ),
+      ),
+    ),
+  );
+  onRefresh?.call();
 }
 
 class _AdminPetDetailScreenState extends State<AdminPetDetailScreen> {
@@ -231,6 +265,9 @@ class _AdminPetDetailScreenState extends State<AdminPetDetailScreen> {
         : 'Unknown';
     final ownerEmail = pet['users']?['email'] ?? '-';
     final ownerPhone = pet['users']?['phone'] ?? '-';
+    final petBarangay = pet['barangay']?.toString() ??
+        pet['users']?['barangay']?.toString() ??
+        '';
 
     // Format date of birth for display
     String dobDisplay = '-';
@@ -241,6 +278,170 @@ class _AdminPetDetailScreenState extends State<AdminPetDetailScreen> {
       } catch (_) {
         dobDisplay = dob.toString();
       }
+    }
+
+    final detailBody = _isUpdating
+        ? const Center(
+            child: Padding(
+              padding: EdgeInsets.symmetric(vertical: 60),
+              child: CircularProgressIndicator(color: AppColors.primary),
+            ),
+          )
+        : RefreshIndicator(
+            color: AppColors.primary,
+            onRefresh: _fetchLatestPet,
+            child: SingleChildScrollView(
+              physics: const AlwaysScrollableScrollPhysics(),
+              padding: EdgeInsets.fromLTRB(
+                20,
+                widget.isDialog ? 16 : 0,
+                20,
+                widget.isDialog ? 24 : 40,
+              ),
+              child: AdminContentWrapper(
+                maxWidth: 960,
+                child: LayoutBuilder(
+                  builder: (context, constraints) {
+                    final isWide = constraints.maxWidth >= 700 ||
+                        (!widget.isDialog && MediaQuery.of(context).size.width >= 900);
+                    if (isWide) {
+                      return _buildWideDetailLayout(
+                        photoUrl: photoUrl.toString(),
+                        name: name,
+                        breed: breed,
+                        species: species,
+                        status: rawStatus,
+                        dobDisplay: dobDisplay,
+                        weight: weight,
+                        color: color,
+                        collarId: collarId,
+                        ownerName: ownerName,
+                        ownerEmail: ownerEmail,
+                        ownerPhone: ownerPhone,
+                      );
+                    }
+                    return _buildNarrowDetailLayout(
+                      photoUrl: photoUrl.toString(),
+                      name: name,
+                      breed: breed,
+                      species: species,
+                      status: rawStatus,
+                      dobDisplay: dobDisplay,
+                      weight: weight,
+                      color: color,
+                      collarId: collarId,
+                      ownerName: ownerName,
+                      ownerEmail: ownerEmail,
+                      ownerPhone: ownerPhone,
+                    );
+                  },
+                ),
+              ),
+            ),
+          );
+
+    if (widget.isDialog) {
+      return Container(
+        constraints: BoxConstraints(
+          maxHeight: MediaQuery.of(context).size.height * 0.90,
+        ),
+        decoration: BoxDecoration(
+          color: AppColors.background,
+          borderRadius: BorderRadius.circular(20),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withOpacity(0.18),
+              blurRadius: 32,
+              offset: const Offset(0, 12),
+            ),
+          ],
+        ),
+        child: ClipRRect(
+          borderRadius: BorderRadius.circular(20),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              // Dialog Header Bar
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
+                decoration: const BoxDecoration(
+                  color: Colors.white,
+                  border: Border(bottom: BorderSide(color: Color(0xFFE2E8F0))),
+                ),
+                child: Row(
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.all(7),
+                      decoration: BoxDecoration(
+                        color: AppColors.primary.withOpacity(0.1),
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                      child: const Icon(
+                        Icons.pets_rounded,
+                        color: AppColors.primary,
+                        size: 20,
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Row(
+                            children: [
+                              Flexible(
+                                child: Text(
+                                  name,
+                                  style: GoogleFonts.montserrat(
+                                    fontSize: 17,
+                                    fontWeight: FontWeight.w700,
+                                    color: AppColors.onSurface,
+                                  ),
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                              ),
+                              const SizedBox(width: 8),
+                              AdminPetStatusBadge(rawStatus: rawStatus),
+                            ],
+                          ),
+                          const SizedBox(height: 2),
+                          Text(
+                            [
+                              if (species.isNotEmpty) species,
+                              if (breed.isNotEmpty) breed,
+                              if (petBarangay.isNotEmpty) 'Brgy. $petBarangay',
+                            ].join(' • '),
+                            style: GoogleFonts.inter(
+                              fontSize: 11.5,
+                              color: const Color(0xFF64748B),
+                            ),
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ],
+                      ),
+                    ),
+                    IconButton(
+                      icon: const Icon(Icons.history_rounded, color: AppColors.primary),
+                      tooltip: 'View Modification Audit Logs',
+                      onPressed: () => showPetAuditLogDialog(context, pet),
+                    ),
+                    const SizedBox(width: 4),
+                    IconButton(
+                      icon: const Icon(Icons.close_rounded, color: Color(0xFF64748B)),
+                      tooltip: 'Close',
+                      onPressed: widget.onClose ?? () => Navigator.of(context).pop(),
+                    ),
+                  ],
+                ),
+              ),
+              // Scrollable Detail Body
+              Flexible(
+                child: detailBody,
+              ),
+            ],
+          ),
+        ),
+      );
     }
 
     return Scaffold(
@@ -265,56 +466,7 @@ class _AdminPetDetailScreenState extends State<AdminPetDetailScreen> {
           ),
         ],
       ),
-      body: _isUpdating
-          ? const Center(
-              child: CircularProgressIndicator(color: AppColors.primary))
-          : RefreshIndicator(
-              color: AppColors.primary,
-              onRefresh: _fetchLatestPet,
-              child: SingleChildScrollView(
-                physics: const AlwaysScrollableScrollPhysics(),
-                padding: const EdgeInsets.fromLTRB(20, 0, 20, 40),
-                child: AdminContentWrapper(
-                  maxWidth: 960,
-                  child: LayoutBuilder(
-                    builder: (context, constraints) {
-                      final isWide = constraints.maxWidth >= 720 ||
-                          MediaQuery.of(context).size.width >= 900;
-                      if (isWide) {
-                        return _buildWideDetailLayout(
-                          photoUrl: photoUrl.toString(),
-                          name: name,
-                          breed: breed,
-                          species: species,
-                          status: rawStatus,
-                          dobDisplay: dobDisplay,
-                          weight: weight,
-                          color: color,
-                          collarId: collarId,
-                          ownerName: ownerName,
-                          ownerEmail: ownerEmail,
-                          ownerPhone: ownerPhone,
-                        );
-                      }
-                      return _buildNarrowDetailLayout(
-                        photoUrl: photoUrl.toString(),
-                        name: name,
-                        breed: breed,
-                        species: species,
-                        status: rawStatus,
-                        dobDisplay: dobDisplay,
-                        weight: weight,
-                        color: color,
-                        collarId: collarId,
-                        ownerName: ownerName,
-                        ownerEmail: ownerEmail,
-                        ownerPhone: ownerPhone,
-                      );
-                    },
-                  ),
-                ),
-              ),
-            ),
+      body: detailBody,
     );
   }
 

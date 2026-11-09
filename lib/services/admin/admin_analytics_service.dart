@@ -517,9 +517,9 @@ class AdminAnalyticsService {
     final result = bins.values.toList();
     result.sort((a, b) => a.date.compareTo(b.date));
 
-    // Limit maximum points for clean chart display on mobile
-    if (result.length > 20) {
-      return result.sublist(result.length - 20);
+    // Retain full month points for daily granularity (up to 90 days for longer views)
+    if (granularity == TrendGranularity.daily && result.length > 90) {
+      return result.sublist(result.length - 90);
     }
     return result;
   }
@@ -594,8 +594,9 @@ class AdminAnalyticsService {
       );
     }
 
-    if (result.length > 15) {
-      return result.sublist(result.length - 15);
+    // Retain full month points for daily granularity (up to 90 days for longer views)
+    if (granularity == TrendGranularity.daily && result.length > 90) {
+      return result.sublist(result.length - 90);
     }
     return result;
   }

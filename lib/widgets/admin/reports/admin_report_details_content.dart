@@ -18,6 +18,7 @@ class AdminReportDetailsContent extends StatelessWidget {
 
   final bool hasGps;
   final VoidCallback? onViewMap;
+  final VoidCallback? onViewAllMap;
   final String? foundAt;
   final String? foundPhotoUrl;
   final bool isFound;
@@ -38,6 +39,7 @@ class AdminReportDetailsContent extends StatelessWidget {
     this.onClose,
     this.hasGps = false,
     this.onViewMap,
+    this.onViewAllMap,
     this.foundAt,
     this.foundPhotoUrl,
     this.isFound = false,
@@ -178,28 +180,23 @@ class AdminReportDetailsContent extends StatelessWidget {
                           ),
                         ),
                       )
-                    : Tooltip(
-                        message: 'No active GPS collar or coordinates available for this pet.',
-                        child: OutlinedButton.icon(
-                          onPressed: null,
-                          icon: const Icon(Icons.gps_off_rounded,
-                              size: 14, color: Color(0xFF94A3B8)),
-                          label: Text(
-                            'No GPS Connected',
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: GoogleFonts.inter(
-                              fontSize: 11,
-                              fontWeight: FontWeight.w600,
-                              color: const Color(0xFF94A3B8),
-                            ),
+                    : OutlinedButton.icon(
+                        onPressed: onViewAllMap,
+                        icon: const Icon(Icons.map_rounded, size: 16),
+                        label: Text(
+                          'View Map',
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: GoogleFonts.inter(
+                            fontSize: 13,
+                            fontWeight: FontWeight.w600,
                           ),
-                          style: OutlinedButton.styleFrom(
-                            padding: const EdgeInsets.symmetric(horizontal: 8),
-                            side: const BorderSide(color: Color(0xFFE2E8F0)),
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(12),
-                            ),
+                        ),
+                        style: OutlinedButton.styleFrom(
+                          foregroundColor: const Color(0xFFFF6600),
+                          side: const BorderSide(color: Color(0xFFFF6600)),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(12),
                           ),
                         ),
                       ),

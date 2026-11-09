@@ -157,6 +157,10 @@ class PetTraceApp extends StatelessWidget {
         final uri = Uri.tryParse(rawName);
         final path = uri?.path ?? '';
 
+        final isRecovery = rawName.contains('type=recovery') ||
+            rawName.contains('recovery') ||
+            path.contains('recovery');
+
         if (path == '/verified' ||
             path == '/confirm' ||
             path.contains('verify') ||
@@ -168,7 +172,7 @@ class PetTraceApp extends StatelessWidget {
             rawName.contains('code=')) {
           return MaterialPageRoute(
             settings: settings,
-            builder: (_) => const EmailVerifiedScreen(),
+            builder: (_) => EmailVerifiedScreen(isRecovery: isRecovery),
           );
         }
         return null;

@@ -1,4 +1,3 @@
-import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
@@ -36,25 +35,33 @@ class _PetProfileDetailScreenState extends State<PetProfileDetailScreen> {
     _currentPet = widget.pet;
   }
 
-    Future<void> _handleChangePetPhoto(Map<String, dynamic> pet) async {
+  Future<void> _handleChangePetPhoto(
+    Map<String, dynamic> pet, {
+    VoidCallback? onStateChanged,
+    void Function(String error)? onError,
+  }) async {
     final petId = pet['pet_id'];
     if (petId == null) return;
     final petName = pet['name']?.toString() ?? 'Pet';
 
     try {
       if (await PetPhotoService.instance.hasActiveLostReport(petId)) {
-        if (mounted) {
-          AppToast.error(
-            context,
-            '$petName has an active lost report. Photos can be changed once the report is resolved.',
-          );
+        final errorMsg =
+            '$petName has an active lost report. Photos can be changed once the report is resolved.';
+        if (onError != null) {
+          onError(errorMsg);
+        } else if (mounted) {
+          AppToast.error(context, errorMsg);
         }
         return;
       }
     } catch (e) {
       // If the check fails, stay safe and block the change.
-      if (mounted) {
-        AppToast.error(context, 'Could not verify lost report status. Please try again.');
+      const errorMsg = 'Could not verify lost report status. Please try again.';
+      if (onError != null) {
+        onError(errorMsg);
+      } else if (mounted) {
+        AppToast.error(context, errorMsg);
       }
       return;
     }
@@ -64,9 +71,10 @@ class _PetProfileDetailScreenState extends State<PetProfileDetailScreen> {
     if (selection == null || !mounted) return;
 
     setState(() => _isUpdatingPhoto = true);
+    onStateChanged?.call();
     try {
       final newUrl = await PetPhotoService.instance.updatePetPhotos(
-        petId: petId,
+        petId: petId.toString(),
         petName: petName,
         faceImage: selection.face,
         leftImage: selection.left,
@@ -78,15 +86,24 @@ class _PetProfileDetailScreenState extends State<PetProfileDetailScreen> {
       if (mounted) {
         setState(() {
           _currentPet?['photo_url'] = newUrl;
+          pet['photo_url'] = newUrl;
           _isUpdatingPhoto = false;
         });
+        onStateChanged?.call();
         AppToast.success(context, '$petName\'s photo updated successfully! 📸');
         await _reloadPet();
+        onStateChanged?.call();
       }
     } catch (e) {
       if (mounted) {
         setState(() => _isUpdatingPhoto = false);
-        AppToast.error(context, 'Failed to update photo: $e');
+        onStateChanged?.call();
+        final errorMsg = 'Failed to update photo: $e';
+        if (onError != null) {
+          onError(errorMsg);
+        } else {
+          AppToast.error(context, errorMsg);
+        }
       }
     }
   }
@@ -163,6 +180,8 @@ class _PetProfileDetailScreenState extends State<PetProfileDetailScreen> {
           .select('report_id')
           .eq('pet_id', petId)
           .eq('status', 'active')
+          .order('reported_at', ascending: false)
+          .limit(1)
           .maybeSingle();
       if (activeReport != null && activeReport['report_id'] != null) {
         reportId = activeReport['report_id'].toString();
@@ -172,25 +191,25 @@ class _PetProfileDetailScreenState extends State<PetProfileDetailScreen> {
     if (!mounted) return;
 
     // Prompt user to capture live photo of the found pet
-    final foundPhotoUrl = await MarkFoundCameraSheet.show(
+    final foundResult = await MarkFoundCameraSheet.show(
       context,
       petName: pet['name']?.toString() ?? 'your pet',
       reportId: reportId,
+      petData: pet,
+      petId: petId.toString(),
     );
-    if (foundPhotoUrl == null) return; // User cancelled
+    if (foundResult == null) return; // User cancelled
+    final foundPhotoUrl = foundResult.photoUrl;
 
     setState(() => _isMarkingFound = true);
     final nowIso = DateTime.now().toUtc().toIso8601String();
     try {
       // 1. Update pet status back to active in Supabase
       try {
-        await Supabase.instance.client
-            .from('pets')
-            .update({
-              'status': 'active',
-              'found_photo_url': foundPhotoUrl,
-            })
-            .eq('pet_id', petId);
+        await Supabase.instance.client.from('pets').update({
+          'status': 'active',
+          'found_photo_url': foundPhotoUrl,
+        }).eq('pet_id', petId);
       } catch (_) {
         await Supabase.instance.client
             .from('pets')
@@ -232,7 +251,8 @@ class _PetProfileDetailScreenState extends State<PetProfileDetailScreen> {
         petId: petId.toString(),
         petName: pet['name']?.toString() ?? 'Pet',
         action: 'Status Changed: Found (Active)',
-        changesSummary: 'Pet marked as found with photo verification. Open lost reports archived.',
+        changesSummary:
+            'Pet marked as found with photo verification. Open lost reports archived.',
         modifiedByRole: 'Owner',
       );
 
@@ -532,8 +552,7 @@ class _PetProfileDetailScreenState extends State<PetProfileDetailScreen> {
                                               ? reasonCtrl.text.trim()
                                               : selectedReason;
 
-                                      final confirmed =
-                                          await showDialog<bool>(
+                                      final confirmed = await showDialog<bool>(
                                         context: context,
                                         builder: (ctx) => AlertDialog(
                                           backgroundColor: Colors.white,
@@ -553,8 +572,8 @@ class _PetProfileDetailScreenState extends State<PetProfileDetailScreen> {
                                                 padding:
                                                     const EdgeInsets.all(9),
                                                 decoration: const BoxDecoration(
-                                                  color: AppColors
-                                                      .errorContainer,
+                                                  color:
+                                                      AppColors.errorContainer,
                                                   shape: BoxShape.circle,
                                                 ),
                                                 child: const Icon(
@@ -567,13 +586,10 @@ class _PetProfileDetailScreenState extends State<PetProfileDetailScreen> {
                                               Expanded(
                                                 child: Text(
                                                   'Archive $petName?',
-                                                  style:
-                                                      GoogleFonts.montserrat(
+                                                  style: GoogleFonts.montserrat(
                                                     fontSize: 18,
-                                                    fontWeight:
-                                                        FontWeight.w700,
-                                                    color: AppColors
-                                                        .onSurface,
+                                                    fontWeight: FontWeight.w700,
+                                                    color: AppColors.onSurface,
                                                   ),
                                                 ),
                                               ),
@@ -583,8 +599,7 @@ class _PetProfileDetailScreenState extends State<PetProfileDetailScreen> {
                                             'Are you sure you want to archive $petName? This will move their profile to archived history, and their GPS collar will be unpaired.',
                                             style: GoogleFonts.inter(
                                               fontSize: 13.5,
-                                              color: AppColors
-                                                  .onSurfaceVariant,
+                                              color: AppColors.onSurfaceVariant,
                                               height: 1.45,
                                             ),
                                           ),
@@ -601,9 +616,8 @@ class _PetProfileDetailScreenState extends State<PetProfileDetailScreen> {
                                                             ctx, false),
                                                     style: OutlinedButton
                                                         .styleFrom(
-                                                      foregroundColor:
-                                                          AppColors
-                                                              .onSurfaceVariant,
+                                                      foregroundColor: AppColors
+                                                          .onSurfaceVariant,
                                                       side: BorderSide(
                                                         color: AppColors
                                                             .outlineVariant
@@ -615,10 +629,9 @@ class _PetProfileDetailScreenState extends State<PetProfileDetailScreen> {
                                                             BorderRadius
                                                                 .circular(12),
                                                       ),
-                                                      padding:
-                                                          const EdgeInsets
-                                                              .symmetric(
-                                                              vertical: 12),
+                                                      padding: const EdgeInsets
+                                                          .symmetric(
+                                                          vertical: 12),
                                                     ),
                                                     child: Text(
                                                       'No, Keep Pet',
@@ -647,10 +660,9 @@ class _PetProfileDetailScreenState extends State<PetProfileDetailScreen> {
                                                             BorderRadius
                                                                 .circular(12),
                                                       ),
-                                                      padding:
-                                                          const EdgeInsets
-                                                              .symmetric(
-                                                              vertical: 12),
+                                                      padding: const EdgeInsets
+                                                          .symmetric(
+                                                          vertical: 12),
                                                     ),
                                                     child: Text(
                                                       'Yes, Archive',
@@ -759,42 +771,6 @@ class _PetProfileDetailScreenState extends State<PetProfileDetailScreen> {
                             ),
                           ),
                         ),
-                        actions: [
-                          Padding(
-                            padding: const EdgeInsets.only(
-                                right: 12, top: 12, bottom: 8),
-                            child: GestureDetector(
-                              onTap: () => _showEditPetDialog(pet),
-                              child: Container(
-                                padding: const EdgeInsets.symmetric(
-                                    horizontal: 14, vertical: 6),
-                                decoration: BoxDecoration(
-                                  color: Colors.black.withOpacity(0.4),
-                                  borderRadius: BorderRadius.circular(999),
-                                  border: Border.all(
-                                      color: Colors.white.withOpacity(0.35),
-                                      width: 1),
-                                ),
-                                child: Row(
-                                  mainAxisSize: MainAxisSize.min,
-                                  children: [
-                                    const Icon(Icons.edit_rounded,
-                                        color: Colors.white, size: 16),
-                                    const SizedBox(width: 4),
-                                    Text(
-                                      'Edit',
-                                      style: GoogleFonts.inter(
-                                        color: Colors.white,
-                                        fontSize: 13,
-                                        fontWeight: FontWeight.w700,
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                              ),
-                            ),
-                          ),
-                        ],
                         flexibleSpace: FlexibleSpaceBar(
                           background: Stack(
                             fit: StackFit.expand,
@@ -841,51 +817,6 @@ class _PetProfileDetailScreenState extends State<PetProfileDetailScreen> {
                                     ),
                                   ),
                                 ),
-                              Positioned(
-                                bottom: 16,
-                                right: 16,
-                                child: GestureDetector(
-                                  onTap: _isUpdatingPhoto
-                                      ? null
-                                      : () => _handleChangePetPhoto(pet),
-                                  child: Container(
-                                    padding: const EdgeInsets.symmetric(
-                                        horizontal: 14, vertical: 8),
-                                    decoration: BoxDecoration(
-                                      color: Colors.black.withOpacity(0.6),
-                                      borderRadius:
-                                          BorderRadius.circular(999),
-                                      border: Border.all(
-                                        color: Colors.white.withOpacity(0.45),
-                                        width: 1,
-                                      ),
-                                      boxShadow: [
-                                        BoxShadow(
-                                          color: Colors.black.withOpacity(0.3),
-                                          blurRadius: 8,
-                                          offset: const Offset(0, 2),
-                                        ),
-                                      ],
-                                    ),
-                                    child: Row(
-                                      mainAxisSize: MainAxisSize.min,
-                                      children: [
-                                        const Icon(Icons.camera_alt_rounded,
-                                            color: Colors.white, size: 15),
-                                        const SizedBox(width: 6),
-                                        Text(
-                                          'Change Photo',
-                                          style: GoogleFonts.inter(
-                                            color: Colors.white,
-                                            fontSize: 12.5,
-                                            fontWeight: FontWeight.w700,
-                                          ),
-                                        ),
-                                      ],
-                                    ),
-                                  ),
-                                ),
-                              ),
                             ],
                           ),
                         ),
@@ -895,8 +826,7 @@ class _PetProfileDetailScreenState extends State<PetProfileDetailScreen> {
                           padding: const EdgeInsets.fromLTRB(20, 20, 20, 120),
                           child: Column(
                             children: [
-                              _buildIdentityHeader(
-                                  name, breed, species, status,
+                              _buildIdentityHeader(name, breed, species, status,
                                   gender: pet['gender']?.toString()),
                               const SizedBox(height: 16),
                               _buildInfoGrid(pet),
@@ -954,8 +884,8 @@ class _PetProfileDetailScreenState extends State<PetProfileDetailScreen> {
     final genderText = (gender != null && gender.isNotEmpty)
         ? (gender.toLowerCase() == 'female' ? '♀ Female' : '♂ Male')
         : '';
-    final subtext = [breed, species, if (genderText.isNotEmpty) genderText]
-        .join(' • ');
+    final subtext =
+        [breed, species, if (genderText.isNotEmpty) genderText].join(' • ');
 
     return Row(
       mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -1301,7 +1231,8 @@ class _PetProfileDetailScreenState extends State<PetProfileDetailScreen> {
                         .limit(1)
                         .maybeSingle();
                     if (ping != null) {
-                      bool active = ping['is_online'] == true;
+                      // Only consider active if ping was within the last 180 seconds.
+                      bool active = false;
                       final raw = ping['recorded_at']?.toString();
                       if (raw != null && raw.isNotEmpty) {
                         try {
@@ -1309,7 +1240,8 @@ class _PetProfileDetailScreenState extends State<PetProfileDetailScreen> {
                           if (!raw.endsWith('Z') && !raw.contains('+')) {
                             dt = DateTime.parse('${raw}Z');
                           }
-                          final diff = DateTime.now().difference(dt.toLocal());
+                          final diff =
+                              DateTime.now().toUtc().difference(dt.toUtc());
                           if (!diff.isNegative && diff.inSeconds <= 180) {
                             active = true;
                           }
@@ -1437,8 +1369,7 @@ class _PetProfileDetailScreenState extends State<PetProfileDetailScreen> {
     final breed = (pet['breed'] != null && pet['breed'] != 'N/A')
         ? pet['breed'].toString()
         : 'Unknown Breed';
-    final photoUrl = pet['photo_url']?.toString();
-    File? newLocalPhoto;
+    String? photoUrl = pet['photo_url']?.toString();
 
     DateTime? selectedDOB = pet['date_of_birth'] != null
         ? DateTime.tryParse(pet['date_of_birth'].toString())
@@ -1468,6 +1399,27 @@ class _PetProfileDetailScreenState extends State<PetProfileDetailScreen> {
                   isDOBUnknown = false;
                 });
               }
+            }
+
+            Future<void> triggerChangePhoto() async {
+              if (_isUpdatingPhoto) return;
+              setModalState(() => errorMessage = null);
+              await _handleChangePetPhoto(
+                _currentPet ?? pet,
+                onError: (msg) {
+                  if (context.mounted) {
+                    setModalState(() => errorMessage = msg);
+                  }
+                },
+                onStateChanged: () {
+                  if (context.mounted) {
+                    setModalState(() {
+                      photoUrl = _currentPet?['photo_url']?.toString() ??
+                          pet['photo_url']?.toString();
+                    });
+                  }
+                },
+              );
             }
 
             return Container(
@@ -1554,8 +1506,12 @@ class _PetProfileDetailScreenState extends State<PetProfileDetailScreen> {
                               decoration: BoxDecoration(
                                 color: AppColors.errorContainer,
                                 borderRadius: BorderRadius.circular(12),
+                                border: Border.all(
+                                  color: AppColors.error.withOpacity(0.3),
+                                ),
                               ),
                               child: Row(
+                                crossAxisAlignment: CrossAxisAlignment.center,
                                 children: [
                                   const Icon(Icons.error_outline_rounded,
                                       color: AppColors.error, size: 20),
@@ -1565,7 +1521,17 @@ class _PetProfileDetailScreenState extends State<PetProfileDetailScreen> {
                                       errorMessage!,
                                       style: GoogleFonts.inter(
                                           color: AppColors.onErrorContainer,
-                                          fontSize: 13),
+                                          fontSize: 13,
+                                          fontWeight: FontWeight.w500),
+                                    ),
+                                  ),
+                                  GestureDetector(
+                                    onTap: () => setModalState(
+                                        () => errorMessage = null),
+                                    child: const Padding(
+                                      padding: EdgeInsets.only(left: 6),
+                                      child: Icon(Icons.close_rounded,
+                                          size: 18, color: AppColors.error),
                                     ),
                                   ),
                                 ],
@@ -1586,16 +1552,9 @@ class _PetProfileDetailScreenState extends State<PetProfileDetailScreen> {
                             child: Row(
                               children: [
                                 GestureDetector(
-                                  onTap: () async {
-                                    final picked = await PetPhotoService
-                                        .instance
-                                        .pickPetImage(modalContext);
-                                    if (picked != null) {
-                                      setModalState(() {
-                                        newLocalPhoto = picked;
-                                      });
-                                    }
-                                  },
+                                  onTap: _isUpdatingPhoto
+                                      ? null
+                                      : triggerChangePhoto,
                                   child: Stack(
                                     children: [
                                       ClipRRect(
@@ -1604,31 +1563,47 @@ class _PetProfileDetailScreenState extends State<PetProfileDetailScreen> {
                                           width: 60,
                                           height: 60,
                                           color: AppColors.surfaceContainerHigh,
-                                          child: newLocalPhoto != null
-                                              ? Image.file(
-                                                  newLocalPhoto!,
+                                          child: (photoUrl != null &&
+                                                  photoUrl!.isNotEmpty)
+                                              ? Image.network(
+                                                  photoUrl!,
                                                   fit: BoxFit.cover,
+                                                  errorBuilder: (_, __, ___) =>
+                                                      const Icon(
+                                                    Icons.pets,
+                                                    size: 28,
+                                                    color: AppColors.primary,
+                                                  ),
                                                 )
-                                              : (photoUrl != null &&
-                                                      photoUrl.isNotEmpty)
-                                                  ? Image.network(
-                                                      photoUrl,
-                                                      fit: BoxFit.cover,
-                                                      errorBuilder:
-                                                          (_, __, ___) =>
-                                                              const Icon(
-                                                        Icons.pets,
-                                                        size: 28,
-                                                        color: AppColors.primary,
-                                                      ),
-                                                    )
-                                                  : const Icon(
-                                                      Icons.pets,
-                                                      size: 28,
-                                                      color: AppColors.primary,
-                                                    ),
+                                              : const Icon(
+                                                  Icons.pets,
+                                                  size: 28,
+                                                  color: AppColors.primary,
+                                                ),
                                         ),
                                       ),
+                                      if (_isUpdatingPhoto)
+                                        Positioned.fill(
+                                          child: ClipRRect(
+                                            borderRadius:
+                                                BorderRadius.circular(14),
+                                            child: Container(
+                                              color: Colors.black
+                                                  .withOpacity(0.45),
+                                              child: const Center(
+                                                child: SizedBox(
+                                                  width: 20,
+                                                  height: 20,
+                                                  child:
+                                                      CircularProgressIndicator(
+                                                    strokeWidth: 2,
+                                                    color: Colors.white,
+                                                  ),
+                                                ),
+                                              ),
+                                            ),
+                                          ),
+                                        ),
                                       Positioned(
                                         bottom: 0,
                                         right: 0,
@@ -1671,14 +1646,16 @@ class _PetProfileDetailScreenState extends State<PetProfileDetailScreen> {
                                             ),
                                           ),
                                           const SizedBox(width: 6),
-                                          Text(
-                                            '• $breed',
-                                            style: GoogleFonts.inter(
-                                              fontSize: 13,
-                                              fontWeight: FontWeight.w600,
-                                              color: const Color(0xFF475569),
+                                          Flexible(
+                                            child: Text(
+                                              '• $breed',
+                                              style: GoogleFonts.inter(
+                                                fontSize: 13,
+                                                fontWeight: FontWeight.w600,
+                                                color: const Color(0xFF475569),
+                                              ),
+                                              overflow: TextOverflow.ellipsis,
                                             ),
-                                            overflow: TextOverflow.ellipsis,
                                           ),
                                           const SizedBox(width: 6),
                                           Text(
@@ -1691,45 +1668,47 @@ class _PetProfileDetailScreenState extends State<PetProfileDetailScreen> {
                                           ),
                                         ],
                                       ),
-                                      const SizedBox(height: 5),
+                                      const SizedBox(height: 6),
                                       InkWell(
-                                        onTap: () async {
-                                          final picked = await PetPhotoService
-                                              .instance
-                                              .pickPetImage(modalContext);
-                                          if (picked != null) {
-                                            setModalState(() {
-                                              newLocalPhoto = picked;
-                                            });
-                                          }
-                                        },
-                                        borderRadius: BorderRadius.circular(6),
-                                        child: Row(
-                                          mainAxisSize: MainAxisSize.min,
-                                          children: [
-                                            Icon(
-                                              newLocalPhoto != null
-                                                  ? Icons.check_circle_rounded
-                                                  : Icons.add_photo_alternate_outlined,
-                                              size: 13,
-                                              color: newLocalPhoto != null
-                                                  ? const Color(0xFF16A34A)
-                                                  : AppColors.primary,
+                                        onTap: _isUpdatingPhoto
+                                            ? null
+                                            : triggerChangePhoto,
+                                        borderRadius:
+                                            BorderRadius.circular(999),
+                                        child: Container(
+                                          padding: const EdgeInsets.symmetric(
+                                              horizontal: 10, vertical: 4),
+                                          decoration: BoxDecoration(
+                                            color: AppColors.primary
+                                                .withOpacity(0.1),
+                                            borderRadius:
+                                                BorderRadius.circular(999),
+                                            border: Border.all(
+                                              color: AppColors.primary
+                                                  .withOpacity(0.25),
                                             ),
-                                            const SizedBox(width: 4),
-                                            Text(
-                                              newLocalPhoto != null
-                                                  ? 'New photo selected (tap to change)'
-                                                  : 'Tap to change photo',
-                                              style: GoogleFonts.inter(
-                                                fontSize: 11.5,
-                                                fontWeight: FontWeight.w600,
-                                                color: newLocalPhoto != null
-                                                    ? const Color(0xFF16A34A)
-                                                    : AppColors.primary,
+                                          ),
+                                          child: Row(
+                                            mainAxisSize: MainAxisSize.min,
+                                            children: [
+                                              const Icon(
+                                                Icons.camera_alt_rounded,
+                                                size: 13,
+                                                color: AppColors.primary,
                                               ),
-                                            ),
-                                          ],
+                                              const SizedBox(width: 5),
+                                              Text(
+                                                _isUpdatingPhoto
+                                                    ? 'Updating photo...'
+                                                    : 'Change Photo',
+                                                style: GoogleFonts.inter(
+                                                  fontSize: 11.5,
+                                                  fontWeight: FontWeight.w700,
+                                                  color: AppColors.primary,
+                                                ),
+                                              ),
+                                            ],
+                                          ),
                                         ),
                                       ),
                                     ],
@@ -1882,8 +1861,9 @@ class _PetProfileDetailScreenState extends State<PetProfileDetailScreen> {
                                             ? null
                                             : selectedDOB!.toIso8601String();
 
-                                        final nowIso =
-                                            DateTime.now().toUtc().toIso8601String();
+                                        final nowIso = DateTime.now()
+                                            .toUtc()
+                                            .toIso8601String();
                                         final updatePayload = <String, dynamic>{
                                           'name': newName,
                                           'color': newColor,
@@ -1891,23 +1871,6 @@ class _PetProfileDetailScreenState extends State<PetProfileDetailScreen> {
                                           'date_of_birth': newDob,
                                           'updated_at': nowIso,
                                         };
-                                        if (newLocalPhoto != null) {
-                                          final newPhotoUrl =
-                                              await PetPhotoService.instance
-                                                  .uploadPetPhoto(newLocalPhoto!);
-                                          updatePayload['photo_url'] =
-                                              newPhotoUrl;
-
-                                          try {
-                                            await Supabase.instance.client
-                                                .from('lost_reports')
-                                                .update({
-                                                  'photo_url': newPhotoUrl
-                                                })
-                                                .eq('pet_id', petId)
-                                                .eq('status', 'active');
-                                          } catch (_) {}
-                                        }
 
                                         try {
                                           await Supabase.instance.client
@@ -1977,10 +1940,6 @@ class _PetProfileDetailScreenState extends State<PetProfileDetailScreen> {
                                           _currentPet?['date_of_birth'] =
                                               newDob;
                                           _currentPet?['updated_at'] = nowIso;
-                                          if (updatePayload.containsKey('photo_url')) {
-                                            _currentPet?['photo_url'] =
-                                                updatePayload['photo_url'];
-                                          }
                                         });
 
                                         if (context.mounted) {
