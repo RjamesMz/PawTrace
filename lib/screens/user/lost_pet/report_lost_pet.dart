@@ -318,13 +318,19 @@ class _ReportLostPetScreenState extends State<ReportLostPetScreen> {
 
       final currentUserId = Supabase.instance.client.auth.currentUser?.id;
       final ownerId = currentUserId ?? pet['owner_id'];
+      final currentUserBarangay =
+          (await AuthService.instance.getCurrentUserBarangay()).trim();
+      final ownerBarangay = currentUserBarangay.isNotEmpty
+          ? currentUserBarangay
+          : (pet['barangay']?.toString().trim() ?? '');
 
       // 2. Insert lost report in 'lost_reports' table
       final reportInsertData = <String, dynamic>{
         'pet_id': petId,
         'owner_id': ownerId,
+        if (ownerBarangay.isNotEmpty) 'owner_barangay': ownerBarangay,
         'last_seen_address': cleanAddress,
-        'barangay': barangayToSave,
+        'barangay': ownerBarangay.isNotEmpty ? ownerBarangay : barangayToSave,
         'description': _descCtrl.text.trim(),
         'status': 'active',
         'reported_at': DateTime.now().toUtc().toIso8601String(),
@@ -344,6 +350,7 @@ class _ReportLostPetScreenState extends State<ReportLostPetScreen> {
         debugPrint('[ReportLostPet] First insert attempt failed: $insertErr');
         // Fallback without separate lat/lon fields in case schema differs
         final fallbackData = Map<String, dynamic>.from(reportInsertData)
+          ..remove('owner_barangay')
           ..remove('last_seen_lat')
           ..remove('last_seen_lon');
         reportRes = await Supabase.instance.client
@@ -359,7 +366,9 @@ class _ReportLostPetScreenState extends State<ReportLostPetScreen> {
       await AlertService.instance.createLostPetAlerts(
         lostReportId: reportId,
         petName: pet['name']?.toString() ?? 'A pet',
-        barangay: pet['barangay']?.toString() ?? 'Santa Ana',
+        barangay: ownerBarangay.isNotEmpty
+            ? ownerBarangay
+            : (pet['barangay']?.toString() ?? 'Santa Ana'),
       );
 
       if (!mounted) return;

@@ -7,6 +7,19 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../core/app_colors.dart';
 import '../../screens/admin/pets/admin_pet_tracking_map_screen.dart';
 import '../user/locate_pet/pet_geofence_layer.dart';
+import '../../services/geo/reverse_geocode_service.dart';
+
+bool isValidCollarId(String? raw) {
+  if (raw == null) return false;
+  final u = raw.trim().toUpperCase();
+  return u.isNotEmpty &&
+      u != 'N/A' &&
+      u != 'NONE' &&
+      u != 'NULL' &&
+      u != 'NOT PAIRED' &&
+      u != 'UNPAIRED' &&
+      u != '-';
+}
 
 /// Data class holding resolved location info for a pet
 class PetLocationResult {
@@ -48,7 +61,34 @@ class PetLocationResult {
 Future<PetLocationResult> fetchPetLocation(Map<String, dynamic> pet) async {
   final supabase = Supabase.instance.client;
   final petId = pet['pet_id'] ?? pet['id'];
-  final collarId = (pet['gps_id'] ?? '').toString().trim();
+  String collarId = (pet['gps_id'] ??
+          (pet['pets'] is Map ? pet['pets']['gps_id'] : null) ??
+          '')
+      .toString()
+      .trim();
+  if (!isValidCollarId(collarId) && petId != null) {
+    try {
+      final petRow = await supabase
+          .from('pets')
+          .select('gps_id, last_seen_lat, last_seen_lon, last_seen_address, barangay')
+          .eq('pet_id', petId)
+          .maybeSingle();
+      if (petRow != null) {
+        final dbCollar = petRow['gps_id']?.toString().trim() ?? '';
+        if (isValidCollarId(dbCollar)) {
+          collarId = dbCollar;
+          pet['gps_id'] = dbCollar;
+        }
+        pet['last_seen_lat'] ??= petRow['last_seen_lat'];
+        pet['last_seen_lon'] ??= petRow['last_seen_lon'];
+        pet['last_seen_address'] ??= petRow['last_seen_address'];
+      }
+    } catch (_) {}
+  }
+  final hasPairedCollar = isValidCollarId(collarId);
+  if (hasPairedCollar) {
+    pet['gps_id'] = collarId;
+  }
   final petStatus = (pet['status'] ?? '').toString().toLowerCase();
 
   double? lat;
@@ -64,7 +104,7 @@ Future<PetLocationResult> fetchPetLocation(Map<String, dynamic> pet) async {
   // 1. If pet has a collar assigned, fetch the latest collar GPS ping
   if (collarId.isNotEmpty &&
       collarId.toUpperCase() != 'N/A' &&
-      collarId.toUpperCase() != 'NONE') {
+      collarId.toUpperCase() != 'NONE' && hasPairedCollar) {
     try {
       final collarPing = await supabase
           .from('gps_locations')
@@ -142,7 +182,7 @@ Future<PetLocationResult> fetchPetLocation(Map<String, dynamic> pet) async {
         final rLon = (r['last_seen_lon'] as num?)?.toDouble() ??
             (r['lon'] as num?)?.toDouble();
 
-        if (rLat != null && rLon != null && (lat == null || lon == null || petStatus == 'lost')) {
+        if (rLat != null && rLon != null && (lat == null || lon == null)) {
           lat = rLat;
           lon = rLon;
           sourceLabel = 'Lost Pet Report';
@@ -176,7 +216,7 @@ Future<PetLocationResult> fetchPetLocation(Map<String, dynamic> pet) async {
   // 4. Regex coordinates extraction from any text in rawAddress or pet['last_seen_address']
   if (lat == null || lon == null) {
     final textToSearch = '${rawAddress ?? ''} ${pet['last_seen_address'] ?? ''}';
-    final match = RegExp(r'Lat:\s*([-\d.]+),\s*Lng:\s*([-\d.]+)', caseSensitive: false)
+    final match = RegExp(r'Lat:\s*([-\d.]+),\s*(?:Lng|Lon):\s*([-\d.]+)', caseSensitive: false)
         .firstMatch(textToSearch);
     if (match != null) {
       final parsedLat = double.tryParse(match.group(1)!);
@@ -205,13 +245,25 @@ Future<PetLocationResult> fetchPetLocation(Map<String, dynamic> pet) async {
 
   // Clean formatted address for display (strip raw Lat/Lng regex string)
   String displayAddress = rawAddress
-      .replaceAll(RegExp(r'\s*\(?Lat:\s*[-\d.]+,\s*Lng:\s*[-\d.]+\)?', caseSensitive: false), '')
+      .replaceAll(RegExp(r'\s*\(?Lat:\s*[-\d.]+,\s*(?:Lng|Lon):\s*[-\d.]+\)?', caseSensitive: false), '')
       .trim();
   if (displayAddress.isEmpty) {
     displayAddress = barangay.isNotEmpty ? '$barangay, Catanduanes' : 'Catanduanes';
   }
 
   final bool hasCoordinates = (lat != null && lon != null);
+  if (hasCoordinates &&
+      (sourceLabel.contains('Collar') ||
+          displayAddress == 'Catanduanes' ||
+          displayAddress == '$barangay, Catanduanes' ||
+          displayAddress.toLowerCase() == barangay.toLowerCase())) {
+    try {
+      final geocoded = await ReverseGeocodeService.reverseGeocode(lat!, lon!);
+      if (geocoded != null && geocoded.trim().isNotEmpty) {
+        displayAddress = geocoded.trim();
+      }
+    } catch (_) {}
+  }
   if (!hasCoordinates && !isLiveCollar) {
     sourceLabel = 'No GPS Connected';
     sourceColor = const Color(0xFF64748B);

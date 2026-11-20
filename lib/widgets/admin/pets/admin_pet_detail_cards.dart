@@ -191,6 +191,9 @@ class AdminPetInfoGridCard extends StatelessWidget {
     final hasCollar = collarId.isNotEmpty &&
         collarId.toUpperCase() != 'N/A' &&
         collarId.toUpperCase() != 'NONE' &&
+        collarId.toUpperCase() != 'NULL' &&
+        collarId.toUpperCase() != 'NOT PAIRED' &&
+        collarId.toUpperCase() != 'UNPAIRED' &&
         collarId != '-';
 
     return Column(

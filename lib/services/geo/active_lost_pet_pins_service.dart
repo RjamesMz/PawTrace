@@ -42,21 +42,22 @@ class ActiveLostPetPinsService {
   static Future<List<LostPetPin>> fetch({String? barangay}) async {
     try {
       final client = Supabase.instance.client;
-      var query = client
+      final query = client
           .from('lost_reports')
           .select('*, pets(*), owner_id(*)')
           .eq('status', 'active');
-      if (barangay != null && barangay.isNotEmpty) {
-        if (barangay.toLowerCase() == 'calatagan') {
-          query = query.inFilter('barangay', ['Calatagan', 'San Isidro Village']);
-        } else {
-          query = query.eq('barangay', barangay);
-        }
-      }
       final data = await query.order('reported_at', ascending: false);
-      final reports = List<Map<String, dynamic>>.from(data)
-          .where((r) => !AdminAnalyticsService.isReportFound(r))
-          .toList();
+      final reports = List<Map<String, dynamic>>.from(data).where((r) {
+        if (AdminAnalyticsService.isReportFound(r)) return false;
+        if (barangay != null && barangay.isNotEmpty) {
+          return AdminAnalyticsService.matchesReportBarangay(
+            r,
+            barangay,
+            allowCalataganAlias: true,
+          );
+        }
+        return true;
+      }).toList();
 
       final pins = await Future.wait(reports.map((r) async {
         final pet = r['pets'] is Map<String, dynamic>

@@ -38,7 +38,11 @@ class PetLocationResolver {
     if (collarId == null ||
         collarId.isEmpty ||
         collarId.toUpperCase() == 'N/A' ||
-        collarId.toUpperCase() == 'NONE') {
+        collarId.toUpperCase() == 'NONE' ||
+        collarId.toUpperCase() == 'NULL' ||
+        collarId.toUpperCase() == 'NOT PAIRED' ||
+        collarId.toUpperCase() == 'UNPAIRED' ||
+        collarId == '-') {
       final petId = report['pet_id'] ?? pet?['pet_id'] ?? pet?['id'];
       if (petId != null) {
         try {
@@ -61,7 +65,11 @@ class PetLocationResolver {
     if (collarId != null &&
         collarId.isNotEmpty &&
         collarId.toUpperCase() != 'N/A' &&
-        collarId.toUpperCase() != 'NONE') {
+        collarId.toUpperCase() != 'NONE' &&
+        collarId.toUpperCase() != 'NULL' &&
+        collarId.toUpperCase() != 'NOT PAIRED' &&
+        collarId.toUpperCase() != 'UNPAIRED' &&
+        collarId != '-') {
       try {
         final ping = await Supabase.instance.client
             .from('gps_locations')

@@ -135,6 +135,47 @@ class AdminAnalyticsService {
     return false;
   }
 
+  /// Checks whether a lost report belongs to a resident/pet registered in
+  /// [targetBarangay], rather than relying on the last-seen street address
+  /// previously stored in `lost_reports.barangay`.
+  static bool matchesReportBarangay(
+    Map<String, dynamic> report,
+    String targetBarangay, {
+    bool allowCalataganAlias = false,
+  }) {
+    final target = targetBarangay.trim().toLowerCase();
+    if (target.isEmpty) return false;
+
+    final allowedTargets = <String>{target};
+    if (allowCalataganAlias && target == 'calatagan') {
+      allowedTargets.add('san isidro village');
+    }
+
+    final owner = report['owner_id'];
+    final ownerBrgy = owner is Map
+        ? (owner['barangay'] ?? '').toString().trim().toLowerCase()
+        : '';
+    final reportOwnerBrgy =
+        (report['owner_barangay'] ?? '').toString().trim().toLowerCase();
+    final pet = report['pets'];
+    final petBrgy = pet is Map
+        ? (pet['barangay'] ?? '').toString().trim().toLowerCase()
+        : '';
+
+    if (ownerBrgy.isNotEmpty ||
+        reportOwnerBrgy.isNotEmpty ||
+        petBrgy.isNotEmpty) {
+      return (ownerBrgy.isNotEmpty && allowedTargets.contains(ownerBrgy)) ||
+          (reportOwnerBrgy.isNotEmpty &&
+              allowedTargets.contains(reportOwnerBrgy)) ||
+          (petBrgy.isNotEmpty && allowedTargets.contains(petBrgy));
+    }
+
+    final fallbackBrgy =
+        (report['barangay'] ?? '').toString().trim().toLowerCase();
+    return fallbackBrgy.isNotEmpty && allowedTargets.contains(fallbackBrgy);
+  }
+
   DateTime _getStartDateForRange(DashboardDateRange range) {
     final now = DateTime.now();
     switch (range) {
@@ -222,13 +263,16 @@ class AdminAnalyticsService {
           ? ((pairedPets / totalNonArchived) * 100).clamp(0.0, 100.0)
           : 0.0;
 
-      // 2. Fetch Lost Reports with joined pets data
-      var reportQuery = _supabase.from('lost_reports').select('*, pets(*)');
-      if (filterByBarangay) {
-        reportQuery = reportQuery.eq('barangay', barangay);
-      }
-      final reportsData = await reportQuery;
-      final reportsList = List<Map<String, dynamic>>.from(reportsData);
+      // 2. Fetch Lost Reports with joined pets & owner data
+      final reportsData = await _supabase
+          .from('lost_reports')
+          .select('*, pets(*), owner_id(barangay)');
+      final allReportsList = List<Map<String, dynamic>>.from(reportsData);
+      final reportsList = filterByBarangay
+          ? allReportsList
+              .where((r) => matchesReportBarangay(r, barangay))
+              .toList()
+          : allReportsList;
 
       // Snapshot: Active Lost Reports & Found This Month
       int activeLostReports = 0;

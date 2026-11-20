@@ -36,6 +36,10 @@ ON public.lost_reports(pet_id);
 CREATE INDEX IF NOT EXISTS idx_lost_reports_owner_id 
 ON public.lost_reports(owner_id);
 
+-- Composite index: owner_id + reported_at (optimized for 7-day resident-scoped Recent Activity)
+CREATE INDEX IF NOT EXISTS idx_lost_reports_owner_id_reported_at
+ON public.lost_reports(owner_id, reported_at DESC);
+
 
 -- ------------------------------------------------------------------------------
 -- 2. PETS TABLE (Registry, Demographics, & Species / Status Filtering)

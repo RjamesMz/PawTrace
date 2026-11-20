@@ -101,6 +101,44 @@ class _AdminHomeScreenState extends State<AdminHomeScreen> {
     if (mounted) setState(() => _isLoading = false);
   }
 
+  bool _matchesAdminBarangay(Map<String, dynamic> report, String adminBarangay) {
+    final target = adminBarangay.trim().toLowerCase();
+    if (target.isEmpty) return false;
+
+    bool matchesValue(String? val) {
+      if (val == null) return false;
+      final clean = val.trim().toLowerCase();
+      if (clean.isEmpty) return false;
+      if (target == 'calatagan') {
+        return clean == 'calatagan' || clean == 'san isidro village';
+      }
+      return clean == target;
+    }
+
+    final userData = report['owner_id'];
+    if (userData is Map && userData['barangay'] != null) {
+      final ownerBrgy = userData['barangay']?.toString().trim() ?? '';
+      if (ownerBrgy.isNotEmpty) {
+        return matchesValue(ownerBrgy);
+      }
+    }
+
+    final explicitOwnerBrgy = report['owner_barangay']?.toString().trim() ?? '';
+    if (explicitOwnerBrgy.isNotEmpty) {
+      return matchesValue(explicitOwnerBrgy);
+    }
+
+    final petData = report['pets'];
+    if (petData is Map && petData['barangay'] != null) {
+      final petBrgy = petData['barangay']?.toString().trim() ?? '';
+      if (petBrgy.isNotEmpty) {
+        return matchesValue(petBrgy);
+      }
+    }
+
+    return matchesValue(report['barangay']?.toString());
+  }
+
   Future<void> _fetchStats() async {
     try {
       // Registered pets (active / lost only, excluding archived)
@@ -115,16 +153,15 @@ class _AdminHomeScreenState extends State<AdminHomeScreen> {
       final pets = await petQuery;
       _registeredPets = pets.length;
 
-      // Lost reports (active only)
-      var lostQuery = _supabase
+      // Lost reports (active only, scoped to owner's / pet's registered barangay)
+      final lostData = await _supabase
           .from('lost_reports')
-          .select('report_id')
+          .select('report_id, barangay, pets(barangay), owner_id(barangay)')
           .eq('status', 'active');
-      if (_adminBarangay.isNotEmpty) {
-        lostQuery = lostQuery.eq('barangay', _adminBarangay);
-      }
-      final lost = await lostQuery;
-      _lostReports = lost.length;
+      final lostList = List<Map<String, dynamic>>.from(lostData);
+      _lostReports = _adminBarangay.isEmpty
+          ? lostList.length
+          : lostList.where((r) => _matchesAdminBarangay(r, _adminBarangay)).length;
 
       // Registered Users count (scoped to barangay, excluding admins)
       var userQuery = _supabase
@@ -162,16 +199,40 @@ class _AdminHomeScreenState extends State<AdminHomeScreen> {
 
   Future<void> _fetchRecentActivity() async {
     try {
-      // Fetch recently registered pets as activity items
+      final adminBarangay = _adminBarangay.trim();
+      if (adminBarangay.isEmpty) {
+        _recentActivity = [];
+        return;
+      }
+
+      final sevenDaysAgoUtc =
+          DateTime.now().toUtc().subtract(const Duration(days: 7));
+      final sevenDaysAgoIso = sevenDaysAgoUtc.toIso8601String();
+
+      // Fetch recently registered pets (within last 7 days) as activity items
       final pets = await _supabase
           .from('pets')
           .select('name, created_at, users(first_name, surname)')
-          .eq('barangay', _adminBarangay)
+          .eq('barangay', adminBarangay)
+          .gte('created_at', sevenDaysAgoIso)
           .order('created_at', ascending: false)
           .limit(5);
 
       final List<Map<String, dynamic>> activities = [];
       for (final p in pets) {
+        final rawCreatedAt = p['created_at']?.toString() ?? '';
+        if (rawCreatedAt.isEmpty) continue;
+        DateTime? createdAtUtc = DateTime.tryParse(rawCreatedAt);
+        if (createdAtUtc != null &&
+            !rawCreatedAt.endsWith('Z') &&
+            !rawCreatedAt.contains('+')) {
+          createdAtUtc = DateTime.tryParse('${rawCreatedAt}Z');
+        }
+        createdAtUtc = createdAtUtc?.toUtc();
+        if (createdAtUtc == null || createdAtUtc.isBefore(sevenDaysAgoUtc)) {
+          continue;
+        }
+
         final petName = p['name'] ?? 'A pet';
         final u = p['users'];
         final ownerName = u != null
@@ -184,15 +245,33 @@ class _AdminHomeScreenState extends State<AdminHomeScreen> {
         });
       }
 
-      // Fetch recent lost reports as activity
-      final reports = await _supabase
+      // Fetch recent lost reports from the last 7 days submitted by residents
+      // of the logged-in admin's barangay (filtered by owner's / pet's registered barangay,
+      // regardless of where the pet was last seen).
+      final reportsData = await _supabase
           .from('lost_reports')
-          .select('*, pets(name), owner_id(first_name, surname)')
-          .eq('barangay', _adminBarangay)
-          .order('reported_at', ascending: false)
-          .limit(5);
+          .select('*, pets(name, barangay), owner_id(first_name, surname, barangay)')
+          .gte('reported_at', sevenDaysAgoIso)
+          .order('reported_at', ascending: false);
 
-      for (final r in reports) {
+      final matchingReports = List<Map<String, dynamic>>.from(reportsData)
+          .where((r) => _matchesAdminBarangay(r, adminBarangay))
+          .take(5);
+
+      for (final r in matchingReports) {
+        final rawReportedAt = r['reported_at']?.toString() ?? '';
+        if (rawReportedAt.isEmpty) continue;
+        DateTime? reportedAtUtc = DateTime.tryParse(rawReportedAt);
+        if (reportedAtUtc != null &&
+            !rawReportedAt.endsWith('Z') &&
+            !rawReportedAt.contains('+')) {
+          reportedAtUtc = DateTime.tryParse('${rawReportedAt}Z');
+        }
+        reportedAtUtc = reportedAtUtc?.toUtc();
+        if (reportedAtUtc == null || reportedAtUtc.isBefore(sevenDaysAgoUtc)) {
+          continue;
+        }
+
         final petData = r['pets'];
         final petName = petData is Map ? (petData['name'] ?? 'A pet') : 'A pet';
         final userData = r['owner_id'];
@@ -225,12 +304,15 @@ class _AdminHomeScreenState extends State<AdminHomeScreen> {
       final data = await _supabase
           .from('lost_reports')
           .select(
-              '*, pets(name, photo_url), owner_id(first_name, surname, phone)')
-          .eq('barangay', _adminBarangay)
+              '*, pets(name, photo_url, barangay), owner_id(first_name, surname, phone, barangay)')
           .order('reported_at', ascending: false);
 
       final reports = List<Map<String, dynamic>>.from(data);
       _pendingReports = reports.where((r) {
+        if (_adminBarangay.trim().isNotEmpty &&
+            !_matchesAdminBarangay(r, _adminBarangay)) {
+          return false;
+        }
         final status = (r['status'] ?? '').toString().toLowerCase();
         return status == 'pending' || status == 'active';
       }).toList();

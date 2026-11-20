@@ -116,11 +116,17 @@ class AdminReportCard extends StatelessWidget {
       if (gender.isNotEmpty) gender,
     ].join(' • ');
 
-    final collarId =
+    final rawCollarId =
         (petData?['gps_id'] ?? report['gps_id'] ?? '').toString().trim();
-    final bool hasCollar = collarId.isNotEmpty &&
-        collarId.toUpperCase() != 'N/A' &&
-        collarId.toUpperCase() != 'NONE';
+    final collarUpper = rawCollarId.toUpperCase();
+    final bool hasCollar = rawCollarId.isNotEmpty &&
+        collarUpper != 'N/A' &&
+        collarUpper != 'NONE' &&
+        collarUpper != 'NULL' &&
+        collarUpper != 'NOT PAIRED' &&
+        collarUpper != 'UNPAIRED' &&
+        collarUpper != '-';
+    final String collarId = hasCollar ? rawCollarId : '';
 
     final double? rLat = (report['last_seen_lat'] as num?)?.toDouble() ??
         (petData?['last_seen_lat'] as num?)?.toDouble();
@@ -128,9 +134,9 @@ class AdminReportCard extends StatelessWidget {
         (petData?['last_seen_lon'] as num?)?.toDouble();
 
     final bool hasRegexCoords = RegExp(
-            r'Lat:\s*([-\d.]+),\s*Lng:\s*([-\d.]+)',
+            r'Lat:\s*([-\d.]+),\s*(?:Lng|Lon):\s*([-\d.]+)',
             caseSensitive: false)
-        .hasMatch(rawLocation);
+        .hasMatch('$rawLocation ${petData?['last_seen_address'] ?? ''}');
 
     final bool hasGps =
         hasCollar || (rLat != null && rLon != null) || hasRegexCoords;
@@ -203,11 +209,9 @@ class AdminReportCard extends StatelessWidget {
           formatDate: formatDate,
           formatTime: formatTime,
           hasGps: hasGps,
-          onViewMap: hasGps ? handleViewMap : null,
-          onViewAllMap: () => Navigator.push(
-            context,
-            MaterialPageRoute(builder: (_) => const AllLostPetsMapScreen()),
-          ),
+          hasCollar: hasCollar,
+          onViewMap: handleViewMap,
+          onViewAllMap: handleViewMap,
           foundAt: foundAt,
           foundPhotoUrl: foundPhotoUrl,
           isFound: isFound,

@@ -294,7 +294,11 @@ class ReportsDataTableSource extends DataTableSource {
                   (pet is Map ? pet['gps_id'] : report['gps_id'])?.toString().trim() ?? '';
               final bool hasCollar = collarId.isNotEmpty &&
                   collarId.toUpperCase() != 'N/A' &&
-                  collarId.toUpperCase() != 'NONE';
+                  collarId.toUpperCase() != 'NONE' &&
+                  collarId.toUpperCase() != 'NULL' &&
+                  collarId.toUpperCase() != 'NOT PAIRED' &&
+                  collarId.toUpperCase() != 'UNPAIRED' &&
+                  collarId != '-';
               final double? rLat = (report['last_seen_lat'] as num?)?.toDouble() ??
                   (pet is Map ? (pet['last_seen_lat'] as num?)?.toDouble() : null);
               final double? rLon = (report['last_seen_lon'] as num?)?.toDouble() ??
@@ -320,7 +324,7 @@ class ReportsDataTableSource extends DataTableSource {
                     if (hasGps) {
                       onViewMap?.call(report);
                     } else {
-                      onViewAllMap?.call();
+                      onViewMap?.call(report);
                     }
                   } else if (action == 'found_photo' && foundPhotoUrl != null) {
                     _showPhotoLightbox(context, foundPhotoUrl, petName);

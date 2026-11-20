@@ -10,7 +10,9 @@ import 'package:url_launcher/url_launcher.dart';
 import '../../../core/app_colors.dart';
 import '../../../core/app_toast.dart';
 import '../../../services/geo/no_signal_mask_service.dart';
-import '../../../widgets/admin/pet_location_map_dialog.dart' show PetLocationResult;
+import '../../../services/geo/reverse_geocode_service.dart';
+import '../../../widgets/admin/pet_location_map_dialog.dart'
+    show PetLocationResult, fetchPetLocation, isValidCollarId;
 import '../../../widgets/common/photo_placeholder.dart';
 import '../../../widgets/user/locate_pet/pet_geofence_layer.dart';
 
@@ -42,6 +44,8 @@ class _AdminPetTrackingMapScreenState extends State<AdminPetTrackingMapScreen> {
   String? _collarId;
   double? _lat;
   double? _lon;
+  bool _hasCoordinates = false;
+  String _sourceLabel = '';
   String _address = '';
   String _lastUpdated = '';
   int? _battery;
@@ -85,17 +89,20 @@ class _AdminPetTrackingMapScreenState extends State<AdminPetTrackingMapScreen> {
   @override
   void initState() {
     super.initState();
-    _collarId = (widget.pet['gps_id'] ?? '').toString().trim();
-    if (_collarId != null &&
-        (_collarId!.toUpperCase() == 'N/A' ||
-            _collarId!.toUpperCase() == 'NONE' ||
-            _collarId!.isEmpty)) {
-      _collarId = null;
-    }
+    final rawCollar = (widget.pet['gps_id'] ??
+            (widget.pet['pets'] is Map ? widget.pet['pets']['gps_id'] : null) ??
+            '')
+        .toString()
+        .trim();
+    _collarId = isValidCollarId(rawCollar) ? rawCollar : null;
 
     if (widget.initialLocation != null) {
-      _lat = widget.initialLocation!.lat;
-      _lon = widget.initialLocation!.lon;
+      if (widget.initialLocation!.hasCoordinates) {
+        _lat = widget.initialLocation!.lat;
+        _lon = widget.initialLocation!.lon;
+        _hasCoordinates = true;
+      }
+      _sourceLabel = widget.initialLocation!.sourceLabel;
       _address = widget.initialLocation!.displayAddress;
       _lastUpdated = widget.initialLocation!.timeRecorded ?? '';
       _battery = widget.initialLocation!.battery;
@@ -128,7 +135,42 @@ class _AdminPetTrackingMapScreenState extends State<AdminPetTrackingMapScreen> {
     super.dispose();
   }
 
+  Future<void> _resolveAddressForCoords(double lat, double lon) async {
+    try {
+      final geocoded = await ReverseGeocodeService.reverseGeocode(lat, lon);
+      if (geocoded != null && geocoded.trim().isNotEmpty && mounted) {
+        setState(() {
+          _address = geocoded.trim();
+        });
+      }
+    } catch (_) {}
+  }
+
   Future<void> _loadInitialLocation() async {
+    // 1. If collarId wasn't on widget.pet, check the pets table by pet_id
+    if (_collarId == null || _collarId!.isEmpty) {
+      final petId = widget.pet['pet_id'] ??
+          widget.pet['id'] ??
+          (widget.pet['pets'] is Map ? widget.pet['pets']['pet_id'] : null);
+      if (petId != null) {
+        try {
+          final petRow = await _supabase
+              .from('pets')
+              .select('gps_id')
+              .eq('pet_id', petId)
+              .maybeSingle();
+          final dbCollar = petRow?['gps_id']?.toString().trim();
+          if (isValidCollarId(dbCollar) && mounted) {
+            setState(() {
+              _collarId = dbCollar;
+            });
+            _listenToCollarStream();
+          }
+        } catch (_) {}
+      }
+    }
+
+    // 2. If pet has a valid collar, fetch latest ping from gps_locations
     if (_collarId != null && _collarId!.isNotEmpty) {
       try {
         final ping = await _supabase
@@ -140,33 +182,57 @@ class _AdminPetTrackingMapScreenState extends State<AdminPetTrackingMapScreen> {
             .maybeSingle();
 
         if (ping != null && mounted) {
-          setState(() {
-            final pLat = (ping['lat'] as num?)?.toDouble();
-            final pLon = (ping['lon'] as num?)?.toDouble();
-            if (pLat != null && pLon != null) {
+          final pLat = (ping['lat'] as num?)?.toDouble();
+          final pLon = (ping['lon'] as num?)?.toDouble();
+          if (pLat != null && pLon != null) {
+            setState(() {
               _lat = pLat;
               _lon = pLon;
-            }
-            _lastUpdated = ping['recorded_at']?.toString() ?? _lastUpdated;
-            _battery = (ping['battery_level'] ?? ping['battery']) as int?;
-            _isLoading = false;
-          });
-
-          if (_lat != null && _lon != null) {
-            _mapController.move(ll.LatLng(_lat!, _lon!), 16.0);
+              _hasCoordinates = true;
+              _lastUpdated = ping['recorded_at']?.toString() ?? _lastUpdated;
+              _battery = (ping['battery_level'] ?? ping['battery']) as int?;
+              _sourceLabel = _isLiveGpsActive
+                  ? 'Live GPS Collar'
+                  : 'Collar Offline (Last Known)';
+              _isLoading = false;
+            });
+            _checkSignalStatus(pLat, pLon);
+            _mapController.move(ll.LatLng(pLat, pLon), 16.0);
+            _resolveAddressForCoords(pLat, pLon);
+            return;
           }
-          return;
         }
       } catch (e) {
         debugPrint('[AdminTracking] Error loading collar ping: $e');
       }
     }
 
-    // If no collar or no collar ping, fallback to initialLocation or registered barangay
+    // 3. Fallback: resolve from report / pet record via fetchPetLocation
+    if (!_hasCoordinates) {
+      try {
+        final resolved = await fetchPetLocation(widget.pet);
+        if (mounted) {
+          setState(() {
+            if (resolved.hasCoordinates) {
+              _lat = resolved.lat;
+              _lon = resolved.lon;
+              _hasCoordinates = true;
+            }
+            _sourceLabel = resolved.sourceLabel;
+            if (resolved.displayAddress.isNotEmpty) {
+              _address = resolved.displayAddress;
+            }
+            if ((_lastUpdated.isEmpty) && resolved.timeRecorded != null) {
+              _lastUpdated = resolved.timeRecorded!;
+            }
+            _battery ??= resolved.battery;
+          });
+        }
+      } catch (_) {}
+    }
+
     if (mounted) {
       setState(() {
-        _lat ??= 13.5938;
-        _lon ??= 124.2381;
         if (_address.isEmpty) {
           final brgy = widget.pet['barangay']?.toString() ??
               widget.pet['users']?['barangay']?.toString() ??
@@ -175,7 +241,10 @@ class _AdminPetTrackingMapScreenState extends State<AdminPetTrackingMapScreen> {
         }
         _isLoading = false;
       });
-      _mapController.move(ll.LatLng(_lat!, _lon!), 15.0);
+      if (_lat != null && _lon != null) {
+        _checkSignalStatus(_lat, _lon);
+        _mapController.move(ll.LatLng(_lat!, _lon!), 16.0);
+      }
     }
   }
 
@@ -261,11 +330,13 @@ class _AdminPetTrackingMapScreenState extends State<AdminPetTrackingMapScreen> {
           setState(() {
             _lat = pLat;
             _lon = pLon;
+            _hasCoordinates = true;
             _battery = (latest['battery_level'] ?? latest['battery']) as int?;
             _lastUpdated = latest['recorded_at']?.toString() ?? '';
           });
           _checkSignalStatus(pLat, pLon);
           _mapController.move(ll.LatLng(pLat, pLon), 16.0);
+          _resolveAddressForCoords(pLat, pLon);
         }
       },
       onError: (err) {
@@ -729,6 +800,35 @@ class _AdminPetTrackingMapScreenState extends State<AdminPetTrackingMapScreen> {
     required String lastUpdated,
   }) {
     if (!hasCollar) {
+      if (_hasCoordinates) {
+        return Container(
+          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+          decoration: BoxDecoration(
+            color: const Color(0xFFFEF3C7),
+            borderRadius: BorderRadius.circular(8),
+            border: Border.all(color: const Color(0xFFFCD34D)),
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Icon(
+                Icons.pin_drop_rounded,
+                size: 11,
+                color: Color(0xFFD97706),
+              ),
+              const SizedBox(width: 4),
+              Text(
+                'Pinned (No Collar)',
+                style: GoogleFonts.inter(
+                  fontSize: 10,
+                  fontWeight: FontWeight.w700,
+                  color: const Color(0xFFB45309),
+                ),
+              ),
+            ],
+          ),
+        );
+      }
       return Container(
         padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
         decoration: BoxDecoration(
@@ -929,7 +1029,9 @@ class _AdminPetTrackingMapScreenState extends State<AdminPetTrackingMapScreen> {
                             ? 'Actively Transmitting'
                             : (hasCollar
                                 ? 'Offline / Sleep Mode'
-                                : 'No Device'),
+                                : (_hasCoordinates
+                                    ? 'Pinned Report Location'
+                                    : 'No GPS / No Collar')),
                         style: GoogleFonts.inter(
                           fontSize: 12,
                           fontWeight: FontWeight.w700,
@@ -937,7 +1039,9 @@ class _AdminPetTrackingMapScreenState extends State<AdminPetTrackingMapScreen> {
                               ? const Color(0xFF16A34A)
                               : (hasCollar
                                   ? const Color(0xFFD97706)
-                                  : AppColors.primary),
+                                  : (_hasCoordinates
+                                      ? const Color(0xFFB45309)
+                                      : AppColors.primary)),
                         ),
                       ),
                     ],

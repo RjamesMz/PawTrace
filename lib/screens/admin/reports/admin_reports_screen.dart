@@ -112,14 +112,24 @@ class _AdminReportsScreenState extends State<AdminReportsScreen> {
       if (_currentUserRole != UserRole.superAdmin &&
           _adminBarangay.isNotEmpty) {
         if (_adminBarangay.toLowerCase() == 'calatagan') {
-          query = query.inFilter('barangay', ['Calatagan', 'San Isidro Village']);
+          // Filtered below by owner/pet registered barangay
         } else {
-          query = query.eq('barangay', _adminBarangay);
+          // Filtered below by owner/pet registered barangay
         }
       }
 
       final data = await query.order('reported_at', ascending: false);
-      final fetched = List<Map<String, dynamic>>.from(data);
+      final allFetched = List<Map<String, dynamic>>.from(data);
+      final fetched = (_currentUserRole != UserRole.superAdmin &&
+              _adminBarangay.isNotEmpty)
+          ? allFetched
+              .where((r) => AdminAnalyticsService.matchesReportBarangay(
+                    r,
+                    _adminBarangay,
+                    allowCalataganAlias: true,
+                  ))
+              .toList()
+          : allFetched;
 
       if (_targetReportId != null && _targetReportId!.isNotEmpty) {
         final hasTarget =

@@ -17,6 +17,7 @@ class AdminReportDetailsContent extends StatelessWidget {
   final String Function(String?) formatTime;
 
   final bool hasGps;
+  final bool hasCollar;
   final VoidCallback? onViewMap;
   final VoidCallback? onViewAllMap;
   final String? foundAt;
@@ -38,6 +39,7 @@ class AdminReportDetailsContent extends StatelessWidget {
     required this.formatTime,
     this.onClose,
     this.hasGps = false,
+    this.hasCollar = false,
     this.onViewMap,
     this.onViewAllMap,
     this.foundAt,
@@ -252,7 +254,7 @@ class AdminReportDetailsContent extends StatelessWidget {
                       ),
                     ),
                     const SizedBox(width: 8),
-                    if (hasGps)
+                    if (hasCollar)
                       Container(
                         padding: const EdgeInsets.symmetric(
                             horizontal: 6, vertical: 2),
@@ -278,6 +280,34 @@ class AdminReportDetailsContent extends StatelessWidget {
                                 fontSize: 9,
                                 fontWeight: FontWeight.w700,
                                 color: const Color(0xFF15803D),
+                              ),
+                            ),
+                          ],
+                        ),
+                      )
+                    else if (hasGps)
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 6, vertical: 2),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFFFEF3C7),
+                          borderRadius: BorderRadius.circular(6),
+                        ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            const Icon(
+                              Icons.pin_drop_rounded,
+                              size: 10,
+                              color: Color(0xFFD97706),
+                            ),
+                            const SizedBox(width: 3),
+                            Text(
+                              'Pinned (No Collar)',
+                              style: GoogleFonts.inter(
+                                fontSize: 9,
+                                fontWeight: FontWeight.w700,
+                                color: const Color(0xFFB45309),
                               ),
                             ),
                           ],
