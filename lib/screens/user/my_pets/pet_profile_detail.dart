@@ -975,6 +975,7 @@ class _PetProfileDetailScreenState extends State<PetProfileDetailScreen> {
                   child: InkWell(
                     borderRadius: BorderRadius.circular(8),
                     onTap: () async {
+                      if (!context.mounted) return;
                       final result = await showPairCollarDialog(
                           context: context, pet: pet);
                       if (result != null) {

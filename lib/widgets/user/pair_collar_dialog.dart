@@ -2,15 +2,19 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../core/app_colors.dart';
-import '../../core/app_constants.dart';
+import '../../utils/app_errors.dart';
 
 /// Displays a dialog to pair or unpair a GPS collar to a pet.
-/// Enforces the business rule: 1 Collar for 1 Pet only.
+/// The user types the unique device code printed on their physical collar box.
+/// The code is validated against the gps_devices table — it must exist
+/// (pre-registered by the programmer) and must not be claimed by another pet.
 Future<String?> showPairCollarDialog({
   required BuildContext context,
   required Map<String, dynamic> pet,
 }) async {
-  final petId = pet['pet_id'];
+  final dynamic rawPetId = pet['pet_id'] ?? pet['id'];
+  final petId =
+      (rawPetId is String) ? (int.tryParse(rawPetId) ?? rawPetId) : rawPetId;
   final petName = pet['name'] ?? 'Pet';
   final currentCollarId = pet['gps_id'] as String?;
 
@@ -40,7 +44,7 @@ Future<String?> showPairCollarDialog({
                   mainAxisSize: MainAxisSize.min,
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    // Header with Icon
+                    // ── Header ──
                     Row(
                       children: [
                         Container(
@@ -62,8 +66,8 @@ Future<String?> showPairCollarDialog({
                             children: [
                               Text(
                                 currentCollarId == null
-                                    ? 'Pair GPS '
-                                    : 'Manage GPS ',
+                                    ? 'Pair GPS Collar'
+                                    : 'Manage GPS Collar',
                                 style: GoogleFonts.montserrat(
                                   fontSize: 18,
                                   fontWeight: FontWeight.w700,
@@ -87,7 +91,7 @@ Future<String?> showPairCollarDialog({
 
                     const SizedBox(height: 18),
 
-                    // 1 Collar = 1 Pet rule notice
+                    // ── Info notice ──
                     Container(
                       padding: const EdgeInsets.all(12),
                       decoration: BoxDecoration(
@@ -108,7 +112,7 @@ Future<String?> showPairCollarDialog({
                           const SizedBox(width: 8),
                           Expanded(
                             child: Text(
-                              'Rule: 1 gps for 1 pet only. A gps cannot be paired with another pet while active.',
+                              'Enter the unique code printed on your GPS collar box. Each code can only be paired to one pet.',
                               style: GoogleFonts.inter(
                                 fontSize: 12,
                                 height: 1.35,
@@ -122,9 +126,9 @@ Future<String?> showPairCollarDialog({
 
                     const SizedBox(height: 18),
 
-                    // Input field
+                    // ── Code input field ──
                     Text(
-                      'GPS Device ID / Serial',
+                      'GPS Device Code',
                       style: GoogleFonts.inter(
                         fontSize: 12,
                         fontWeight: FontWeight.w700,
@@ -134,21 +138,13 @@ Future<String?> showPairCollarDialog({
                     const SizedBox(height: 6),
                     TextField(
                       controller: textCtrl,
+                      autocorrect: false,
                       textCapitalization: TextCapitalization.characters,
-                      autofocus: currentCollarId == null,
-                      enabled: !isSubmitting,
                       decoration: InputDecoration(
-                        hintText: 'e.g. COL-1001',
-                        hintStyle: GoogleFonts.inter(
-                          color: AppColors.onSurfaceVariant.withOpacity(0.5),
-                        ),
+                        hintText: 'e.g. GPS-A1B2C3',
                         prefixIcon: const Icon(Icons.tag_rounded, size: 20),
                         filled: true,
                         fillColor: AppColors.surfaceContainerLow,
-                        contentPadding: const EdgeInsets.symmetric(
-                          horizontal: 14,
-                          vertical: 12,
-                        ),
                         border: OutlineInputBorder(
                           borderRadius: BorderRadius.circular(12),
                           borderSide: BorderSide.none,
@@ -161,9 +157,14 @@ Future<String?> showPairCollarDialog({
                           ),
                         ),
                       ),
+                      onChanged: (_) {
+                        if (errorMessage != null) {
+                          setDialogState(() => errorMessage = null);
+                        }
+                      },
                     ),
 
-                    // Error message
+                    // ── Error message ──
                     if (errorMessage != null) ...[
                       const SizedBox(height: 10),
                       Container(
@@ -200,10 +201,10 @@ Future<String?> showPairCollarDialog({
 
                     const SizedBox(height: 24),
 
-                    // Buttons
+                    // ── Action buttons ──
                     Row(
                       children: [
-                        // Unpair button (if already paired)
+                        // Unpair button (only shown when already paired)
                         if (currentCollarId != null) ...[
                           OutlinedButton.icon(
                             onPressed: isSubmitting
@@ -217,17 +218,19 @@ Future<String?> showPairCollarDialog({
                                     try {
                                       final idToClean = currentCollarId.trim();
 
-                                      // 1. Fetch latest telemetry before unpairing so the pin is retained
+                                      // Fetch latest telemetry so the map pin is retained after unpairing
                                       double? lastLat;
                                       double? lastLon;
                                       String? lastAt;
 
                                       try {
-                                        final ping = await Supabase.instance.client
+                                        final ping = await Supabase
+                                            .instance.client
                                             .from('gps_locations')
                                             .select('lat, lon, recorded_at')
                                             .eq('gps_id', idToClean)
-                                            .order('recorded_at', ascending: false)
+                                            .order('recorded_at',
+                                                ascending: false)
                                             .limit(1)
                                             .maybeSingle();
 
@@ -248,17 +251,19 @@ Future<String?> showPairCollarDialog({
                                           ?.toDouble();
                                       lastLon ??= (pet['last_seen_lon'] as num?)
                                           ?.toDouble();
-                                      lastAt ??= pet['last_seen_at']?.toString();
+                                      lastAt ??=
+                                          pet['last_seen_at']?.toString();
 
                                       final barangay =
                                           pet['barangay']?.toString() ??
                                               'Calatagan';
-                                      final String? addressWithCoords =
-                                          (lastLat != null && lastLon != null)
-                                              ? '$barangay (Lat: ${lastLat.toStringAsFixed(5)}, Lng: ${lastLon.toStringAsFixed(5)})'
-                                              : null;
+                                      final String? addressWithCoords = (lastLat !=
+                                                  null &&
+                                              lastLon != null)
+                                          ? '$barangay (Lat: ${lastLat.toStringAsFixed(5)}, Lng: ${lastLon.toStringAsFixed(5)})'
+                                          : null;
 
-                                      // 2. Lock the pin permanently into any active lost reports for this pet
+                                      // Lock pin into active lost reports
                                       if (lastLat != null && lastLon != null) {
                                         try {
                                           await Supabase.instance.client
@@ -278,7 +283,7 @@ Future<String?> showPairCollarDialog({
                                         }
                                       }
 
-                                      // 3. Clear gps_id from pet row while retaining last known coordinates
+                                      // Clear gps_id from pet, retain last known coords
                                       final petUpdate = <String, dynamic>{
                                         'gps_id': null,
                                       };
@@ -301,15 +306,27 @@ Future<String?> showPairCollarDialog({
                                             .eq('pet_id', petId);
                                       } catch (updateErr) {
                                         debugPrint(
-                                            '[CollarUnpair] Updating pets with last_seen coords: ');
-                                        // Graceful fallback if schema does not yet have last_seen columns
+                                            '[CollarUnpair] Updating pets with last_seen coords: $updateErr');
                                         await Supabase.instance.client
                                             .from('pets')
-                                            .update({'gps_id': null})
-                                            .eq('pet_id', petId);
+                                            .update({'gps_id': null}).eq(
+                                                'pet_id', petId);
                                       }
 
-                                      // 4. Update local in-memory pet map so calling screens retain the pin
+                                      // Update gps_devices status to available
+                                      try {
+                                        await Supabase.instance.client
+                                            .from('gps_devices')
+                                            .update({
+                                          'status': 'available',
+                                          'paired_at': null,
+                                        }).eq('gps_id', idToClean);
+                                      } catch (devErr) {
+                                        debugPrint(
+                                            '[CollarUnpair] Notice updating gps_devices status: $devErr');
+                                      }
+
+                                      // Update in-memory pet map
                                       pet['gps_id'] = null;
                                       if (lastLat != null && lastLon != null) {
                                         pet['last_seen_lat'] = lastLat;
@@ -356,6 +373,7 @@ Future<String?> showPairCollarDialog({
                           const SizedBox(width: 8),
                         ],
 
+                        // Cancel button
                         Expanded(
                           child: OutlinedButton(
                             onPressed: isSubmitting
@@ -381,22 +399,23 @@ Future<String?> showPairCollarDialog({
                         ),
                         const SizedBox(width: 8),
 
-                        // Pair / Save Button
+                        // Pair / Save button
                         Expanded(
                           child: ElevatedButton(
                             onPressed: isSubmitting
                                 ? null
                                 : () async {
-                                    final enteredId = textCtrl.text.trim();
+                                    final enteredId =
+                                        textCtrl.text.trim().toUpperCase();
                                     if (enteredId.isEmpty) {
                                       setDialogState(() {
                                         errorMessage =
-                                            'Please enter a Collar ID';
+                                            'Please enter the device code from your collar.';
                                       });
                                       return;
                                     }
 
-                                    // If same as current, nothing changed
+                                    // No change
                                     if (enteredId == currentCollarId) {
                                       Navigator.pop(context, currentCollarId);
                                       return;
@@ -408,7 +427,44 @@ Future<String?> showPairCollarDialog({
                                     });
 
                                     try {
-                                      // 1. Verify 1 collar = 1 pet rule
+                                      // 1. Verify the code exists in gps_devices (programmer-registered only)
+                                      Map<String, dynamic>? deviceRow;
+                                      try {
+                                        deviceRow = await Supabase
+                                            .instance.client
+                                            .from('gps_devices')
+                                            .select('gps_id')
+                                            .eq('gps_id', enteredId)
+                                            .maybeSingle();
+                                      } catch (colErr) {
+                                        // Fallback if the table was created with 'device_id' or 'id'
+                                        try {
+                                          deviceRow = await Supabase
+                                              .instance.client
+                                              .from('gps_devices')
+                                              .select('device_id')
+                                              .eq('device_id', enteredId)
+                                              .maybeSingle();
+                                        } catch (_) {
+                                          deviceRow = await Supabase
+                                              .instance.client
+                                              .from('gps_devices')
+                                              .select('id')
+                                              .eq('id', enteredId)
+                                              .maybeSingle();
+                                        }
+                                      }
+
+                                      if (deviceRow == null) {
+                                        setDialogState(() {
+                                          isSubmitting = false;
+                                          errorMessage =
+                                              'Code "$enteredId" not found. Check the code on your collar box and try again.';
+                                        });
+                                        return;
+                                      }
+
+                                      // 2. Enforce 1 collar = 1 pet rule
                                       final existingPet = await Supabase
                                           .instance.client
                                           .from('pets')
@@ -421,12 +477,12 @@ Future<String?> showPairCollarDialog({
                                         setDialogState(() {
                                           isSubmitting = false;
                                           errorMessage =
-                                              'Collar "$enteredId" is already paired to another pet. 1 collar can only belong to 1 pet.';
+                                              'This collar is already paired to another pet. Each collar can only belong to one pet.';
                                         });
                                         return;
                                       }
 
-                                      // 2. Purge any stale location history for this collar so the newly paired pet starts fresh
+                                      // 3. Purge stale location history so newly-paired pet starts fresh
                                       try {
                                         await Supabase.instance.client
                                             .from('gps_locations')
@@ -437,12 +493,56 @@ Future<String?> showPairCollarDialog({
                                             '[CollarPair] Notice clearing old collar locations: $locErr');
                                       }
 
-                                      // 3. Update pet row in Supabase and reset any stale location coordinates
+                                      // 4. Write new gps_id to pet row
                                       await Supabase.instance.client
                                           .from('pets')
-                                          .update({
-                                        'gps_id': enteredId,
-                                      }).eq('pet_id', petId);
+                                          .update({'gps_id': enteredId}).eq(
+                                              'pet_id', petId);
+                                      pet['gps_id'] = enteredId;
+
+                                      // 5. If previously paired to a different collar, mark old one as available
+                                      if (currentCollarId != null &&
+                                          currentCollarId != enteredId) {
+                                        try {
+                                          await Supabase.instance.client
+                                              .from('gps_devices')
+                                              .update({
+                                            'status': 'available',
+                                            'paired_at': null,
+                                          }).eq('gps_id', currentCollarId);
+                                        } catch (_) {
+                                          try {
+                                            await Supabase.instance.client
+                                                .from('gps_devices')
+                                                .update({
+                                              'status': 'available'
+                                            }).eq('gps_id', currentCollarId);
+                                          } catch (_) {}
+                                        }
+                                      }
+
+                                      // 6. Update gps_devices status to 'paired' and timestamp 'paired_at'
+                                      try {
+                                        await Supabase.instance.client
+                                            .from('gps_devices')
+                                            .update({
+                                          'status': 'paired',
+                                          'paired_at': DateTime.now()
+                                              .toUtc()
+                                              .toIso8601String(),
+                                        }).eq('gps_id', enteredId);
+                                      } catch (devErr) {
+                                        // Fallback if 'paired_at' column does not exist yet
+                                        try {
+                                          await Supabase.instance.client
+                                              .from('gps_devices')
+                                              .update({'status': 'paired'}).eq(
+                                                  'gps_id', enteredId);
+                                        } catch (statusErr) {
+                                          debugPrint(
+                                              '[CollarPair] Error updating gps_devices status: $statusErr');
+                                        }
+                                      }
 
                                       if (context.mounted) {
                                         Navigator.pop(context, enteredId);
@@ -450,13 +550,13 @@ Future<String?> showPairCollarDialog({
                                     } catch (e) {
                                       setDialogState(() {
                                         isSubmitting = false;
-                                        final errStr = e.toString().toLowerCase();
+                                        final errStr =
+                                            e.toString().toLowerCase();
                                         if (errStr.contains('23505') ||
                                             errStr.contains('unique') ||
-                                            errStr.contains('pets_collar_id') ||
                                             errStr.contains('duplicate')) {
                                           errorMessage =
-                                              'Collar "$enteredId" is already paired to another pet. 1 collar can only belong to 1 pet.';
+                                              'This collar is already paired to another pet.';
                                         } else {
                                           errorMessage = AppErrors.format(
                                             e,

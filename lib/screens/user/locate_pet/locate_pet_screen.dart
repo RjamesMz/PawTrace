@@ -256,9 +256,13 @@ class _LocatePetScreenState extends State<LocatePetScreen> {
   }
 
   Future<void> _handleManageCollar() async {
+    if (!mounted) return;
     final petCopy = Map<String, dynamic>.from(widget.pet);
     petCopy['gps_id'] = currentCollarId;
-    final result = await showPairCollarDialog(context: context, pet: petCopy);
+    final result = await showPairCollarDialog(
+      context: context,
+      pet: petCopy,
+    );
     if (result == null) return;
 
     _locationSub?.cancel();
